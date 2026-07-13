@@ -12,7 +12,8 @@ detail in files like this one — not in chat messages.
 ## Project goal
 
 Local TypeScript feasibility benchmark: determine whether captioned YouTube videos can
-reliably produce useful, brutally concise summaries in **< 15 seconds end-to-end**.
+reliably produce useful, brutally concise summaries fast. **User decision (2026-07-13):
+the hard per-run limit is 30 seconds (was 15); faster is still the goal.**
 Output per video: verdict (WATCH / SKIM / SKIP), one blunt reason, shortest complete
 summary. Measures speed and transcript-provider reliability. Summary quality is judged
 manually — **no automated quality scoring, no AI judge.**
@@ -36,14 +37,16 @@ not explicitly required.
 
 ## Current status
 
-Phase 2 complete: URL parsing, both transcript adapters (Supadata + TranscriptAPI),
-normalization, caching, deadline/retry handling, per-provider stats + terminal report,
-results JSON saving, 68 mocked tests passing, typecheck + format clean.
-**Waiting for user approval to start Phase 3 (Gemini).**
+Phase 3 code complete: Gemini summary provider (blunt prompt, structured JSON,
+store=false, thinking minimal, temp 0.2), summary stage wired into the shared per-run
+deadline, verdicts printed per video and saved to results JSON. 79 mocked tests pass,
+typecheck + format clean.
 
-For Phase 3 the user must add keys to `.env`: `SUPADATA_API_KEY`,
-`TRANSCRIPTAPI_API_KEY` (both needed for real transcript runs) and `GEMINI_API_KEY`.
-No real API calls have been made yet — everything so far is tested with mocks.
+**Not done yet: a real benchmark run.** The user has not created `.env` (no API keys)
+or `videos.json`. Once both exist: `npm run bench:no-cache` for honest numbers.
+No real API calls have been made; all tests use mocks. A stray real Gemini call
+happened once from an outdated stub test (with a fake key, got 400, harmless) —
+that test was replaced; nothing in the suite touches the network now.
 
 ## Architecture
 
@@ -53,7 +56,12 @@ No real API calls have been made yet — everything so far is tested with mocks.
 - `SummaryProvider` interface (`src/summary/provider.ts`): `summarize(text, signal)` → `Summary`
   validated by the Zod `summarySchema` (`verdict/reason/summary`).
 - One `AbortController` per video/provider run enforces the single end-to-end deadline
-  (`END_TO_END_TIMEOUT_MS`, default 15000 ms) across transcript fetch + retry + Gemini.
+  (`END_TO_END_TIMEOUT_MS`, default 30000 ms) across transcript fetch + retry + Gemini.
+- Cached transcripts still get a live Gemini summary (fresh RunContext), but cached
+  runs never enter the live timing statistics (`withinDeadline` stays undefined).
+- Gemini requests: SDK-internal retries disabled (`maxRetries: 0`); our own single
+  retry for ApiError 408/429/5xx only, and only if the deadline allows. The abort
+  signal is passed via `options.fetchOptions.signal`.
 - Transcript cache (Phase 2): local files under `.cache/`, key = provider + videoId +
   language (when known) + cache-format version. Atomic writes (temp file + rename).
   LIVE vs CACHED labeled everywhere; cached runs excluded from live latency stats.
@@ -148,17 +156,17 @@ src/
     transcriptapi.ts    real adapter (v2, Bearer auth, seconds→ms conversion)
   summary/
     provider.ts         SummaryProvider interface + Zod summarySchema
-    gemini.ts           stub (Phase 3); confirmed SDK call shape in header comment
-tests/                  68 mocked tests — no real API calls, no keys needed
+    gemini.ts           real adapter: interactions.create, JSON schema generated
+                        from summarySchema via z.toJSONSchema, injectable createFn
+                        for tests, own one-retry rule (SDK retries off)
+tests/                  79 mocked tests — no real API calls, no keys needed
   youtube.test.ts, config.test.ts, videos.test.ts, normalize.test.ts,
   http.test.ts, cache.test.ts, providers.test.ts, benchmark.test.ts,
-  stats.test.ts, scaffold.test.ts
+  gemini.test.ts, stats.test.ts, scaffold.test.ts
 ```
 
-Phase 3 additions: implement `summary/gemini.ts` (one interactions.create call per
-transcript, blunt prompt, structured JSON validated by summarySchema), wire the summary
-stage into `benchmark.ts` inside the SAME RunContext deadline (failureStage 'summary'),
-extend report (completed-summary rate already scaffolded), update README + this file.
+Remaining work: run a real benchmark once the user supplies `.env` keys and
+`videos.json`, review summary quality manually, report honest numbers.
 
 ## Commands
 
@@ -176,7 +184,8 @@ npm run cache:clear      (wipe .cache/)
 
 `SUPADATA_API_KEY`, `TRANSCRIPTAPI_API_KEY`, `GEMINI_API_KEY`,
 `TRANSCRIPT_PROVIDER` (supadata | transcriptapi | all), `GEMINI_MODEL`,
-`END_TO_END_TIMEOUT_MS`. Missing key ⇒ that provider is marked **skipped**, never a crash.
+`END_TO_END_TIMEOUT_MS` (default 30000). Missing transcript key ⇒ provider marked
+**skipped**; missing `GEMINI_API_KEY` ⇒ transcripts only, clearly noted, never a crash.
 Never log or embed keys anywhere, including error messages.
 
 ## Known problems / unresolved decisions

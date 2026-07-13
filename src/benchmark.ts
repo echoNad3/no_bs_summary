@@ -1,14 +1,16 @@
 import { performance } from 'node:perf_hooks';
 import { cacheKey, TranscriptCache } from './cache.js';
 import { createRunContext, isAbortError } from './run-context.js';
-import type { TranscriptProvider } from './transcript/provider.js';
+import type { SummaryProvider } from './summary/provider.js';
+import type { TranscriptProvider, TranscriptResult } from './transcript/provider.js';
 
 /**
  * Runs the benchmark: every video is tested against every selected provider,
  * one run at a time (parallel runs would distort the timing numbers).
  *
- * Phase 2 measures the transcript stage. The Gemini summary stage is added
- * in Phase 3 and shares the same per-run deadline.
+ * A LIVE run = transcript fetch + summary, both inside ONE shared deadline.
+ * A CACHED run reuses the stored transcript and only the summary happens
+ * live; cached runs never count toward the live timing statistics.
  */
 
 export type RunStatus = 'success' | 'failure' | 'skipped';
@@ -54,6 +56,8 @@ export interface BenchmarkOptions {
   cache: TranscriptCache;
   useCache: boolean;
   timeoutMs: number;
+  /** Undefined = no summaries (e.g. GEMINI_API_KEY missing); transcript-only run. */
+  summaryProvider?: SummaryProvider;
 }
 
 export async function runBenchmark(options: BenchmarkOptions): Promise<RunRecord[]> {
@@ -88,22 +92,18 @@ async function runOne(
     };
   }
 
-  // Cached transcript? Then no live request is made and no timing is recorded.
+  // Cached transcript? Then only the summary happens live, on a fresh
+  // deadline, and nothing from this run enters the live timing statistics.
   if (options.useCache) {
     const cached = await options.cache.read(cacheKey(entry.name, video.videoId));
     if (cached) {
-      return {
-        ...base,
-        status: 'success',
-        source: 'CACHED',
-        language: cached.language,
-        transcriptChars: cached.text.length,
-      };
+      return runSummaryForCached(base, cached, options);
     }
   }
 
   const { ctx, dispose } = createRunContext(options.timeoutMs);
   const startedAt = performance.now();
+  let stage: FailureStage = 'transcript';
 
   try {
     const transcript = await entry.provider.fetchTranscript(video.videoId, ctx);
@@ -111,13 +111,25 @@ async function runOne(
 
     await options.cache.write(cacheKey(entry.name, video.videoId), transcript);
 
+    let summary: Partial<RunRecord> = {};
+    let summaryMs: number | undefined;
+    if (options.summaryProvider) {
+      stage = 'summary';
+      const summaryStartedAt = performance.now();
+      const verdict = await options.summaryProvider.summarize(transcript.text, ctx);
+      summaryMs = Math.round(performance.now() - summaryStartedAt);
+      summary = { verdict: verdict.verdict, reason: verdict.reason, summary: verdict.summary };
+    }
+
     const totalMs = Math.round(performance.now() - startedAt);
     return {
       ...base,
+      ...summary,
       status: 'success',
       source: 'LIVE',
       language: transcript.language,
       transcriptMs,
+      summaryMs,
       totalMs,
       transcriptChars: transcript.text.length,
       retried: ctx.retried,
@@ -125,22 +137,66 @@ async function runOne(
     };
   } catch (error) {
     const totalMs = Math.round(performance.now() - startedAt);
-    const timedOut = isAbortError(error);
     return {
       ...base,
       status: 'failure',
       source: 'LIVE',
       totalMs,
       retried: ctx.retried,
-      failureStage: 'transcript',
-      failureReason: timedOut
-        ? `Ran out of time (${options.timeoutMs} ms deadline) during the transcript stage.`
-        : error instanceof Error
-          ? error.message
-          : String(error),
+      failureStage: stage,
+      failureReason: describeFailure(error, stage, options.timeoutMs),
       withinDeadline: false,
     };
   } finally {
     dispose();
   }
+}
+
+/** Summarize a transcript that came from the cache (summary is still live). */
+async function runSummaryForCached(
+  base: RunRecord,
+  cached: TranscriptResult,
+  options: BenchmarkOptions,
+): Promise<RunRecord> {
+  const cachedBase: RunRecord = {
+    ...base,
+    status: 'success',
+    source: 'CACHED',
+    language: cached.language,
+    transcriptChars: cached.text.length,
+  };
+
+  if (!options.summaryProvider) return cachedBase;
+
+  const { ctx, dispose } = createRunContext(options.timeoutMs);
+  const startedAt = performance.now();
+  try {
+    const verdict = await options.summaryProvider.summarize(cached.text, ctx);
+    return {
+      ...cachedBase,
+      summaryMs: Math.round(performance.now() - startedAt),
+      retried: ctx.retried,
+      verdict: verdict.verdict,
+      reason: verdict.reason,
+      summary: verdict.summary,
+    };
+  } catch (error) {
+    return {
+      ...cachedBase,
+      status: 'failure',
+      summaryMs: Math.round(performance.now() - startedAt),
+      retried: ctx.retried,
+      failureStage: 'summary',
+      failureReason: describeFailure(error, 'summary', options.timeoutMs),
+    };
+  } finally {
+    dispose();
+  }
+}
+
+function describeFailure(error: unknown, stage: FailureStage, timeoutMs: number): string {
+  if (isAbortError(error)) {
+    return `Ran out of time (${timeoutMs} ms deadline) during the ${stage} stage.`;
+  }
+  return error instanceof Error ? error.message : String(error);
 }

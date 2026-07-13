@@ -1,7 +1,8 @@
 # no-bullshit-summary — feasibility benchmark
 
 A small local benchmark that answers one question: **can captioned YouTube videos
-reliably produce useful, brutally concise summaries in under 15 seconds end-to-end?**
+reliably produce useful, brutally concise summaries quickly — 30 seconds at the very
+most, ideally much faster?**
 
 For every video it fetches the existing captions (no AI transcription), sends them
 to Gemini once, and expects back:
@@ -13,9 +14,8 @@ to Gemini once, and expects back:
 It measures transcript-provider reliability and end-to-end speed. Summary quality
 is reviewed by a human — there is no automated quality score on purpose.
 
-> **Status: Phase 2 done.** Fetching captions and measuring their speed works now.
-> The Gemini summary part is coming in Phase 3 — sections marked _(coming in Phase 3)_
-> describe planned behaviour.
+> **Status: Phase 3 done.** The full pipeline works: captions in, blunt summary out,
+> everything timed against a 30-second limit per video.
 
 ## What you need
 
@@ -40,7 +40,6 @@ npm install
    - `SUPADATA_API_KEY` — from your [Supadata dashboard](https://supadata.ai)
    - `TRANSCRIPTAPI_API_KEY` — from your [TranscriptAPI dashboard](https://transcriptapi.com)
    - `GEMINI_API_KEY` — from [Google AI Studio](https://aistudio.google.com/apikey)
-     _(not used until Phase 3)_
 
 A missing key does not crash anything — that provider is simply reported as "skipped".
 
@@ -71,12 +70,14 @@ npm run bench:no-cache   # force live transcript requests (real latency numbers)
 npm run cache:clear      # delete the local transcript cache
 ```
 
-Right now this measures **caption fetching only**. The Gemini summary step is
-added in Phase 3 and will count toward the same 15-second limit.
+Each run fetches the captions, sends them to Gemini once, and prints the verdict
+(WATCH / SKIM / SKIP), the one-line reason and the summary for every video.
+Everything for one video must finish within the time limit (30 seconds, set by
+`END_TO_END_TIMEOUT_MS` in `.env`).
 
 Tip: for honest speed numbers use `npm run bench:no-cache`. A normal run reuses
-transcripts already saved on your computer ("cached"), which is faster but says
-nothing about real-world speed.
+captions already saved on your computer ("cached"), which is faster but says
+nothing about real-world speed. Cached runs still get a fresh summary.
 
 ### Reading the terminal report
 
@@ -85,7 +86,7 @@ For each provider you see:
 - how many live runs were tried, and how many worked or failed
 - **Median** — the typical time (half the runs were faster than this)
 - **p95** — almost the worst case (95% of runs were faster than this)
-- how many runs finished within the 15-second limit
+- how many runs finished within the time limit
 - which videos failed and why, in one short line each
 
 Cached runs are listed separately and never mixed into the timing numbers.
@@ -93,7 +94,7 @@ Cached runs are listed separately and never mixed into the timing numbers.
 ### Detailed results
 
 Every run also writes a timestamped JSON file into the `results/` folder with the
-full per-video measurements (and later the verdicts and summaries).
+full per-video measurements, verdicts and summaries.
 
 ## Checks and tests
 

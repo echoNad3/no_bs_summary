@@ -5,6 +5,7 @@ import { TranscriptCache } from './cache.js';
 import { loadConfig } from './config.js';
 import { formatReport } from './report.js';
 import { saveResults } from './results.js';
+import { GeminiSummaryProvider } from './summary/gemini.js';
 import { SupadataProvider } from './transcript/supadata.js';
 import { TranscriptApiProvider } from './transcript/transcriptapi.js';
 import { loadVideos } from './videos.js';
@@ -15,9 +16,6 @@ import { loadVideos } from './videos.js';
  * Flags:
  *   --no-cache     always fetch transcripts live (real latency numbers)
  *   --clear-cache  delete the local transcript cache and exit
- *
- * Phase 2: transcript benchmark only. The Gemini summary stage (Phase 3)
- * will plug into the same per-run deadline.
  */
 
 const CACHE_DIR = path.resolve('.cache');
@@ -57,10 +55,18 @@ async function main(): Promise<void> {
     );
   }
 
+  const summaryProvider = config.GEMINI_API_KEY
+    ? new GeminiSummaryProvider(config.GEMINI_API_KEY, config.GEMINI_MODEL)
+    : undefined;
+  if (!summaryProvider) {
+    console.log('Note: GEMINI_API_KEY is missing in .env — transcripts only, no summaries.');
+  }
+
   console.log(
     `Benchmarking ${videos.length} video${videos.length === 1 ? '' : 's'} × ` +
       `${providers.length} provider${providers.length === 1 ? '' : 's'} ` +
-      `(cache ${useCache ? 'on' : 'off'}, deadline ${config.END_TO_END_TIMEOUT_MS} ms)…`,
+      `(cache ${useCache ? 'on' : 'off'}, deadline ${config.END_TO_END_TIMEOUT_MS} ms` +
+      `${summaryProvider ? `, model ${config.GEMINI_MODEL}` : ''})…`,
   );
 
   const records = await runBenchmark({
@@ -69,7 +75,16 @@ async function main(): Promise<void> {
     cache,
     useCache,
     timeoutMs: config.END_TO_END_TIMEOUT_MS,
+    summaryProvider,
   });
+
+  for (const record of records) {
+    if (record.verdict) {
+      console.log(`\n[${record.provider} | ${record.source}] ${record.url}`);
+      console.log(`${record.verdict} — ${record.reason}`);
+      console.log(record.summary);
+    }
+  }
 
   console.log(formatReport(records, config.END_TO_END_TIMEOUT_MS));
 

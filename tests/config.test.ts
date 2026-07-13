@@ -12,7 +12,7 @@ describe('loadConfig', () => {
     expect(config.SUPADATA_API_KEY).toBeUndefined();
     expect(config.TRANSCRIPT_PROVIDER).toBe('all');
     expect(config.GEMINI_MODEL).toBe('gemini-3.1-flash-lite');
-    expect(config.END_TO_END_TIMEOUT_MS).toBe(15000);
+    expect(config.END_TO_END_TIMEOUT_MS).toBe(30000);
   });
 
   it('reads real values', () => {

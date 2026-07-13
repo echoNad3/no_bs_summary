@@ -28,7 +28,7 @@ const envSchema = z.object({
   ),
   END_TO_END_TIMEOUT_MS: z.preprocess(
     (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
-    z.coerce.number().int().positive().default(15000),
+    z.coerce.number().int().positive().default(30000),
   ),
 });
 
