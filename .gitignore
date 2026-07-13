@@ -1,0 +1,16 @@
+# Secrets — never commit API keys
+.env
+
+# Dependencies
+node_modules/
+
+# Local benchmark data
+.cache/
+results/
+
+# Personal video list (commit videos.example.json instead)
+videos.json
+
+# Editor/OS noise
+.DS_Store
+Thumbs.db
