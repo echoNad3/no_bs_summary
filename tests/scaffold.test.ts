@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { summarySchema } from '../src/summary/provider.js';
-import { SupadataProvider } from '../src/transcript/supadata.js';
-import { TranscriptApiProvider } from '../src/transcript/transcriptapi.js';
 import { GeminiSummaryProvider } from '../src/summary/gemini.js';
+import { summarySchema } from '../src/summary/provider.js';
+import type { RunContext } from '../src/run-context.js';
 
-describe('scaffold', () => {
+function testContext(): RunContext {
+  return {
+    signal: new AbortController().signal,
+    deadlineAt: Date.now() + 15000,
+    retried: false,
+  };
+}
+
+describe('summary schema and Gemini stub', () => {
   it('summarySchema accepts a valid verdict object', () => {
     const parsed = summarySchema.parse({
       verdict: 'SKIP',
@@ -23,22 +30,11 @@ describe('scaffold', () => {
     expect(result.success).toBe(false);
   });
 
-  it('provider stubs expose their names and are not implemented yet', async () => {
-    const supadata = new SupadataProvider('test-key');
-    const transcriptApi = new TranscriptApiProvider('test-key');
+  it('Gemini provider is a stub until Phase 3', async () => {
     const gemini = new GeminiSummaryProvider('test-key', 'gemini-3.1-flash-lite');
-
-    expect(supadata.name).toBe('supadata');
-    expect(transcriptApi.name).toBe('transcriptapi');
     expect(gemini.name).toBe('gemini');
-
-    const signal = new AbortController().signal;
-    await expect(supadata.fetchTranscript('dQw4w9WgXcQ', signal)).rejects.toThrow(
+    await expect(gemini.summarize('transcript text', testContext())).rejects.toThrow(
       'not implemented',
     );
-    await expect(transcriptApi.fetchTranscript('dQw4w9WgXcQ', signal)).rejects.toThrow(
-      'not implemented',
-    );
-    await expect(gemini.summarize('transcript text', signal)).rejects.toThrow('not implemented');
   });
 });

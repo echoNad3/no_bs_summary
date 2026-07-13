@@ -24,15 +24,31 @@ export interface TranscriptResult {
   metadata?: Record<string, unknown>;
 }
 
+import type { RunContext } from '../run-context.js';
+
 /**
  * A transcript source. Implementations must:
  * - use only official, documented APIs
  * - never fall back to another provider
  * - never trigger AI-generated or asynchronous transcription jobs
- * - respect the AbortSignal so runs stop at the end-to-end deadline
+ * - respect the run context so requests stop at the end-to-end deadline
  */
 export interface TranscriptProvider {
   /** Stable machine-readable name, e.g. "supadata". */
   readonly name: string;
-  fetchTranscript(videoId: string, signal: AbortSignal): Promise<TranscriptResult>;
+  fetchTranscript(videoId: string, ctx: RunContext): Promise<TranscriptResult>;
+}
+
+/**
+ * A transcript failure that must never be retried, e.g. "this video has no
+ * captions" or "the API key is wrong". Retrying cannot fix these.
+ */
+export class TranscriptError extends Error {
+  constructor(
+    message: string,
+    readonly stage: 'transcript' = 'transcript',
+  ) {
+    super(message);
+    this.name = 'TranscriptError';
+  }
 }

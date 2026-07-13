@@ -13,8 +13,9 @@ to Gemini once, and expects back:
 It measures transcript-provider reliability and end-to-end speed. Summary quality
 is reviewed by a human — there is no automated quality score on purpose.
 
-> **Status: Phase 1 (scaffold).** The benchmark pipeline is not implemented yet.
-> Sections marked _(coming in Phase 2/3)_ describe planned behaviour.
+> **Status: Phase 2 done.** Fetching captions and measuring their speed works now.
+> The Gemini summary part is coming in Phase 3 — sections marked _(coming in Phase 3)_
+> describe planned behaviour.
 
 ## What you need
 
@@ -32,13 +33,16 @@ Open a terminal in this project folder and run:
 npm install
 ```
 
-## 2. Add your API keys _(not needed until Phase 2/3)_
+## 2. Add your API keys
 
 1. Copy the file `.env.example` and name the copy `.env` (exactly that, starting with a dot).
 2. Open `.env` in any text editor and paste your keys after the `=` signs:
    - `SUPADATA_API_KEY` — from your [Supadata dashboard](https://supadata.ai)
    - `TRANSCRIPTAPI_API_KEY` — from your [TranscriptAPI dashboard](https://transcriptapi.com)
    - `GEMINI_API_KEY` — from [Google AI Studio](https://aistudio.google.com/apikey)
+     _(not used until Phase 3)_
+
+A missing key does not crash anything — that provider is simply reported as "skipped".
 
 The `.env` file stays on your machine and is ignored by git. Never share it.
 
@@ -59,7 +63,7 @@ In `.env`, set `TRANSCRIPT_PROVIDER` to one of:
 
 A provider whose API key is missing is reported as **skipped**, never silently dropped.
 
-## 5. Run the benchmark _(coming in Phase 2/3)_
+## 5. Run the benchmark
 
 ```
 npm run bench            # normal run (may reuse cached transcripts)
@@ -67,17 +71,29 @@ npm run bench:no-cache   # force live transcript requests (real latency numbers)
 npm run cache:clear      # delete the local transcript cache
 ```
 
-### Reading the terminal report _(coming in Phase 2/3)_
+Right now this measures **caption fetching only**. The Gemini summary step is
+added in Phase 3 and will count toward the same 15-second limit.
 
-The report shows, per transcript provider: attempted live runs, successes,
-failures, skips, success rates, median / p95 / slowest live times, how many runs
-finished within 15 seconds, retries, and the URLs that failed with short reasons.
-Cached runs are never mixed into the live statistics.
+Tip: for honest speed numbers use `npm run bench:no-cache`. A normal run reuses
+transcripts already saved on your computer ("cached"), which is faster but says
+nothing about real-world speed.
 
-### Detailed results _(coming in Phase 3)_
+### Reading the terminal report
 
-Every run also writes a timestamped JSON file into `results/` with the full
-per-video measurements, verdicts and summaries.
+For each provider you see:
+
+- how many live runs were tried, and how many worked or failed
+- **Median** — the typical time (half the runs were faster than this)
+- **p95** — almost the worst case (95% of runs were faster than this)
+- how many runs finished within the 15-second limit
+- which videos failed and why, in one short line each
+
+Cached runs are listed separately and never mixed into the timing numbers.
+
+### Detailed results
+
+Every run also writes a timestamped JSON file into the `results/` folder with the
+full per-video measurements (and later the verdicts and summaries).
 
 ## Checks and tests
 

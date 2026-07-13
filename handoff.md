@@ -2,6 +2,13 @@
 
 Continuation guide for any coding agent. Keep this current; replace stale info instead of appending.
 
+## How to talk to the user (important)
+
+The user has autism and is not tech-savvy. Every reply must be **short**, in
+**plain everyday language**, with **as little technical jargon as possible**.
+If a technical word is unavoidable, explain it simply right away. Put technical
+detail in files like this one — not in chat messages.
+
 ## Project goal
 
 Local TypeScript feasibility benchmark: determine whether captioned YouTube videos can
@@ -29,8 +36,14 @@ not explicitly required.
 
 ## Current status
 
-Phase 1 complete: research done, scaffold created, stubs compile, tests pass.
-**Waiting for user approval to start Phase 2.**
+Phase 2 complete: URL parsing, both transcript adapters (Supadata + TranscriptAPI),
+normalization, caching, deadline/retry handling, per-provider stats + terminal report,
+results JSON saving, 68 mocked tests passing, typecheck + format clean.
+**Waiting for user approval to start Phase 3 (Gemini).**
+
+For Phase 3 the user must add keys to `.env`: `SUPADATA_API_KEY`,
+`TRANSCRIPTAPI_API_KEY` (both needed for real transcript runs) and `GEMINI_API_KEY`.
+No real API calls have been made yet — everything so far is tested with mocks.
 
 ## Architecture
 
@@ -112,23 +125,40 @@ tsconfig.json           strict TS, NodeNext ESM, noEmit (tsx runs the code)
 .gitignore              ignores .env, node_modules, .cache/, results/, videos.json
 .env.example            all required env vars with comments
 videos.example.json     { "videos": [ ...urls ] }
-README.md               beginner instructions (Phase 2/3 parts marked "coming")
+README.md               beginner instructions (Phase 3 parts marked "coming")
 src/
-  index.ts              CLI entry (stub; planned flags --no-cache, --clear-cache)
+  index.ts              CLI entry; flags --no-cache, --clear-cache; builds providers,
+                        runs benchmark, prints report, saves results JSON
+  config.ts             Zod-validated env loading (empty strings = unset; readable errors)
+  youtube.ts            extractVideoId(): watch/youtu.be/shorts/live links → 11-char ID
+  videos.ts             loads videos.json; lists ALL bad links in one error, never skips
+  run-context.ts        RunContext { signal, deadlineAt, retried } + createRunContext()
+  http.ts               fetchWithOneRetry(): max 1 retry (network/408/429/5xx only),
+                        Retry-After honoured only if it fits the deadline
+  cache.ts              TranscriptCache: .cache/v1-<provider>-<videoId>-default.json,
+                        atomic writes (tmp file + rename), corrupt file = miss
+  benchmark.ts          runBenchmark(): sequential runs, LIVE/CACHED labeling, RunRecord
+  stats.ts              median / percentile (nearest rank) / max
+  report.ts             computeProviderStats() + formatReport() (per-provider terminal report)
+  results.ts            saveResults(): timestamped JSON into results/
   transcript/
-    provider.ts         TranscriptProvider + TranscriptResult + TranscriptSegment
-    supadata.ts         stub adapter (throws), API facts in header comment
-    transcriptapi.ts    stub adapter (throws), API facts in header comment
+    provider.ts         TranscriptProvider interface + TranscriptResult + TranscriptError
+    normalize.ts        whitespace cleanup + exact-consecutive-duplicate removal only
+    supadata.ts         real adapter (mode=native, text=false; 202 job = failure)
+    transcriptapi.ts    real adapter (v2, Bearer auth, seconds→ms conversion)
   summary/
-    provider.ts         SummaryProvider + Zod summarySchema
-    gemini.ts           stub adapter (throws), SDK facts in header comment
-tests/
-  scaffold.test.ts      schema + stub sanity tests
+    provider.ts         SummaryProvider interface + Zod summarySchema
+    gemini.ts           stub (Phase 3); confirmed SDK call shape in header comment
+tests/                  68 mocked tests — no real API calls, no keys needed
+  youtube.test.ts, config.test.ts, videos.test.ts, normalize.test.ts,
+  http.test.ts, cache.test.ts, providers.test.ts, benchmark.test.ts,
+  stats.test.ts, scaffold.test.ts
 ```
 
-Planned Phase 2 additions: `src/config.ts` (Zod-validated env), `src/youtube.ts`
-(URL → video ID), `src/cache.ts`, `src/retry.ts` or inline, `src/benchmark.ts`,
-`src/report.ts`, plus mocked tests for each.
+Phase 3 additions: implement `summary/gemini.ts` (one interactions.create call per
+transcript, blunt prompt, structured JSON validated by summarySchema), wire the summary
+stage into `benchmark.ts` inside the SAME RunContext deadline (failureStage 'summary'),
+extend report (completed-summary rate already scaffolded), update README + this file.
 
 ## Commands
 
@@ -137,7 +167,9 @@ npm install
 npm run typecheck
 npm test
 npm run format / format:check
-npm run bench            (stub until Phase 2)
+npm run bench            (transcript benchmark; needs .env keys + videos.json)
+npm run bench:no-cache   (force live requests — the honest latency numbers)
+npm run cache:clear      (wipe .cache/)
 ```
 
 ## Environment variables (see .env.example)

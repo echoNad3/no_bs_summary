@@ -1,3 +1,4 @@
+import type { RunContext } from '../run-context.js';
 import type { Summary, SummaryProvider } from './provider.js';
 
 /**
@@ -22,7 +23,7 @@ export class GeminiSummaryProvider implements SummaryProvider {
     private readonly model: string,
   ) {}
 
-  async summarize(_transcriptText: string, _signal: AbortSignal): Promise<Summary> {
+  async summarize(_transcriptText: string, _ctx: RunContext): Promise<Summary> {
     throw new Error('GeminiSummaryProvider is not implemented yet (Phase 3).');
   }
 }
