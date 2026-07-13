@@ -42,11 +42,18 @@ store=false, thinking minimal, temp 0.2), summary stage wired into the shared pe
 deadline, verdicts printed per video and saved to results JSON. 79 mocked tests pass,
 typecheck + format clean.
 
-**Not done yet: a real benchmark run.** The user has not created `.env` (no API keys)
-or `videos.json`. Once both exist: `npm run bench:no-cache` for honest numbers.
-No real API calls have been made; all tests use mocks. A stray real Gemini call
-happened once from an outdated stub test (with a fake key, got 400, harmless) —
-that test was replaced; nothing in the suite touches the network now.
+**First real benchmark run done (2026-07-13, 3 videos, both providers, no cache):**
+
+- 6/6 runs succeeded end-to-end; 100% transcript and summary success; 0 retries
+- supadata: median 4120 ms, slowest 5727 ms
+- transcriptapi: median 1757 ms, slowest 1765 ms (clearly faster)
+- All comfortably within the 30 s limit; all would even fit the original 15 s goal
+- All verdicts came back SKIM; summaries correctly flagged sales pitches/padding
+- Detailed file: results/benchmark-2026-07-13T19-24-08-313Z.json (gitignored)
+
+Open question: whether the model leans too hard toward SKIM (sample of 3 videos,
+all fitness/commentary genre — needs a more varied sample and manual quality review
+by the user). Nothing in the automated suite touches the network; all tests use mocks.
 
 ## Architecture
 
