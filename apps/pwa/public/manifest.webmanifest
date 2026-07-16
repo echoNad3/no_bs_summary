@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "No Bullshit Summary",
-  "short_name": "NBS Summary",
+  "name": "No BS Summary",
+  "short_name": "No BS Summary",
   "description": "Get the point of a captioned YouTube video without the padding.",
   "start_url": "/",
   "scope": "/",

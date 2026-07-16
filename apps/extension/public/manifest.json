@@ -1,12 +1,12 @@
 {
   "manifest_version": 3,
-  "name": "No Bullshit Summary",
+  "name": "No BS Summary",
   "description": "Summarize the current captioned YouTube video without the padding.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "minimum_chrome_version": "114",
-  "permissions": ["activeTab", "sidePanel", "storage"],
+  "permissions": ["sidePanel", "storage"],
   "host_permissions": [
-    "http://127.0.0.1:8787/*",
+    "https://no-bullshit-summary.echonad3.workers.dev/*",
     "https://youtube.com/*",
     "https://www.youtube.com/*",
     "https://m.youtube.com/*",
@@ -17,8 +17,18 @@
     "service_worker": "background.js",
     "type": "module"
   },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
   "action": {
-    "default_title": "Open No Bullshit Summary"
+    "default_title": "Open No BS Summary",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png"
+    }
   },
   "side_panel": {
     "default_path": "sidepanel.html"

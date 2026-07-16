@@ -1,4 +1,4 @@
-# no-bullshit-summary
+# No BS Summary
 
 Blunt, useful summaries of captioned YouTube videos. Paste a link (or share one from your
 phone), get a detailed English summary with the important facts, names, numbers, and
@@ -29,7 +29,7 @@ You need the shared **app password** from the owner.
 
 **Chrome extension (desktop):**
 
-1. Get the extension: either the `no-bullshit-summary-extension.zip` from the owner
+1. Get the extension: either the `no-bs-summary-extension.zip` from the owner
    (unzip it), or build it yourself with `npm run build` (output in `dist/extension`).
 2. Open `chrome://extensions`, enable Developer mode, click **Load unpacked**, select the
    extension directory.

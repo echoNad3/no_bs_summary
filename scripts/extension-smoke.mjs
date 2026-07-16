@@ -9,6 +9,7 @@ const extensionDir = path.resolve(projectDir, 'dist/extension');
 const resultsDir = path.resolve(projectDir, 'results');
 const youtubeUrl = 'https://www.youtube.com/watch?v=EwMSGdE2bOQ';
 const secondYoutubeUrl = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+const productionApiUrl = 'https://no-bullshit-summary.echonad3.workers.dev/api/summarize';
 const userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'nbs-extension-smoke-'));
 const startedAt = new Date().toISOString();
 
@@ -86,7 +87,7 @@ try {
   const pwaPage = await context.newPage();
   await pwaPage.goto('http://127.0.0.1:8787/');
   await pwaPage.locator('h1').waitFor({ state: 'visible' });
-  assert.equal(await pwaPage.locator('h1').innerText(), 'No Bullshit Summary');
+  assert.equal(await pwaPage.locator('h1').innerText(), 'No BS Summary');
   await pwaPage.locator('#url').fill(youtubeUrl);
   await installLoadingRecorder(pwaPage);
   const pwaResponsePromise = waitForSummaryResponse(pwaPage);
@@ -99,6 +100,33 @@ try {
   await assertDetailedTopics(pwaPage);
   report.checks.pwaSummarySubmission = true;
 
+  // Keep the extension on its shipped production URL while returning the same
+  // already-proven local payload. This avoids both paid calls and release-only
+  // localhost permissions.
+  await context.route(productionApiUrl, async (route) => {
+    const input = route.request().postDataJSON();
+    if (input?.url === 'https://example.com') {
+      await route.fulfill({
+        status: 400,
+        contentType: 'application/json',
+        headers: { 'access-control-allow-origin': '*' },
+        body: JSON.stringify({
+          error: {
+            code: 'INVALID_VIDEO_URL',
+            message: 'Not a YouTube link: "https://example.com"',
+          },
+        }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify(pwaPayload),
+    });
+  });
+
   const youtubePage = await context.newPage();
   await youtubePage.goto(youtubeUrl);
   assert.equal(await youtubePage.title(), 'PyroLIVE Smoke - YouTube');
@@ -106,7 +134,7 @@ try {
   const sidePanelPage = await context.newPage();
   await sidePanelPage.goto(`chrome-extension://${extensionId}/sidepanel.html`);
   await sidePanelPage.locator('h1').waitFor({ state: 'visible' });
-  assert.equal(await sidePanelPage.locator('h1').innerText(), 'No Bullshit Summary');
+  assert.equal(await sidePanelPage.locator('h1').innerText(), 'No BS Summary');
   report.checks.sidePanelDocumentOpened = true;
 
   await youtubePage.bringToFront();
@@ -122,20 +150,12 @@ try {
   report.checks.currentYouTubeUrlDetected = true;
   report.checks.detectedTitleReplacesUrl = true;
 
-  // The shipped default backend is production; point this run at the local server.
-  await fallbackControls.evaluate((element) => {
-    element.open = true;
-  });
-  await sidePanelPage.locator('#backend-url').fill('http://127.0.0.1:8787');
-  await fallbackControls.evaluate((element) => {
-    element.open = false;
-  });
-  report.checks.localBackendConfigured = true;
+  report.checks.productionBackendConfigured = true;
 
   const submit = sidePanelPage.locator('#submit');
   const status = sidePanelPage.locator('#status');
   await installLoadingRecorder(sidePanelPage);
-  const extensionResponsePromise = waitForSummaryResponse(sidePanelPage);
+  const extensionResponsePromise = waitForSummaryResponse(sidePanelPage, productionApiUrl);
   await submit.click();
   const extensionPayload = await (await extensionResponsePromise).json();
 
@@ -194,7 +214,7 @@ try {
   await waitForText(status, 'Not a YouTube link: "https://example.com"');
   assert.equal(await result.isHidden(), true);
   assert.equal(await submit.isEnabled(), true);
-  assert.equal(await submit.innerText(), 'Cut the bullshit');
+  assert.equal(await submit.innerText(), 'Cut the BS');
   report.checks.errorState = true;
 
   const transcriptRequests = requests.filter((url) => /transcriptapi\.com/iu.test(url));
@@ -204,7 +224,7 @@ try {
   assert.deepEqual(requestFailures, []);
 
   const unexpectedResponses = responses.filter(
-    ({ url, status }) => !(url === 'http://127.0.0.1:8787/api/summarize' && status === 400),
+    ({ url, status }) => !(url.endsWith('/api/summarize') && status === 400),
   );
   assert.deepEqual(unexpectedResponses, []);
   const unexpectedConsoleErrors = consoleErrors.filter(
@@ -249,10 +269,9 @@ async function waitForText(locator, expected, timeoutMs = 5_000) {
   assert.equal(await locator.innerText(), expected);
 }
 
-async function waitForSummaryResponse(page) {
+async function waitForSummaryResponse(page, apiUrl = 'http://127.0.0.1:8787/api/summarize') {
   return page.waitForResponse(
-    (response) =>
-      response.url() === 'http://127.0.0.1:8787/api/summarize' && response.status() === 200,
+    (response) => response.url() === apiUrl && response.status() === 200,
     { timeout: 20_000 },
   );
 }

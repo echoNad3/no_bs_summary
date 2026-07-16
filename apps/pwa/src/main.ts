@@ -98,7 +98,7 @@ function displayTime(response: SummaryResult): string {
 
 function setBusy(busy: boolean): void {
   submitButton.disabled = busy;
-  submitButton.textContent = busy ? 'Working…' : 'Cut the bullshit';
+  submitButton.textContent = busy ? 'Working…' : 'Cut the BS';
   form.setAttribute('aria-busy', String(busy));
 }
 

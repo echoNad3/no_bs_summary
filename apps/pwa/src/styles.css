@@ -257,6 +257,10 @@ footer {
   text-align: center;
 }
 
+footer a {
+  color: var(--color-accent);
+}
+
 [hidden] {
   display: none !important;
 }

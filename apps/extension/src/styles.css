@@ -142,6 +142,7 @@ summary {
 }
 
 .help,
+.data-disclosure,
 .status,
 footer,
 .meta {
@@ -152,6 +153,13 @@ footer,
 
 .help {
   margin: 0.35rem 0 0;
+}
+
+.data-disclosure {
+  margin: 0.75rem 0 0;
+  color: var(--color-text-subtle);
+  font-size: 0.72rem;
+  line-height: 1.45;
 }
 
 button {
@@ -281,7 +289,8 @@ body.has-result .video-context {
 }
 
 body.has-result .context-label,
-body.has-result form details {
+body.has-result form details,
+body.has-result .data-disclosure {
   display: none;
 }
 

@@ -1,17 +1,15 @@
 /**
- * Persistent side-panel settings. The backend URL and shared app password are
- * user configuration, never bundled secrets. chrome.storage.sync keeps them
- * across devices signed into the same Chrome profile.
+ * Persistent side-panel settings. The shared app password is user
+ * configuration, never a bundled secret. chrome.storage.sync keeps it across
+ * devices signed into the same Chrome profile.
  */
 
-// The deployed backend. For local development, change it in the side panel's
-// settings to http://127.0.0.1:8787.
+// The deployed backend. Self-hosted builds replace this value before building.
 export const DEFAULT_BACKEND_URL = 'https://no-bullshit-summary.echonad3.workers.dev';
 
 const STORAGE_KEY = 'nbs-settings';
 
 export interface ExtensionSettings {
-  backendUrl: string;
   password: string;
 }
 
@@ -31,33 +29,17 @@ function syncStorage(): SyncStorageArea | undefined {
   return candidate.chrome?.storage?.sync;
 }
 
-/** Trims and strips trailing slashes; falls back to the default on garbage. */
-export function normalizeBackendUrl(raw: string): string {
-  const trimmed = raw.trim().replace(/\/+$/u, '');
-  if (trimmed === '') return DEFAULT_BACKEND_URL;
-  try {
-    const parsed = new URL(trimmed);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return DEFAULT_BACKEND_URL;
-    return trimmed;
-  } catch {
-    return DEFAULT_BACKEND_URL;
-  }
-}
-
 export async function loadSettings(): Promise<ExtensionSettings> {
   try {
     const storage = syncStorage();
-    if (!storage) return { backendUrl: DEFAULT_BACKEND_URL, password: '' };
+    if (!storage) return { password: '' };
     const stored = await storage.get(STORAGE_KEY);
     const value = stored[STORAGE_KEY] as Partial<ExtensionSettings> | undefined;
     return {
-      backendUrl: normalizeBackendUrl(
-        typeof value?.backendUrl === 'string' ? value.backendUrl : '',
-      ),
       password: typeof value?.password === 'string' ? value.password : '',
     };
   } catch {
-    return { backendUrl: DEFAULT_BACKEND_URL, password: '' };
+    return { password: '' };
   }
 }
 

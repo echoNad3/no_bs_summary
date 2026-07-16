@@ -1,15 +1,25 @@
 import { promises as fs } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { getYouTubeTabContext } from '../apps/extension/src/tab-context.js';
-import { DEFAULT_BACKEND_URL, normalizeBackendUrl } from '../apps/extension/src/settings.js';
+import { DEFAULT_BACKEND_URL } from '../apps/extension/src/settings.js';
 
 describe('extension manifest permissions', () => {
   it('can read the current supported YouTube tab while the side panel stays open', async () => {
     const manifest = JSON.parse(
       await fs.readFile('apps/extension/public/manifest.json', 'utf8'),
-    ) as { host_permissions: string[] };
+    ) as {
+      name: string;
+      version: string;
+      permissions: string[];
+      host_permissions: string[];
+      icons: Record<string, string>;
+      action: { default_title: string; default_icon: Record<string, string> };
+    };
+    expect(manifest.name).toBe('No BS Summary');
+    expect(manifest.version).toBe('0.1.1');
     expect(manifest.host_permissions).toEqual(
       expect.arrayContaining([
+        `${DEFAULT_BACKEND_URL}/*`,
         'https://youtube.com/*',
         'https://www.youtube.com/*',
         'https://m.youtube.com/*',
@@ -17,6 +27,21 @@ describe('extension manifest permissions', () => {
         'https://youtu.be/*',
       ]),
     );
+    expect(manifest.host_permissions.every((permission) => permission.startsWith('https://'))).toBe(
+      true,
+    );
+    expect(manifest.permissions).toEqual(['sidePanel', 'storage']);
+    expect(manifest.icons).toEqual({
+      '16': 'icons/icon-16.png',
+      '32': 'icons/icon-32.png',
+      '48': 'icons/icon-48.png',
+      '128': 'icons/icon-128.png',
+    });
+    expect(manifest.action.default_icon).toEqual({
+      '16': 'icons/icon-16.png',
+      '32': 'icons/icon-32.png',
+    });
+    expect(manifest.action.default_title).toBe('Open No BS Summary');
   });
 });
 
@@ -30,22 +55,16 @@ describe('extension controls', () => {
     expect(fallbackStart).toBeGreaterThan(0);
     expect(html.slice(fallbackStart, fallbackEnd)).toContain('id="url"');
     expect(html.slice(fallbackStart, fallbackEnd)).toContain('id="language"');
-    expect(html.slice(fallbackStart, fallbackEnd)).toContain('id="backend-url"');
     expect(html.slice(fallbackStart, fallbackEnd)).toContain('id="password"');
     expect(html.match(/<button\b/gu)).toHaveLength(1);
     expect(html).not.toContain('<details id="fallback-controls" open>');
+    expect(html).toContain('Clicking sends this video link');
   });
 });
 
 describe('extension settings', () => {
-  it('normalizes the backend URL and falls back to the local default on garbage', () => {
-    expect(normalizeBackendUrl('https://app.example.workers.dev/')).toBe(
-      'https://app.example.workers.dev',
-    );
-    expect(normalizeBackendUrl('  http://127.0.0.1:8787  ')).toBe('http://127.0.0.1:8787');
-    expect(normalizeBackendUrl('')).toBe(DEFAULT_BACKEND_URL);
-    expect(normalizeBackendUrl('not a url')).toBe(DEFAULT_BACKEND_URL);
-    expect(normalizeBackendUrl('ftp://nope.example')).toBe(DEFAULT_BACKEND_URL);
+  it('ships against the production HTTPS backend', () => {
+    expect(DEFAULT_BACKEND_URL).toBe('https://no-bullshit-summary.echonad3.workers.dev');
   });
 });
 

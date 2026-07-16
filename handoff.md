@@ -17,7 +17,8 @@ sounding nice. Deep technical detail belongs in this file and in code, not in ch
 
 ## What this product is
 
-A YouTube summary tool. You give it a YouTube link, it reads the video's existing captions and
+**No BS Summary** is a YouTube summary tool. You give it a YouTube link, it reads the video's
+existing captions and
 returns a detailed English summary (the main product) plus a small WATCH / SKIM / SKIP verdict
 with one blunt reason. Two clients, one backend:
 
@@ -75,11 +76,12 @@ Worker secret, never in the repo or browser bundles.
   right allow headers; one live summarize of `dQw4w9WgXcQ` (WATCH, 1.8 s, source LIVE — the
   only paid TranscriptAPI call, budget was ≤ 2); immediate repeat returned a byte-identical
   KV-cached response; `/share` SPA fallback 200.
-- Extension zip for friends: `dist/no-bullshit-summary-extension.zip` (rebuild any time with
-  `npm run build` + zipping `dist/extension`). Not published to the Chrome Web Store.
+- Chrome Web Store package: `dist/no-bs-summary-extension.zip` (version `0.1.1`,
+  manifest at ZIP root). The listing is not submitted yet; package, copy, privacy
+  disclosures, and images are ready.
 
 Everything works **locally**: `npm run build && npm start` serves the PWA and API at
-`http://127.0.0.1:8787`. The extension loads unpacked from `dist/extension`. 175 tests across
+`http://127.0.0.1:8787`. The extension loads unpacked from `dist/extension`. 176 tests across
 21 files pass; format, typecheck, all builds, the Worker dry-run bundle, and the isolated
 Playwright extension smoke test pass.
 
@@ -101,10 +103,9 @@ Done so far:
   observability on. Worker env uses structural types on purpose (one tsconfig, Node-testable).
 - **Phase C — clients.** Shared api-client sends optional `X-App-Password`. PWA: password
   field under "Options and app password", saved in localStorage, auto-opens on 401.
-  Extension: backend URL + password in the fallback `<details>`, saved via
-  `chrome.storage.sync` (new `storage` permission), URL normalized with local-dev default
-  `http://127.0.0.1:8787` in `apps/extension/src/settings.ts` (`DEFAULT_BACKEND_URL` — bake
-  the deployed URL here after deploy).
+  Extension: production backend fixed in `apps/extension/src/settings.ts`; password in the
+  fallback `<details>`, saved via `chrome.storage.sync` (`storage` permission). Self-hosted
+  builds replace `DEFAULT_BACKEND_URL` before build.
 - **Phase D — CI.** `.github/workflows/ci.yml`: format check, typecheck, tests, builds,
   Worker dry-run bundle on push/PR. Deploys stay manual (`npm run deploy`).
 
@@ -127,11 +128,11 @@ Key architecture facts:
 ## Completed phases E and F (2026-07-16)
 
 - **Phase E — deploy.** Deployed via `npm run deploy` under the owner's wrangler login.
-  Extension `DEFAULT_BACKEND_URL` (`apps/extension/src/settings.ts`) now points at
-  production; local dev switches via the side-panel settings. `preview_urls` disabled in
-  wrangler.jsonc — one stable URL. The extension smoke script explicitly points the side
-  panel at `http://127.0.0.1:8787` because the shipped default is production. All production
-  checks above passed.
+  Extension `DEFAULT_BACKEND_URL` (`apps/extension/src/settings.ts`) points at production.
+  `preview_urls` disabled in wrangler.jsonc — one stable URL. The extension smoke script
+  keeps the shipped production URL and intercepts it with the already-proven local cached
+  payload, so smoke needs no release-only localhost permission and makes no paid call. All
+  production checks above passed.
 - **Phase F — docs.** README rewritten for the deployed reality (live URL, friend setup,
   extension install, local dev, self-hosting, costs, limits).
 
@@ -168,45 +169,70 @@ npm run cache:clear        # wipe local transcript + summary caches
 npm run smoke:extension    # needs `npm start` running in another terminal
 ```
 
-## Next task: publish the extension to the Chrome Web Store (unlisted)
+## Next task: finish the Chrome Web Store dashboard submission (unlisted)
 
 Decided with the owner 2026-07-16. Chrome forbids installing extensions from arbitrary
 websites — the Web Store is the only one-click install path. Goal: an **unlisted** store
 listing (only people with the link find it) so friends install with one click and updates
-push automatically. The zip-sharing workflow dies once this ships.
+push automatically. The owner paid the $5 developer fee and signed into the dashboard. Google did
+not flag the old name specifically; its validation dialog lists unfinished listing, privacy, and
+contact requirements. The owner still chose the safer public brand **No BS Summary**. The updated
+package and signed-in dashboard flow are in progress.
 
-**Owner-only steps (cannot be automated):**
+**Finished 2026-07-16:**
 
-1. Register as a Chrome Web Store developer at https://chrome.google.com/webstore/devconsole
-   with the Google account they want to own the extension — one-time $5 fee.
-2. Upload the prepared package zip (or grant whatever access the session has), fill nothing
-   by hand — all listing text/assets should already be prepared by the AI in the repo.
-3. Submit for review; wait (usually a few days). After approval, share the listing URL.
+- Manifest version `0.1.1`; public name `No BS Summary`; primary button `Cut the BS`; PNG icons at
+  16, 32, 48, and 128 px; toolbar icons set. The 128 px store icon has the required transparent
+  padding.
+- Removed `activeTab` and the localhost host permission. Exact host permissions remain for
+  supported YouTube hosts (persistent URL/title detection while the panel stays open) and
+  the production Worker (cross-origin API fetch). Removed the now-invalid custom backend URL
+  field from the shipped UI; self-hosted builds replace `DEFAULT_BACKEND_URL` before build.
+- Added an in-product pre-submit disclosure for the video URL/title, caption language, and
+  app password sent to the backend.
+- Hosted privacy policy is live at
+  `https://no-bullshit-summary.echonad3.workers.dev/privacy` (deploy version
+  `4a78af83-bd85-4b7a-96dd-a8009d05909b`). It discloses Chrome Sync, Cloudflare,
+  TranscriptAPI, Gemini, summary-cache retention, and Chrome Web Store Limited Use.
+- Listing copy/permission justifications/data disclosures: `store/listing.md`.
+- Required images: `store/screenshot-1280x800.png` and
+  `store/small-promo-440x280.png`. Generators live in
+  `scripts/generate-extension-icons.mjs` and `scripts/generate-store-assets.mjs`.
+- Release ZIP: `dist/no-bs-summary-extension.zip`; 11 ZIP entries, forward-slash
+  paths, `manifest.json` at root, four icons, no wrapper directory. SHA-256:
+  `DF1385206AD3EB77B178AD57701340D52B17B50C2B827F13927111C6E3D06532`. Frontend secret scan:
+  clean; old public-brand scan clean.
+- Verification: format check, typecheck, 176 tests/21 files, full build, Worker dry-run,
+  live `/privacy` + homepage + web manifest checks, and isolated extension smoke all pass. The live
+  pages say `No BS Summary` and contain no old public name. Smoke used the saved local summary plus
+  a mocked production URL, made zero TranscriptAPI calls, and covered detection,
+  loading/success/error states, cross-client output, and network errors.
+- Web Store fields saved in draft `kijehbnmlengaokipdbenipccfidlecc`: detailed description,
+  category `Tools` (the current dashboard puts this under Productivity), language `English`,
+  homepage/support URLs, all permission justifications, remote code `No`, Authentication
+  information + Web history + Website content disclosures, all three Limited Use certifications,
+  privacy URL, visibility `Unlisted`, and all regions.
+- Google's validation list is down from 13 blockers to four: store icon, one screenshot, publisher
+  contact email, and contact-email verification. The Codex in-app browser does not support file
+  uploads, so the owner must select the package and image files through the visible dashboard.
 
-**Implementation checklist for the AI session that picks this up:**
+**Exact continuation:**
 
-- The extension manifest (`apps/extension/public/manifest.json`) has **no `icons` field** —
-  the store requires PNG icons (16, 32, 48, 128 px; SVG is not supported in extension
-  manifests). Derive PNGs from `apps/pwa/public/icons/icon-512.svg`, add to the manifest and
-  the build, and give the `action` an icon too.
-- Set `"version"` properly and bump it on every store update; the store rejects re-uploads
-  of the same version.
-- Review `host_permissions` before submission: YouTube hosts are justified (reading the
-  active tab's URL/title while the panel stays open); `http://127.0.0.1:8787/*` is dev-only
-  and will draw reviewer questions — consider dropping it (server-side CORS already allows
-  the extension origin for local dev) or be ready to justify it.
-- Prepare the store listing in the repo (e.g. `store/` directory): single-purpose
-  description, permission justifications, at least one 1280×800 or 640×400 screenshot of
-  the side panel, category, language.
-- Privacy disclosures: the extension sends the video URL/title and the user-entered app
-  password to the user-configured backend; nothing else leaves the browser, no analytics.
-  Host a plain `/privacy` page on the Worker (static route or asset) and use its URL in the
-  listing.
-- Package with `npm run build`, zip `dist/extension` contents (zip root = manifest.json,
-  not a folder).
-- After approval: update README (replace zip/Load-unpacked instructions with the store
-  link), the PWA footer if useful, and this file. Verify one-click install + side panel
-  against production.
+1. Use Web Store draft `kijehbnmlengaokipdbenipccfidlecc`, which is the item the owner opened.
+   Leave duplicate draft `mmmblkdkmfhpjegmcklmcbcbocomikdm` untouched unless the owner explicitly
+   asks to delete it.
+2. Owner selects `dist/no-bs-summary-extension.zip` in Build -> Package -> Upload new package.
+3. Owner uploads `apps/extension/public/icons/icon-128.png` as the store icon,
+   `store/screenshot-1280x800.png` as the required screenshot, and optionally
+   `store/small-promo-440x280.png` as the small promo tile. These cannot be uploaded by the in-app
+   browser automation.
+4. Owner adds the public publisher contact email on Settings and completes Google's email
+   verification. Do not enter the shared app password there. If Google later asks for test
+   credentials, the owner must enter the app password without posting it in chat or committing it.
+5. AI shows the owner the final dashboard state and asks for action-time confirmation before
+   the irreversible "Submit for review" click.
+6. After approval: replace README's zip/Load-unpacked friend instructions with the store
+   link, update this file, and verify one-click install + side panel against production.
 
 ## Other known follow-ups (only if asked)
 

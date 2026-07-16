@@ -11,13 +11,13 @@
         background: #0d0f12;
       }
     </style>
-    <title>No Bullshit Summary</title>
+    <title>No BS Summary</title>
   </head>
   <body>
     <main class="panel-shell">
       <header>
         <p class="eyebrow">LOCAL · CAPTIONS ONLY</p>
-        <h1>No Bullshit Summary</h1>
+        <h1>No BS Summary</h1>
         <p class="lede">Get the point without leaving YouTube.</p>
       </header>
 
@@ -31,17 +31,6 @@
         <details id="fallback-controls">
           <summary>Settings, another link, or caption language</summary>
           <div class="fallback-fields">
-            <label for="backend-url">Backend URL</label>
-            <input
-              id="backend-url"
-              name="backend-url"
-              type="text"
-              inputmode="url"
-              autocapitalize="none"
-              spellcheck="false"
-              placeholder="https://…workers.dev"
-            />
-
             <label for="password">App password</label>
             <input
               id="password"
@@ -78,7 +67,11 @@
           </div>
         </details>
 
-        <button id="submit" type="submit">Cut the bullshit</button>
+        <button id="submit" type="submit">Cut the BS</button>
+        <p class="data-disclosure">
+          Clicking sends this video link, its title, the caption language, and your app password to
+          the summary backend.
+        </p>
       </form>
       <p id="status" class="status" role="status" aria-live="polite"></p>
 

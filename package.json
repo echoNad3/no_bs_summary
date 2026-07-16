@@ -1,5 +1,5 @@
 {
-  "name": "no-bullshit-summary-benchmark",
+  "name": "no-bs-summary-benchmark",
   "version": "0.1.0",
   "private": true,
   "description": "Local benchmark and MVP for blunt, useful summaries of captioned YouTube videos.",
@@ -19,6 +19,8 @@
     "build:server": "tsc -p tsconfig.server.json",
     "build:pwa": "vite build --config vite.pwa.config.ts --configLoader runner",
     "build:extension": "vite build --config vite.extension.config.ts --configLoader runner",
+    "assets:extension": "node scripts/generate-extension-icons.mjs",
+    "store:assets": "node scripts/generate-store-assets.mjs",
     "build": "npm run build:server && npm run build:pwa && npm run build:extension",
     "smoke:extension": "node scripts/extension-smoke.mjs",
     "start": "node dist/server/server.js",

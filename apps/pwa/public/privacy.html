@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0d0f12" />
+    <meta
+      name="description"
+      content="Privacy policy for the No BS Summary Chrome extension and web app."
+    />
+    <title>Privacy policy · No BS Summary</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          sans-serif;
+        color: #f5f7fa;
+        background: #0d0f12;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: radial-gradient(circle at 100% 0, rgb(255 122 80 / 16%), transparent 28rem)
+          #0d0f12;
+      }
+
+      main {
+        width: min(100% - 2rem, 48rem);
+        margin: 0 auto;
+        padding: 3rem 0 4rem;
+      }
+
+      .eyebrow {
+        margin: 0 0 0.75rem;
+        color: #ff8a61;
+        font-size: 0.75rem;
+        font-weight: 800;
+        letter-spacing: 0.14em;
+      }
+
+      h1 {
+        max-width: 10ch;
+        margin: 0 0 1rem;
+        font-size: clamp(2.6rem, 10vw, 5rem);
+        line-height: 0.92;
+        letter-spacing: -0.06em;
+      }
+
+      h2 {
+        margin: 2rem 0 0.65rem;
+        font-size: 1.05rem;
+      }
+
+      p,
+      li {
+        color: #b4bcc8;
+        line-height: 1.65;
+      }
+
+      ul {
+        padding-left: 1.2rem;
+      }
+
+      strong {
+        color: #f5f7fa;
+      }
+
+      a {
+        color: #ff8a61;
+      }
+
+      .updated {
+        color: #949eac;
+        font-size: 0.82rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">PLAIN-ENGLISH PRIVACY</p>
+      <h1>No BS Summary</h1>
+      <p class="updated">Last updated: July 16, 2026</p>
+
+      <p>
+        No BS Summary turns the captions from a YouTube video into a detailed summary. It has no
+        ads, analytics, tracking, accounts, or data sales.
+      </p>
+
+      <h2>What the Chrome extension handles</h2>
+      <ul>
+        <li>The URL and title of the active YouTube video.</li>
+        <li>The caption language you choose.</li>
+        <li>The shared app password you enter.</li>
+      </ul>
+      <p>
+        The extension reads the active tab only on supported YouTube hosts. It sends the items above
+        to the No BS Summary backend only when you click “Cut the BS.” The app password is saved in
+        Chrome Sync so you do not have to enter it every time. The extension does not read page
+        contents, browsing history outside those YouTube hosts, cookies, or personal files.
+      </p>
+
+      <h2>How the backend uses data</h2>
+      <p>
+        The backend extracts the YouTube video ID, asks TranscriptAPI for the requested captions,
+        and sends the video title, caption language, and caption text to Google Gemini to create the
+        summary. Gemini requests set storage off. Full transcripts and the app password are not
+        stored by No BS Summary.
+      </p>
+      <p>
+        The finished summary, verdict, timing, language, and video ID are cached in Cloudflare KV
+        without an automatic expiry so repeat requests are fast and do not create another paid API
+        call. Cloudflare, TranscriptAPI, Google, and Chrome Sync process data under their own
+        privacy and security terms.
+      </p>
+
+      <h2>Sharing, selling, and advertising</h2>
+      <p>
+        Data is shared only with the processors named above to provide the requested summary. It is
+        never sold, used for ads, used for credit decisions, or given to humans to read except when
+        required for security, abuse investigation, or law.
+      </p>
+
+      <h2>Limited Use</h2>
+      <p>
+        No BS Summary’s use and transfer of information received from Chrome APIs follows the Chrome
+        Web Store User Data Policy, including its Limited Use requirements. Data is used only to
+        provide and secure the summary feature the user requests.
+      </p>
+
+      <h2>Deletion and contact</h2>
+      <p>
+        Remove the extension to delete its local Chrome data. Chrome Sync data can also be cleared
+        through your Google account. To ask the owner to delete a cached summary or report a privacy
+        problem, open an issue on the
+        <a href="https://github.com/echoNad3/no_bullshit_summary">project’s GitHub repository</a>.
+      </p>
+
+      <p><a href="/">Back to No BS Summary</a></p>
+    </main>
+  </body>
+</html>

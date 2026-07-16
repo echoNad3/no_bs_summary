@@ -2,14 +2,13 @@ import { ApiClientError, summarizeVideo } from '../../shared/api-client.js';
 import type { SummaryResult } from '../../shared/api-client.js';
 import { renderDetailedSummary } from '../../shared/render-summary.js';
 import { getYouTubeTabContext } from './tab-context.js';
-import { loadSettings, normalizeBackendUrl, saveSettings } from './settings.js';
+import { DEFAULT_BACKEND_URL, loadSettings, saveSettings } from './settings.js';
 import './styles.css';
 
 const form = requiredElement<HTMLFormElement>('summary-form');
 const urlInput = requiredElement<HTMLInputElement>('url');
 const titleInput = requiredElement<HTMLInputElement>('title');
 const languageInput = requiredElement<HTMLInputElement>('language');
-const backendUrlInput = requiredElement<HTMLInputElement>('backend-url');
 const passwordInput = requiredElement<HTMLInputElement>('password');
 const submitButton = requiredElement<HTMLButtonElement>('submit');
 const status = requiredElement<HTMLParagraphElement>('status');
@@ -50,7 +49,6 @@ void fillFromSavedSettings();
 
 async function fillFromSavedSettings(): Promise<void> {
   const settings = await loadSettings();
-  backendUrlInput.value = settings.backendUrl;
   passwordInput.value = settings.password;
 }
 
@@ -84,14 +82,12 @@ async function submitSummary(): Promise<void> {
   result.hidden = true;
   status.textContent = 'Reading captions and cutting the padding…';
 
-  const backendUrl = normalizeBackendUrl(backendUrlInput.value);
   const password = passwordInput.value.trim();
-  backendUrlInput.value = backendUrl;
-  await saveSettings({ backendUrl, password });
+  await saveSettings({ password });
 
   try {
     const response = await summarizeVideo(
-      backendUrl,
+      DEFAULT_BACKEND_URL,
       {
         url: urlInput.value.trim(),
         title: titleInput.value.trim() || undefined,
@@ -134,7 +130,7 @@ function displayTime(response: SummaryResult): string {
 
 function setBusy(busy: boolean): void {
   submitButton.disabled = busy;
-  submitButton.textContent = busy ? 'Working…' : 'Cut the bullshit';
+  submitButton.textContent = busy ? 'Working…' : 'Cut the BS';
   form.setAttribute('aria-busy', String(busy));
 }
 

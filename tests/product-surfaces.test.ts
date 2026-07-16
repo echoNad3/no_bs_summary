@@ -9,6 +9,8 @@ describe('local MVP manifests', () => {
     ) as Record<string, unknown>;
 
     expect(manifest).toMatchObject({
+      name: 'No BS Summary',
+      short_name: 'No BS Summary',
       start_url: '/',
       scope: '/',
       display: 'standalone',
@@ -55,19 +57,21 @@ describe('local MVP manifests', () => {
     }
   });
 
-  it('keeps the extension minimal and limited to the local backend plus supported YouTube tabs', async () => {
+  it('keeps the extension minimal and limited to production plus supported YouTube tabs', async () => {
     const manifestText = await fs.readFile('apps/extension/public/manifest.json', 'utf8');
     const manifest = JSON.parse(manifestText) as Record<string, unknown>;
 
     expect(manifest).toMatchObject({
       manifest_version: 3,
-      permissions: ['activeTab', 'sidePanel', 'storage'],
+      name: 'No BS Summary',
+      version: '0.1.1',
+      permissions: ['sidePanel', 'storage'],
       background: { service_worker: 'background.js', type: 'module' },
       side_panel: { default_path: 'sidepanel.html' },
     });
     expect(manifest.host_permissions).toEqual(
       expect.arrayContaining([
-        'http://127.0.0.1:8787/*',
+        'https://no-bullshit-summary.echonad3.workers.dev/*',
         'https://youtube.com/*',
         'https://www.youtube.com/*',
         'https://m.youtube.com/*',
@@ -75,7 +79,21 @@ describe('local MVP manifests', () => {
         'https://youtu.be/*',
       ]),
     );
+    expect(manifestText).not.toContain('http://127.0.0.1');
     expect(manifestText).not.toMatch(/TRANSCRIPTAPI_API_KEY|GEMINI_API_KEY/u);
+  });
+
+  it('ships the privacy policy and links it from the hosted app', async () => {
+    const [privacy, pwaHtml] = await Promise.all([
+      fs.readFile('apps/pwa/public/privacy.html', 'utf8'),
+      fs.readFile('apps/pwa/index.html', 'utf8'),
+    ]);
+
+    expect(pwaHtml).toContain('href="/privacy"');
+    expect(privacy).toMatch(/Chrome\s+Web Store User Data Policy/u);
+    expect(privacy).toContain('The URL and title of the active YouTube video.');
+    expect(privacy).toContain('The shared app password you enter.');
+    expect(privacy).toMatch(/Full transcripts and the app password are not\s+stored/u);
   });
 
   it('turns a multi-topic detailed summary into separate labeled blocks', () => {
