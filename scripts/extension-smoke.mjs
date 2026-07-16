@@ -122,6 +122,16 @@ try {
   report.checks.currentYouTubeUrlDetected = true;
   report.checks.detectedTitleReplacesUrl = true;
 
+  // The shipped default backend is production; point this run at the local server.
+  await fallbackControls.evaluate((element) => {
+    element.open = true;
+  });
+  await sidePanelPage.locator('#backend-url').fill('http://127.0.0.1:8787');
+  await fallbackControls.evaluate((element) => {
+    element.open = false;
+  });
+  report.checks.localBackendConfigured = true;
+
   const submit = sidePanelPage.locator('#submit');
   const status = sidePanelPage.locator('#status');
   await installLoadingRecorder(sidePanelPage);

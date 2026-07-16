@@ -6,6 +6,8 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "no-bullshit-summary",
   "main": "src/worker.ts",
+  // One stable URL only — no per-version preview URLs.
+  "preview_urls": false,
   "compatibility_date": "2026-07-16",
   "compatibility_flags": ["nodejs_compat"],
   "assets": {

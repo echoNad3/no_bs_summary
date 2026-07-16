@@ -4,9 +4,9 @@
  * across devices signed into the same Chrome profile.
  */
 
-// Replace with the deployed workers.dev URL once production exists; the local
-// backend stays the development default.
-export const DEFAULT_BACKEND_URL = 'http://127.0.0.1:8787';
+// The deployed backend. For local development, change it in the side panel's
+// settings to http://127.0.0.1:8787.
+export const DEFAULT_BACKEND_URL = 'https://no-bullshit-summary.echonad3.workers.dev';
 
 const STORAGE_KEY = 'nbs-settings';
 
