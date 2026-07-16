@@ -31,22 +31,31 @@ export class ApiClientError extends Error {
   }
 }
 
+export interface SummarizeOptions {
+  signal?: AbortSignal;
+  /** Shared app password for the hosted backend. Sent only when non-empty. */
+  password?: string;
+}
+
 export async function summarizeVideo(
   apiBase: string,
   input: SummarizeInput,
-  signal?: AbortSignal,
+  options: SummarizeOptions = {},
 ): Promise<SummaryResult> {
+  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  if (options.password) headers['x-app-password'] = options.password;
+
   let response: Response;
   try {
     response = await fetch(`${apiBase}/api/summarize`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers,
       body: JSON.stringify(input),
-      signal,
+      signal: options.signal,
     });
   } catch {
     throw new ApiClientError(
-      'The local backend is not reachable. Start it with npm start and try again.',
+      'The backend is not reachable. Check your connection or backend URL.',
       'BACKEND_UNREACHABLE',
     );
   }

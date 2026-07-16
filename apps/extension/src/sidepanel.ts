@@ -2,14 +2,15 @@ import { ApiClientError, summarizeVideo } from '../../shared/api-client.js';
 import type { SummaryResult } from '../../shared/api-client.js';
 import { renderDetailedSummary } from '../../shared/render-summary.js';
 import { getYouTubeTabContext } from './tab-context.js';
+import { loadSettings, normalizeBackendUrl, saveSettings } from './settings.js';
 import './styles.css';
-
-const API_BASE = 'http://127.0.0.1:8787';
 
 const form = requiredElement<HTMLFormElement>('summary-form');
 const urlInput = requiredElement<HTMLInputElement>('url');
 const titleInput = requiredElement<HTMLInputElement>('title');
 const languageInput = requiredElement<HTMLInputElement>('language');
+const backendUrlInput = requiredElement<HTMLInputElement>('backend-url');
+const passwordInput = requiredElement<HTMLInputElement>('password');
 const submitButton = requiredElement<HTMLButtonElement>('submit');
 const status = requiredElement<HTMLParagraphElement>('status');
 const result = requiredElement<HTMLElement>('result');
@@ -45,6 +46,13 @@ chrome.tabs.onUpdated.addListener((_tabId, changeInfo) => {
 });
 
 void fillFromActiveTab();
+void fillFromSavedSettings();
+
+async function fillFromSavedSettings(): Promise<void> {
+  const settings = await loadSettings();
+  backendUrlInput.value = settings.backendUrl;
+  passwordInput.value = settings.password;
+}
 
 async function fillFromActiveTab(): Promise<void> {
   let tab: chrome.tabs.Tab | undefined;
@@ -76,12 +84,21 @@ async function submitSummary(): Promise<void> {
   result.hidden = true;
   status.textContent = 'Reading captions and cutting the padding…';
 
+  const backendUrl = normalizeBackendUrl(backendUrlInput.value);
+  const password = passwordInput.value.trim();
+  backendUrlInput.value = backendUrl;
+  await saveSettings({ backendUrl, password });
+
   try {
-    const response = await summarizeVideo(API_BASE, {
-      url: urlInput.value.trim(),
-      title: titleInput.value.trim() || undefined,
-      language: languageInput.value.trim(),
-    });
+    const response = await summarizeVideo(
+      backendUrl,
+      {
+        url: urlInput.value.trim(),
+        title: titleInput.value.trim() || undefined,
+        language: languageInput.value.trim(),
+      },
+      { password },
+    );
     renderResult(response);
     status.textContent = '';
     fallbackControls.open = false;
@@ -90,6 +107,10 @@ async function submitSummary(): Promise<void> {
     document.body.classList.remove('has-result');
     status.textContent =
       error instanceof ApiClientError ? error.message : 'Something went wrong. Try again.';
+    if (error instanceof ApiClientError && error.code === 'UNAUTHORIZED') {
+      fallbackControls.open = true;
+      passwordInput.focus();
+    }
   } finally {
     setBusy(false);
   }

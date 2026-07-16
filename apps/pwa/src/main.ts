@@ -4,14 +4,20 @@ import { renderDetailedSummary } from '../../shared/render-summary.js';
 import { readSharedValues } from './share.js';
 import './styles.css';
 
+const PASSWORD_STORAGE_KEY = 'nbs-app-password';
+
 const form = requiredElement<HTMLFormElement>('summary-form');
 const urlInput = requiredElement<HTMLInputElement>('url');
 const titleInput = requiredElement<HTMLInputElement>('title');
 const languageInput = requiredElement<HTMLInputElement>('language');
+const passwordInput = requiredElement<HTMLInputElement>('password');
+const options = requiredElement<HTMLDetailsElement>('options');
 const submitButton = requiredElement<HTMLButtonElement>('submit');
 const status = requiredElement<HTMLParagraphElement>('status');
 const result = requiredElement<HTMLElement>('result');
 const shareNote = requiredElement<HTMLParagraphElement>('share-note');
+
+passwordInput.value = loadSavedPassword();
 
 const shared = readSharedValues(window.location.search);
 if (shared.url) urlInput.value = shared.url;
@@ -29,19 +35,47 @@ async function submitSummary(): Promise<void> {
   result.hidden = true;
   status.textContent = 'Reading captions and cutting the padding…';
 
+  const password = passwordInput.value.trim();
+  savePassword(password);
+
   try {
-    const response = await summarizeVideo('', {
-      url: urlInput.value.trim(),
-      title: titleInput.value.trim() || undefined,
-      language: languageInput.value.trim(),
-    });
+    const response = await summarizeVideo(
+      '',
+      {
+        url: urlInput.value.trim(),
+        title: titleInput.value.trim() || undefined,
+        language: languageInput.value.trim(),
+      },
+      { password },
+    );
     renderResult(response);
     status.textContent = '';
   } catch (error) {
     status.textContent =
       error instanceof ApiClientError ? error.message : 'Something went wrong. Try again.';
+    if (error instanceof ApiClientError && error.code === 'UNAUTHORIZED') {
+      options.open = true;
+      passwordInput.focus();
+    }
   } finally {
     setBusy(false);
+  }
+}
+
+function loadSavedPassword(): string {
+  try {
+    return window.localStorage.getItem(PASSWORD_STORAGE_KEY) ?? '';
+  } catch {
+    return ''; // storage can be unavailable in private browsing
+  }
+}
+
+function savePassword(password: string): void {
+  try {
+    if (password) window.localStorage.setItem(PASSWORD_STORAGE_KEY, password);
+    else window.localStorage.removeItem(PASSWORD_STORAGE_KEY);
+  } catch {
+    // storage can be unavailable in private browsing — the password just isn't remembered
   }
 }
 

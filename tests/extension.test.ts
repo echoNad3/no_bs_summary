@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { getYouTubeTabContext } from '../apps/extension/src/tab-context.js';
+import { DEFAULT_BACKEND_URL, normalizeBackendUrl } from '../apps/extension/src/settings.js';
 
 describe('extension manifest permissions', () => {
   it('can read the current supported YouTube tab while the side panel stays open', async () => {
@@ -29,8 +30,22 @@ describe('extension controls', () => {
     expect(fallbackStart).toBeGreaterThan(0);
     expect(html.slice(fallbackStart, fallbackEnd)).toContain('id="url"');
     expect(html.slice(fallbackStart, fallbackEnd)).toContain('id="language"');
+    expect(html.slice(fallbackStart, fallbackEnd)).toContain('id="backend-url"');
+    expect(html.slice(fallbackStart, fallbackEnd)).toContain('id="password"');
     expect(html.match(/<button\b/gu)).toHaveLength(1);
     expect(html).not.toContain('<details id="fallback-controls" open>');
+  });
+});
+
+describe('extension settings', () => {
+  it('normalizes the backend URL and falls back to the local default on garbage', () => {
+    expect(normalizeBackendUrl('https://app.example.workers.dev/')).toBe(
+      'https://app.example.workers.dev',
+    );
+    expect(normalizeBackendUrl('  http://127.0.0.1:8787  ')).toBe('http://127.0.0.1:8787');
+    expect(normalizeBackendUrl('')).toBe(DEFAULT_BACKEND_URL);
+    expect(normalizeBackendUrl('not a url')).toBe(DEFAULT_BACKEND_URL);
+    expect(normalizeBackendUrl('ftp://nope.example')).toBe(DEFAULT_BACKEND_URL);
   });
 });
 

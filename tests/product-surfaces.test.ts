@@ -61,7 +61,7 @@ describe('local MVP manifests', () => {
 
     expect(manifest).toMatchObject({
       manifest_version: 3,
-      permissions: ['activeTab', 'sidePanel'],
+      permissions: ['activeTab', 'sidePanel', 'storage'],
       background: { service_worker: 'background.js', type: 'module' },
       side_panel: { default_path: 'sidepanel.html' },
     });

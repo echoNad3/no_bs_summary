@@ -44,9 +44,18 @@
             required
           />
 
-          <details>
-            <summary>Optional details</summary>
+          <details id="options">
+            <summary>Options and app password</summary>
             <div class="details-grid">
+              <label for="password">App password</label>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                autocomplete="current-password"
+                maxlength="200"
+              />
+              <p class="field-help">Ask the owner for the shared password. Saved on this device.</p>
               <label for="title">Video title</label>
               <input id="title" name="title" type="text" maxlength="300" />
               <label for="language">Caption language</label>
