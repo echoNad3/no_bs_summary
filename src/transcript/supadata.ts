@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { fetchWithOneRetry } from '../http.js';
 import type { RunContext } from '../run-context.js';
 import { assertUsableTranscript, normalizeSegments } from './normalize.js';
-import { TranscriptError } from './provider.js';
+import { languageSchema, sameLanguageFamily, TranscriptError } from './provider.js';
 import type { TranscriptProvider, TranscriptResult } from './provider.js';
 
 /**
@@ -19,63 +19,93 @@ import type { TranscriptProvider, TranscriptResult } from './provider.js';
  */
 
 const responseSchema = z.object({
-  content: z.array(
-    z.object({
-      text: z.string(),
-      offset: z.number(),
-      duration: z.number(),
-      lang: z.string().optional(),
-    }),
-  ),
-  lang: z.string().optional(),
-  availableLangs: z.array(z.string()).optional(),
+  content: z
+    .array(
+      z.object({
+        text: z.string().trim().min(1),
+        offset: z.number().finite().nonnegative(),
+        duration: z.number().finite().nonnegative(),
+        lang: languageSchema,
+      }),
+    )
+    .min(1),
+  lang: languageSchema,
+  availableLangs: z.array(languageSchema),
 });
+
+const SUPADATA_RETRY_POLICY = {
+  // Supadata documents 5xx as infrastructure failures. Its 429 can mean a plan limit.
+  isRetryableStatus: (status: number) => status >= 500 && status < 600,
+  defaultDelayMs: 1000,
+};
 
 export class SupadataProvider implements TranscriptProvider {
   readonly name = 'supadata';
 
   constructor(private readonly apiKey: string) {}
 
-  async fetchTranscript(videoId: string, ctx: RunContext): Promise<TranscriptResult> {
+  async fetchTranscript(
+    videoId: string,
+    ctx: RunContext,
+    requestedLanguage = 'en',
+  ): Promise<TranscriptResult> {
     const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
     const url =
       `https://api.supadata.ai/v1/transcript` +
-      `?url=${encodeURIComponent(videoUrl)}&mode=native&text=false`;
+      `?url=${encodeURIComponent(videoUrl)}` +
+      `&lang=${encodeURIComponent(requestedLanguage)}&mode=native&text=false`;
 
-    const { response } = await fetchWithOneRetry(
+    const { response, firstFailure } = await fetchWithOneRetry(
       url,
       { headers: { 'x-api-key': this.apiKey } },
       ctx,
+      SUPADATA_RETRY_POLICY,
     );
 
     if (response.status === 202) {
-      throw new TranscriptError(
+      throw providerFailure(
         'Supadata answered with an async job (video likely too long). This benchmark does not wait for jobs.',
+        firstFailure,
       );
     }
     if (response.status === 206) {
-      throw new TranscriptError('Supadata: this video has no existing captions (native mode).');
+      throw providerFailure(
+        'Supadata: this video has no existing captions (native mode).',
+        firstFailure,
+      );
     }
     if (response.status === 401 || response.status === 403) {
-      throw new TranscriptError('Supadata rejected the API key (check SUPADATA_API_KEY in .env).');
+      throw providerFailure(
+        'Supadata rejected the API key (check SUPADATA_API_KEY in .env).',
+        firstFailure,
+      );
     }
     if (response.status === 404) {
-      throw new TranscriptError('Supadata: video not found, private, or unavailable.');
+      throw providerFailure('Supadata: video not found, private, or unavailable.', firstFailure);
     }
     if (!response.ok) {
-      throw new TranscriptError(`Supadata request failed with HTTP status ${response.status}.`);
+      throw providerFailure(
+        `Supadata request failed with HTTP status ${response.status}.`,
+        firstFailure,
+      );
     }
 
     let body: unknown;
     try {
       body = await response.json();
     } catch {
-      throw new TranscriptError('Supadata sent a response that was not valid JSON.');
+      throw providerFailure('Supadata sent a response that was not valid JSON.', firstFailure);
     }
 
     const parsed = responseSchema.safeParse(body);
     if (!parsed.success) {
-      throw new TranscriptError('Supadata sent a response in an unexpected format.');
+      throw providerFailure('Supadata sent a response in an unexpected format.', firstFailure);
+    }
+    if (!sameLanguageFamily(parsed.data.lang, requestedLanguage)) {
+      throw providerFailure(
+        `Supadata returned ${parsed.data.lang} captions instead of requested ${requestedLanguage} captions.`,
+        firstFailure,
+      );
     }
 
     const { text, segments } = normalizeSegments(
@@ -87,17 +117,19 @@ export class SupadataProvider implements TranscriptProvider {
     );
     assertUsableTranscript(text, 'Supadata');
 
-    const language = parsed.data.lang ?? parsed.data.content[0]?.lang ?? 'unknown';
-
     return {
       provider: this.name,
       videoId,
-      language,
+      language: parsed.data.lang,
       text,
       segments,
-      metadata: parsed.data.availableLangs
-        ? { availableLangs: parsed.data.availableLangs }
-        : undefined,
+      metadata: { availableLangs: parsed.data.availableLangs },
     };
   }
+}
+
+function providerFailure(message: string, firstFailure: string | undefined): TranscriptError {
+  return new TranscriptError(
+    message + (firstFailure ? ` First attempt failed with ${firstFailure}.` : ''),
+  );
 }

@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0d0f12" />
+    <meta
+      name="description"
+      content="Get the point of a captioned YouTube video without the padding."
+    />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icons/icon-192.svg" type="image/svg+xml" />
+    <style>
+      :root {
+        color-scheme: dark;
+        background: #0d0f12;
+      }
+    </style>
+    <title>No Bullshit Summary</title>
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="hero">
+        <p class="eyebrow">LOCAL · CAPTIONS ONLY</p>
+        <h1>No Bullshit Summary</h1>
+        <p class="lede">Paste a YouTube link. Get the point and whether it is worth watching.</p>
+      </header>
+
+      <section class="panel" aria-labelledby="form-title">
+        <h2 id="form-title">Summarize a video</h2>
+        <p id="share-note" class="share-note" hidden>
+          Shared link ready. Check it, then summarize.
+        </p>
+        <form id="summary-form" novalidate>
+          <label for="url">YouTube link</label>
+          <input
+            id="url"
+            name="url"
+            type="url"
+            inputmode="url"
+            autocomplete="url"
+            placeholder="https://youtu.be/…"
+            required
+          />
+
+          <details>
+            <summary>Optional details</summary>
+            <div class="details-grid">
+              <label for="title">Video title</label>
+              <input id="title" name="title" type="text" maxlength="300" />
+              <label for="language">Caption language</label>
+              <input
+                id="language"
+                name="language"
+                type="text"
+                value="en"
+                maxlength="20"
+                autocapitalize="none"
+                spellcheck="false"
+                required
+              />
+              <p class="field-help">Use a caption code such as en, de, es, or pt-BR.</p>
+            </div>
+          </details>
+
+          <button id="submit" type="submit">Cut the bullshit</button>
+        </form>
+        <p id="status" class="status" role="status" aria-live="polite"></p>
+      </section>
+
+      <section id="result" class="result" aria-live="polite" hidden>
+        <div class="verdict-row">
+          <span id="verdict" class="verdict"></span>
+          <span id="meta" class="meta"></span>
+        </div>
+        <p id="reason" class="reason"></p>
+        <div id="summary" class="summary"></div>
+      </section>
+
+      <footer>
+        Install this PWA from your browser menu to make it appear in Android's share sheet. API keys
+        stay in the local backend.
+      </footer>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

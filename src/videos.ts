@@ -2,6 +2,7 @@ import { promises as fs } from 'node:fs';
 import { z } from 'zod';
 import type { BenchmarkVideo } from './benchmark.js';
 import { extractVideoId } from './youtube.js';
+import { languageSchema } from './transcript/provider.js';
 
 /**
  * Loads videos.json and turns every link into a video ID.
@@ -10,7 +11,15 @@ import { extractVideoId } from './youtube.js';
  */
 
 const videosFileSchema = z.object({
-  videos: z.array(z.string()).min(1, 'the "videos" list must contain at least one link'),
+  videos: z
+    .array(
+      z.object({
+        url: z.string().trim().min(1),
+        title: z.string().trim().min(1),
+        language: languageSchema,
+      }),
+    )
+    .min(1, 'the "videos" list must contain at least one entry'),
 });
 
 export async function loadVideos(filePath: string): Promise<BenchmarkVideo[]> {
@@ -41,9 +50,9 @@ export async function loadVideos(filePath: string): Promise<BenchmarkVideo[]> {
 
   const videos: BenchmarkVideo[] = [];
   const problems: string[] = [];
-  for (const url of file.data.videos) {
+  for (const entry of file.data.videos) {
     try {
-      videos.push({ url, videoId: extractVideoId(url) });
+      videos.push({ ...entry, videoId: extractVideoId(entry.url) });
     } catch (error) {
       problems.push(`  - ${error instanceof Error ? error.message : String(error)}`);
     }

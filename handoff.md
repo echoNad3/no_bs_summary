@@ -1,208 +1,148 @@
 # handoff.md
 
-Continuation guide for any coding agent. Keep this current; replace stale info instead of appending.
+Current continuation guide. Replace stale text instead of appending.
 
-## How to talk to the user (important)
+## How to talk to the owner
 
-The user has autism and is not tech-savvy. Every reply must be **short**, in
-**plain everyday language**, with **as little technical jargon as possible**.
-If a technical word is unavoidable, explain it simply right away. Put technical
-detail in files like this one — not in chat messages.
+The owner is autistic, a complete beginner at programming and infrastructure, and wants zero
+bullshit. In every reply: talk like a blunt lifelong best friend. Short, direct, practical,
+simple. Swear naturally. No corporate tone, no polished assistant voice, no fluff, no
+unnecessary disclaimers, no fancy wording. Say the useful shit first. Explain things clearly
+and concretely; use steps only when they actually help. Saving their time matters more than
+sounding nice. Deep technical detail belongs in this file and in code, not in chat.
 
-## Project goal
+## What this product is
 
-Local TypeScript feasibility benchmark: determine whether captioned YouTube videos can
-reliably produce useful, brutally concise summaries fast. **User decision (2026-07-13):
-the hard per-run limit is 30 seconds (was 15); faster is still the goal.**
-Output per video: verdict (WATCH / SKIM / SKIP), one blunt reason, shortest complete
-summary. Measures speed and transcript-provider reliability. Summary quality is judged
-manually — **no automated quality scoring, no AI judge.**
+A YouTube summary tool. You give it a YouTube link, it reads the video's existing captions and
+returns a detailed English summary (the main product) plus a small WATCH / SKIM / SKIP verdict
+with one blunt reason. Two clients, one backend:
 
-## Strict scope
+- **PWA** — installable web app; on Android it appears as a Share target for YouTube links.
+- **Chrome extension** — Manifest V3 side panel that detects the active YouTube tab.
 
-Benchmark only. **Do not add:** UI, browser extension, PWA, server, DB, auth, deployment,
-yt-dlp/FFmpeg/Whisper, audio/video download, generated-transcript fallback, queues,
-analytics, telemetry, Docker, monorepo tooling, alternative AI providers, timestamps in
-summaries, extra summary fields, automated quality scores. Ask before adding anything
-not explicitly required.
+Backend pipeline: TranscriptAPI fetches captions → Gemini (`gemini-3.1-flash-lite`) summarizes
+→ result is validated, cached, and returned. 15,000 ms end-to-end deadline, one retry per
+stage. Clients never see API keys or transcripts.
 
-## Work phases (stop and wait for user approval after each)
+## Who it's for (decided 2026-07-16 with the owner)
 
-1. **Research + scaffold** — DONE (this phase).
-2. **Transcript benchmark** — URL parsing/normalization, both transcript adapters,
-   normalization, caching, timeouts/retries, transcript measurements + report, mocked tests.
-   Stop before Gemini; tell user which API keys to add.
-3. **End-to-end benchmark** — Gemini provider, blunt prompt, structured-output validation,
-   full timing + reporting, real runs only where keys exist, save results. Stop.
+- **Users:** the owner plus a few trusted friends. Nothing more.
+- **No public signups, no accounts, no per-user API keys.** The owner's own Gemini and
+  TranscriptAPI keys pay for all usage.
+- **Hosting:** Cloudflare free tier. Owner accepts the small per-video API cost.
+- **Repo:** public on GitHub as `echoNad3/no_bullshit_summary`, MIT license.
+- **Both clients matter equally** (phone share target and desktop side panel).
 
-## Current status
+## Rejected direction (do not resurrect without the owner asking)
 
-Phase 3 code complete: Gemini summary provider (blunt prompt, structured JSON,
-store=false, thinking minimal, temp 0.2), summary stage wired into the shared per-run
-deadline, verdicts printed per video and saved to results JSON. 79 mocked tests pass,
-typecheck + format clean.
+An earlier ChatGPT-written plan called for Supabase email/password auth, strict RLS,
+per-user encrypted API key storage, account deletion flows, and a Monday/Thursday keepalive
+cron to stop the free Supabase project from pausing. That was over-engineered for a
+friends-only tool: nobody signs up for a service that demands their own API keys, and needing
+a cron job to keep the database awake means the tool choice was wrong. **Supabase is dropped
+entirely.** The owner created a Supabase project during earlier setup; it is unused and can be
+deleted from the Supabase dashboard (its values in `.env` can then be removed too).
 
-**First real benchmark run done (2026-07-13, 3 videos, both providers, no cache):**
+Access control is instead one shared app password: a single secret the owner gives to friends,
+entered once in the PWA/extension and sent with each API request. Stored as a Cloudflare
+Worker secret, never in the repo or browser bundles.
 
-- 6/6 runs succeeded end-to-end; 100% transcript and summary success; 0 retries
-- supadata: median 4120 ms, slowest 5727 ms
-- transcriptapi: median 1757 ms, slowest 1765 ms (clearly faster)
-- All comfortably within the 30 s limit; all would even fit the original 15 s goal
-- All verdicts came back SKIM; summaries correctly flagged sales pitches/padding
-- Detailed file: results/benchmark-2026-07-13T19-24-08-313Z.json (gitignored)
+## Frozen behavior (do not change without owner approval)
 
-Open question: whether the model leans too hard toward SKIM (sample of 3 videos,
-all fitness/commentary genre — needs a more varied sample and manual quality review
-by the user). Nothing in the automated suite touches the network; all tests use mocks.
+- Prompt `summary-first-v31-2026-07-15`, model `gemini-3.1-flash-lite`, verdict logic,
+  detailed-summary behavior, validation/cleanup rules, and the dark-only UI.
+- TranscriptAPI is the only active transcript provider; the Supadata adapter stays disabled.
+- No model or provider comparisons without a new owner-approved run.
+- No analytics, subscriptions, admin panels, social features, custom domains, or paid
+  resources.
 
-## Architecture
+## Current state (verified 2026-07-15)
 
-- `TranscriptProvider` interface (`src/transcript/provider.ts`): `fetchTranscript(videoId, signal)`
-  → normalized `TranscriptResult { provider, videoId, language, text, segments?, metadata? }`.
-  Segment times in **milliseconds**. Providers never fall back to each other.
-- `SummaryProvider` interface (`src/summary/provider.ts`): `summarize(text, signal)` → `Summary`
-  validated by the Zod `summarySchema` (`verdict/reason/summary`).
-- One `AbortController` per video/provider run enforces the single end-to-end deadline
-  (`END_TO_END_TIMEOUT_MS`, default 30000 ms) across transcript fetch + retry + Gemini.
-- Cached transcripts still get a live Gemini summary (fresh RunContext), but cached
-  runs never enter the live timing statistics (`withinDeadline` stays undefined).
-- Gemini requests: SDK-internal retries disabled (`maxRetries: 0`); our own single
-  retry for ApiError 408/429/5xx only, and only if the deadline allows. The abort
-  signal is passed via `options.fetchOptions.signal`.
-- Transcript cache (Phase 2): local files under `.cache/`, key = provider + videoId +
-  language (when known) + cache-format version. Atomic writes (temp file + rename).
-  LIVE vs CACHED labeled everywhere; cached runs excluded from live latency stats.
-  Gemini summaries are never cached.
-- Retries: max 1, only for transient network errors / 408 / 429 / 5xx, inside the same
-  deadline; honour Retry-After only if it fits. Never retry auth/payment/malformed/
-  transcript-unavailable errors.
+Everything works **locally**: `npm run build && npm start` serves the PWA and API at
+`http://127.0.0.1:8787`. The extension loads unpacked from `dist/extension`. 163 tests across
+20 files pass; format, typecheck, all three production builds, and the isolated Playwright
+extension smoke test pass. Nothing is deployed yet and the repo has no GitHub remote yet.
 
-## Confirmed API facts (verified 2026-07-13 against official docs)
+Key architecture facts:
 
-### Supadata — https://docs.supadata.ai/get-transcript
+- `src/product/service.ts` — `SummaryService`: request validation, backend summary cache
+  lookup, in-flight collapse, pipeline call, exact response persistence. Has an internal
+  `{ regenerate: true }` seam, not exposed to clients.
+- `src/product/summary-cache.ts` — replaceable `SummaryCache` interface keyed by video ID +
+  model + prompt version, plus the local `FileSummaryCache` (`.cache/summaries`) development
+  implementation. **Cloud deployment swaps this implementation, not the interface.**
+- `src/server.ts` — local Node HTTP server: CORS allowlist (localhost + chrome-extension),
+  JSON body limits, safe errors, static PWA serving. This is the file the Worker replaces in
+  production.
+- `src/http.ts`, `src/transcript/transcriptapi.ts`, `src/summary/gemini.ts` — the pipeline is
+  already fetch-based, which makes it portable to Cloudflare Workers.
+- `apps/shared/` — API client, theme, and safe Markdown-topic rendering shared by both
+  clients.
+- Benchmark/quality history lives in `MODEL_COMPARISON_REPORT.md`,
+  `QUALITY_BENCHMARK_REPORT.md`, `BENCHMARK_REPORT.md`, `PROMPT_QUALITY_COMPARISON.md`, and
+  `results/`. Historical evidence only; don't rerun without being asked. Any future model
+  comparison must reuse the same cached transcript hashes and current prompt.
 
-- `GET https://api.supadata.ai/v1/transcript`, header `x-api-key: <key>`
-- Query: `url` (encoded), `mode=native` (**required for this project** — never auto/generate),
-  `text=false` to get segments, optional `lang`
-- 200 (text=false): `{ content: [{ text, offset, duration, lang }], lang, availableLangs }`
-  (`offset`/`duration` in ms)
-- 202: `{ jobId }` — async job (docs: videos > 20 min may trigger this). **Do not poll;
-  treat as a run failure with a clear reason** (spec forbids async transcription jobs).
-- 206: no native transcript available. 404: video unavailable/private.
+Owner's existing logins: Cloudflare (wrangler, kzaumanis@gmail.com), GitHub CLI (`echoNad3`).
+Local `.env` holds the real TranscriptAPI and Gemini keys plus now-unneeded Supabase values.
+Never print, expose, or commit secrets.
 
-### TranscriptAPI — https://transcriptapi.com/docs/api/
+## The plan (phased — do them in order, verify each before the next)
 
-- `GET https://transcriptapi.com/api/v2/youtube/transcript`, header `Authorization: Bearer <key>`
-- Query: `video_url` (full URL or bare video ID), `format=json`, `include_timestamp=true`
-  (default), `send_metadata=false` (default — **keep false**, avoids extra latency)
-- 200: `{ video_id, language, transcript: [{ text, start, duration }] }` (`start`/`duration`
-  in **seconds** — convert to ms for `TranscriptSegment`)
-- 404 no transcript; 401 bad key; 402 out of credits; retryable per docs: 408/429/503.
-  Rate limit 300 req/min.
+**Phase A — GitHub.** Add MIT `LICENSE`. Secret-scan the full history and working tree (no
+real keys have ever been committed; verify anyway). Commit the current work in sensible
+commits, create the public `echoNad3/no_bullshit_summary` repo with `gh`, push.
 
-### Gemini — ai.google.dev
+**Phase B — Cloudflare Worker backend.** Port the API of `src/server.ts` to a Worker fetch
+handler reusing `SummaryService` unchanged. Summary cache: a `KvSummaryCache` implementing the
+existing `SummaryCache` interface on Workers KV. Transcript caching stays local-dev only —
+never store full transcripts in the cloud. Secrets (`GEMINI_API_KEY`,
+`TRANSCRIPTAPI_API_KEY`, `APP_PASSWORD`) go in via `wrangler secret put`, values never
+displayed. Add: app-password check on all API routes, restricted CORS, security headers,
+sensible per-client rate limiting, safe error bodies. Serve the built PWA as Worker static
+assets at the workers.dev URL. Keep `npm start` local development fully working.
 
-- SDK `@google/genai` (Interactions API from v2.3.0), method `ai.interactions.create`
-- Model `gemini-3.1-flash-lite` (GA; 1,048,576 in / 65,536 out tokens), env-overridable
-  via `GEMINI_MODEL`
-- Exact call shape **confirmed against installed @google/genai 2.11.0 type definitions**
-  (`node_modules/@google/genai/dist/genai.d.ts` — interactions surface is all snake_case):
-  ```ts
-  const interaction = await ai.interactions.create({
-    model, // string
-    input, // string
-    store: false,
-    system_instruction: '...', // optional string
-    generation_config: { thinking_level: 'minimal', temperature: 0.1 },
-    response_format: { type: 'text', mime_type: 'application/json', schema: jsonSchema },
-  });
-  const text = interaction.output_text; // string | undefined — validate with Zod
-  ```
-- `thinking_level` values: `"minimal" | "low" | "medium" | "high"`.
-  `response_mime_type` is deprecated in favour of `response_format`.
+**Phase C — clients.** PWA and extension get a one-time setup screen for backend URL + app
+password (stored in extension/browser storage, never in the bundle). They otherwise keep the
+exact current UX. Build the extension zip for friends to load unpacked; do not publish to the
+Chrome Web Store.
 
-### Docs consulted
+**Phase D — CI.** GitHub Actions running format check, typecheck, tests, and all builds on
+push/PR. Deploys stay manual via `wrangler deploy` unless a deploy token can be added without
+owner involvement. No Supabase keepalive job — nothing to keep alive.
 
-- https://docs.supadata.ai/get-transcript and https://docs.supadata.ai/llms-full.txt
-- https://transcriptapi.com/docs/api/
-- https://ai.google.dev/gemini-api/docs/interactions-overview
-- https://ai.google.dev/api/interactions-api
-- https://ai.google.dev/gemini-api/docs/structured-output
-- https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-lite
-- https://googleapis.github.io/js-genai/
+**Phase E — deploy and smoke test.** Deploy, then verify in production: PWA loads, app
+password gate works (wrong password rejected), one fresh video summarizes end-to-end, the
+same video returns the identical cached result, and the extension talks to the deployed URL.
+Use at most two live TranscriptAPI requests total.
 
-## File structure
+**Phase F — docs.** Rewrite README for the deployed reality: what it is, the URL, friend
+setup (URL + password + extension install), local development, self-hosting, secrets, known
+limitations. Update this file; end with the owner's exact next manual action.
 
+## Standard verification after any change
+
+```text
+npm run format:check
+npm run typecheck
+npm test
+npm run build
+npm run smoke:extension
+git diff --check
 ```
-package.json            npm scripts: bench, bench:no-cache, cache:clear, typecheck, test, format
-tsconfig.json           strict TS, NodeNext ESM, noEmit (tsx runs the code)
-.prettierrc.json
-.gitignore              ignores .env, node_modules, .cache/, results/, videos.json
-.env.example            all required env vars with comments
-videos.example.json     { "videos": [ ...urls ] }
-README.md               beginner instructions (Phase 3 parts marked "coming")
-src/
-  index.ts              CLI entry; flags --no-cache, --clear-cache; builds providers,
-                        runs benchmark, prints report, saves results JSON
-  config.ts             Zod-validated env loading (empty strings = unset; readable errors)
-  youtube.ts            extractVideoId(): watch/youtu.be/shorts/live links → 11-char ID
-  videos.ts             loads videos.json; lists ALL bad links in one error, never skips
-  run-context.ts        RunContext { signal, deadlineAt, retried } + createRunContext()
-  http.ts               fetchWithOneRetry(): max 1 retry (network/408/429/5xx only),
-                        Retry-After honoured only if it fits the deadline
-  cache.ts              TranscriptCache: .cache/v1-<provider>-<videoId>-default.json,
-                        atomic writes (tmp file + rename), corrupt file = miss
-  benchmark.ts          runBenchmark(): sequential runs, LIVE/CACHED labeling, RunRecord
-  stats.ts              median / percentile (nearest rank) / max
-  report.ts             computeProviderStats() + formatReport() (per-provider terminal report)
-  results.ts            saveResults(): timestamped JSON into results/
-  transcript/
-    provider.ts         TranscriptProvider interface + TranscriptResult + TranscriptError
-    normalize.ts        whitespace cleanup + exact-consecutive-duplicate removal only
-    supadata.ts         real adapter (mode=native, text=false; 202 job = failure)
-    transcriptapi.ts    real adapter (v2, Bearer auth, seconds→ms conversion)
-  summary/
-    provider.ts         SummaryProvider interface + Zod summarySchema
-    gemini.ts           real adapter: interactions.create, JSON schema generated
-                        from summarySchema via z.toJSONSchema, injectable createFn
-                        for tests, own one-retry rule (SDK retries off)
-tests/                  79 mocked tests — no real API calls, no keys needed
-  youtube.test.ts, config.test.ts, videos.test.ts, normalize.test.ts,
-  http.test.ts, cache.test.ts, providers.test.ts, benchmark.test.ts,
-  gemini.test.ts, stats.test.ts, scaffold.test.ts
-```
-
-Remaining work: run a real benchmark once the user supplies `.env` keys and
-`videos.json`, review summary quality manually, report honest numbers.
 
 ## Commands
 
+```text
+npm start                  # build output server + PWA at http://127.0.0.1:8787
+npm run dev:api            # dev API server via tsx
+npm run bench              # benchmark (may reuse cached transcripts)
+npm run bench:cache-only   # Gemini only; fails on transcript cache miss
+npm run bench:no-cache     # live transcripts; costs money
+npm run cache:clear        # wipe local transcript + summary caches
+npm run smoke:extension    # isolated Playwright cross-client test
 ```
-npm install
-npm run typecheck
-npm test
-npm run format / format:check
-npm run bench            (transcript benchmark; needs .env keys + videos.json)
-npm run bench:no-cache   (force live requests — the honest latency numbers)
-npm run cache:clear      (wipe .cache/)
-```
 
-## Environment variables (see .env.example)
+## Next step
 
-`SUPADATA_API_KEY`, `TRANSCRIPTAPI_API_KEY`, `GEMINI_API_KEY`,
-`TRANSCRIPT_PROVIDER` (supadata | transcriptapi | all), `GEMINI_MODEL`,
-`END_TO_END_TIMEOUT_MS` (default 30000). Missing transcript key ⇒ provider marked
-**skipped**; missing `GEMINI_API_KEY` ⇒ transcripts only, clearly noted, never a crash.
-Never log or embed keys anywhere, including error messages.
-
-## Known problems / unresolved decisions
-
-- Supadata may return 202 (async job) for long videos even in native mode — decided:
-  fail that run with reason "provider returned async job", do not poll.
-- Percentiles on tiny samples: compute consistently anyway and print the sample size.
-
-## Files not to modify without a reason
-
-- `.env` (user's secrets; never commit, never print)
-- `videos.json` (user's personal list)
-- `results/` output files (benchmark evidence — append new files, never rewrite old ones)
+Phase A: secret scan, MIT license, commit, create the public GitHub repo, push.

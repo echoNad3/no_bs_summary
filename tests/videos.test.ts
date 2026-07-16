@@ -21,13 +21,34 @@ describe('loadVideos', () => {
     await fs.writeFile(
       file,
       JSON.stringify({
-        videos: ['https://youtu.be/dQw4w9WgXcQ', 'https://www.youtube.com/watch?v=abcdefghijk'],
+        videos: [
+          {
+            url: 'https://youtu.be/dQw4w9WgXcQ',
+            title: 'English video',
+            language: 'en',
+          },
+          {
+            url: 'https://www.youtube.com/watch?v=abcdefghijk',
+            title: 'German video',
+            language: 'de',
+          },
+        ],
       }),
     );
     const videos = await loadVideos(file);
     expect(videos).toEqual([
-      { url: 'https://youtu.be/dQw4w9WgXcQ', videoId: 'dQw4w9WgXcQ' },
-      { url: 'https://www.youtube.com/watch?v=abcdefghijk', videoId: 'abcdefghijk' },
+      {
+        url: 'https://youtu.be/dQw4w9WgXcQ',
+        videoId: 'dQw4w9WgXcQ',
+        title: 'English video',
+        language: 'en',
+      },
+      {
+        url: 'https://www.youtube.com/watch?v=abcdefghijk',
+        videoId: 'abcdefghijk',
+        title: 'German video',
+        language: 'de',
+      },
     ]);
   });
 
@@ -49,12 +70,26 @@ describe('loadVideos', () => {
     await fs.writeFile(
       file,
       JSON.stringify({
-        videos: ['https://youtu.be/dQw4w9WgXcQ', 'https://vimeo.com/1', 'not a link'],
+        videos: [
+          { url: 'https://youtu.be/dQw4w9WgXcQ', title: 'Good', language: 'en' },
+          { url: 'https://vimeo.com/1', title: 'Bad one', language: 'en' },
+          { url: 'not a link', title: 'Bad two', language: 'en' },
+        ],
       }),
     );
     const error = await loadVideos(file).catch((e: unknown) => e as Error);
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).toContain('vimeo.com');
     expect((error as Error).message).toContain('not a link');
+  });
+
+  it('requires a title and valid requested caption language', async () => {
+    await fs.writeFile(
+      file,
+      JSON.stringify({
+        videos: [{ url: 'https://youtu.be/dQw4w9WgXcQ', title: '', language: 'english' }],
+      }),
+    );
+    await expect(loadVideos(file)).rejects.toThrow('wrong shape');
   });
 });

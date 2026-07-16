@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "No Bullshit Summary",
+  "description": "Summarize the current captioned YouTube video with the local backend.",
+  "version": "0.1.0",
+  "minimum_chrome_version": "114",
+  "permissions": ["activeTab", "sidePanel"],
+  "host_permissions": [
+    "http://127.0.0.1:8787/*",
+    "https://youtube.com/*",
+    "https://www.youtube.com/*",
+    "https://m.youtube.com/*",
+    "https://music.youtube.com/*",
+    "https://youtu.be/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Open No Bullshit Summary"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  }
+}

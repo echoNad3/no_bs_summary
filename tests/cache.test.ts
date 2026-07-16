@@ -27,8 +27,8 @@ afterEach(async () => {
 
 describe('cacheKey', () => {
   it('includes version, provider, video ID and requested language', () => {
-    expect(cacheKey('supadata', 'dQw4w9WgXcQ')).toBe('v1-supadata-dQw4w9WgXcQ-default');
-    expect(cacheKey('transcriptapi', 'abc12345678', 'en')).toBe('v1-transcriptapi-abc12345678-en');
+    expect(cacheKey('supadata', 'dQw4w9WgXcQ')).toBe('v2-supadata-dQw4w9WgXcQ-default');
+    expect(cacheKey('transcriptapi', 'abc12345678', 'en')).toBe('v2-transcriptapi-abc12345678-en');
   });
 
   it('differs per provider so providers never share cache entries', () => {
@@ -54,11 +54,56 @@ describe('TranscriptCache', () => {
     expect(files).toEqual([`${key}.json`]);
   });
 
+  it('atomically replaces an existing cache entry', async () => {
+    const key = cacheKey('supadata', transcript.videoId);
+    await cache.write(key, transcript);
+    const replacement: TranscriptResult = {
+      ...transcript,
+      text: 'replacement text',
+      segments: [{ text: 'replacement text', startMs: 10, durationMs: 500 }],
+    };
+    await cache.write(key, replacement);
+    expect(await cache.read(key)).toEqual(replacement);
+    expect(await fs.readdir(dir)).toEqual([`${key}.json`]);
+  });
+
   it('treats a corrupt file as a cache miss', async () => {
     const key = cacheKey('supadata', transcript.videoId);
     await fs.mkdir(dir, { recursive: true });
     await fs.writeFile(path.join(dir, `${key}.json`), '{ not valid json', 'utf8');
     expect(await cache.read(key)).toBeUndefined();
+  });
+
+  it('rejects empty text, invalid language, inconsistent segments and negative timing', async () => {
+    const key = cacheKey('supadata', transcript.videoId);
+    await fs.mkdir(dir, { recursive: true });
+    const invalidEntries = [
+      { ...transcript, text: '' },
+      { ...transcript, language: 'not a language' },
+      { ...transcript, text: 'does not match segments' },
+      {
+        ...transcript,
+        segments: [{ text: 'hello world', startMs: -1, durationMs: 1000 }],
+      },
+    ];
+    for (const entry of invalidEntries) {
+      await fs.writeFile(path.join(dir, `${key}.json`), JSON.stringify(entry), 'utf8');
+      expect(await cache.read(key)).toBeUndefined();
+    }
+  });
+
+  it('rejects a cache entry whose provider or video does not match the requested key', async () => {
+    const key = cacheKey('supadata', transcript.videoId);
+    await cache.write(key, transcript);
+    expect(
+      await cache.read(key, { provider: 'transcriptapi', videoId: transcript.videoId }),
+    ).toBeUndefined();
+    expect(await cache.read(key, { provider: 'supadata', videoId: 'abcdefghijk' })).toBeUndefined();
+  });
+
+  it('refuses to write invalid transcript data', async () => {
+    const invalid = { ...transcript, text: '' };
+    await expect(cache.write(cacheKey('supadata', transcript.videoId), invalid)).rejects.toThrow();
   });
 
   it('clear() removes everything', async () => {

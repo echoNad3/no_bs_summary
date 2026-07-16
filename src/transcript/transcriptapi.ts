@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { fetchWithOneRetry } from '../http.js';
 import type { RunContext } from '../run-context.js';
 import { assertUsableTranscript, normalizeSegments } from './normalize.js';
-import { TranscriptError } from './provider.js';
+import { languageSchema, sameLanguageFamily, TranscriptError, videoIdSchema } from './provider.js';
 import type { TranscriptProvider, TranscriptResult } from './provider.js';
 
 /**
@@ -18,47 +18,63 @@ import type { TranscriptProvider, TranscriptResult } from './provider.js';
  */
 
 const responseSchema = z.object({
-  video_id: z.string().optional(),
-  language: z.string().optional(),
-  transcript: z.array(
-    z.object({
-      text: z.string(),
-      start: z.number(),
-      duration: z.number(),
-    }),
-  ),
+  video_id: videoIdSchema,
+  language: languageSchema,
+  transcript: z
+    .array(
+      z.object({
+        text: z.string().trim().min(1),
+        start: z.number().finite().nonnegative(),
+        duration: z.number().finite().nonnegative(),
+      }),
+    )
+    .min(1),
 });
+
+const TRANSCRIPTAPI_RETRY_POLICY = {
+  isRetryableStatus: (status: number) => status === 408 || status === 429 || status === 503,
+  defaultDelayMs: 1000,
+};
 
 export class TranscriptApiProvider implements TranscriptProvider {
   readonly name = 'transcriptapi';
 
   constructor(private readonly apiKey: string) {}
 
-  async fetchTranscript(videoId: string, ctx: RunContext): Promise<TranscriptResult> {
+  async fetchTranscript(
+    videoId: string,
+    ctx: RunContext,
+    requestedLanguage = 'en',
+  ): Promise<TranscriptResult> {
     const url =
       `https://transcriptapi.com/api/v2/youtube/transcript` +
-      `?video_url=${encodeURIComponent(videoId)}&format=json`;
+      `?video_url=${encodeURIComponent(videoId)}` +
+      `&language=${encodeURIComponent(requestedLanguage)}` +
+      `&format=json&include_timestamp=true&send_metadata=false`;
 
-    const { response } = await fetchWithOneRetry(
+    const { response, firstFailure } = await fetchWithOneRetry(
       url,
       { headers: { Authorization: `Bearer ${this.apiKey}` } },
       ctx,
+      TRANSCRIPTAPI_RETRY_POLICY,
     );
 
     if (response.status === 401) {
-      throw new TranscriptError(
+      throw providerFailure(
         'TranscriptAPI rejected the API key (check TRANSCRIPTAPI_API_KEY in .env).',
+        firstFailure,
       );
     }
     if (response.status === 402) {
-      throw new TranscriptError('TranscriptAPI: no credits left on this account.');
+      throw providerFailure('TranscriptAPI: no credits left on this account.', firstFailure);
     }
     if (response.status === 404) {
-      throw new TranscriptError('TranscriptAPI: no captions available for this video.');
+      throw providerFailure('TranscriptAPI: no captions available for this video.', firstFailure);
     }
     if (!response.ok) {
-      throw new TranscriptError(
+      throw providerFailure(
         `TranscriptAPI request failed with HTTP status ${response.status}.`,
+        firstFailure,
       );
     }
 
@@ -66,12 +82,24 @@ export class TranscriptApiProvider implements TranscriptProvider {
     try {
       body = await response.json();
     } catch {
-      throw new TranscriptError('TranscriptAPI sent a response that was not valid JSON.');
+      throw providerFailure('TranscriptAPI sent a response that was not valid JSON.', firstFailure);
     }
 
     const parsed = responseSchema.safeParse(body);
     if (!parsed.success) {
-      throw new TranscriptError('TranscriptAPI sent a response in an unexpected format.');
+      throw providerFailure('TranscriptAPI sent a response in an unexpected format.', firstFailure);
+    }
+    if (parsed.data.video_id !== videoId) {
+      throw providerFailure(
+        `TranscriptAPI returned transcript data for a different video (${parsed.data.video_id}).`,
+        firstFailure,
+      );
+    }
+    if (!sameLanguageFamily(parsed.data.language, requestedLanguage)) {
+      throw providerFailure(
+        `TranscriptAPI returned ${parsed.data.language} captions instead of requested ${requestedLanguage} captions.`,
+        firstFailure,
+      );
     }
 
     const { text, segments } = normalizeSegments(
@@ -86,9 +114,15 @@ export class TranscriptApiProvider implements TranscriptProvider {
     return {
       provider: this.name,
       videoId,
-      language: parsed.data.language ?? 'unknown',
+      language: parsed.data.language,
       text,
       segments,
     };
   }
+}
+
+function providerFailure(message: string, firstFailure: string | undefined): TranscriptError {
+  return new TranscriptError(
+    message + (firstFailure ? ` First attempt failed with ${firstFailure}.` : ''),
+  );
 }

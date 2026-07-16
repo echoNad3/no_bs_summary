@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0d0f12" />
+    <style>
+      :root {
+        color-scheme: dark;
+        background: #0d0f12;
+      }
+    </style>
+    <title>No Bullshit Summary</title>
+  </head>
+  <body>
+    <main class="panel-shell">
+      <header>
+        <p class="eyebrow">LOCAL · CAPTIONS ONLY</p>
+        <h1>No Bullshit Summary</h1>
+        <p class="lede">Get the point without leaving YouTube.</p>
+      </header>
+
+      <form id="summary-form" novalidate>
+        <div id="video-context" class="video-context" data-detected="false">
+          <span id="context-label" class="context-label">Current video</span>
+          <strong id="detected-title" class="detected-title">No YouTube video detected</strong>
+        </div>
+        <input id="title" name="title" type="hidden" />
+
+        <details id="fallback-controls">
+          <summary>Use another link or caption language</summary>
+          <div class="fallback-fields">
+            <label for="url">YouTube link</label>
+            <input
+              id="url"
+              name="url"
+              type="url"
+              inputmode="url"
+              autocomplete="url"
+              placeholder="Paste a YouTube link"
+              required
+            />
+
+            <label for="language">Caption language</label>
+            <input
+              id="language"
+              name="language"
+              type="text"
+              value="en"
+              maxlength="20"
+              autocapitalize="none"
+              spellcheck="false"
+              required
+            />
+            <p class="help">For example: en, de, es, or pt-BR.</p>
+          </div>
+        </details>
+
+        <button id="submit" type="submit">Cut the bullshit</button>
+      </form>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+
+      <section id="result" class="result" aria-live="polite" hidden>
+        <div class="verdict-row">
+          <span id="verdict" class="verdict"></span>
+          <span id="meta" class="meta"></span>
+        </div>
+        <p id="reason" class="reason"></p>
+        <div id="summary" class="summary"></div>
+      </section>
+
+      <footer>The local backend does the paid API work. No keys are stored here.</footer>
+    </main>
+    <script type="module" src="/src/sidepanel.ts"></script>
+  </body>
+</html>

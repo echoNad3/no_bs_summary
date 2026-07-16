@@ -3,10 +3,12 @@
 
 # Dependencies
 node_modules/
+dist/
 
 # Local benchmark data
 .cache/
 results/
+model-comparison-artifact.json
 
 # Personal video list (commit videos.example.json instead)
 videos.json

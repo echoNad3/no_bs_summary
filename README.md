@@ -1,106 +1,131 @@
-# no-bullshit-summary — feasibility benchmark
+# no-bullshit-summary - local MVP and quality benchmark
 
-A small local benchmark that answers one question: **can captioned YouTube videos
-reliably produce useful, brutally concise summaries quickly — 30 seconds at the very
-most, ideally much faster?**
+A local TypeScript app and benchmark for blunt, useful summaries from existing YouTube
+captions. Each measured request has an end-to-end deadline of **15 seconds (15000 ms)**.
 
-For every video it fetches the existing captions (no AI transcription), sends them
-to Gemini once, and expects back:
+For each video it returns:
 
-- a verdict: **WATCH**, **SKIM** or **SKIP**
-- one short, blunt reason
-- the shortest complete summary of the useful information
+- a detailed English summary containing the important facts, names, events, arguments,
+  numbers, context, and conclusions
+- **WATCH**, **SKIM**, or **SKIP** as a small extra
+- one blunt, natural reason that judges the video's quality
 
-It measures transcript-provider reliability and end-to-end speed. Summary quality
-is reviewed by a human — there is no automated quality score on purpose.
-
-> **Status: Phase 3 done.** The full pipeline works: captions in, blunt summary out,
-> everything timed against a 30-second limit per video.
+Transcript retrieval and Gemini are measured separately. Summary quality is reviewed by a
+human; there is no automated quality score or AI judge.
 
 ## What you need
 
-- [Node.js](https://nodejs.org) version 24 or newer (the current LTS). Check with:
-  ```
-  node --version
-  ```
-- A terminal: on Windows, open "PowerShell" from the Start menu.
+- Node.js 24 or newer
+- API keys for TranscriptAPI and Gemini
 
-## 1. Install dependencies
+## Setup
 
-Open a terminal in this project folder and run:
+1. Run `npm install`.
+2. Copy `.env.example` to `.env` and add the API keys.
+3. Copy `videos.example.json` to `videos.json` and add objects with `url`, `title`, and the
+   requested caption `language`.
 
-```
-npm install
-```
+TranscriptAPI is the only active transcript provider. The tested Supadata adapter remains
+in the source tree but is intentionally disabled. `.env`, `videos.json`, transcript caches,
+and result files are ignored by Git.
 
-## 2. Add your API keys
+## Run the local MVP
 
-1. Copy the file `.env.example` and name the copy `.env` (exactly that, starting with a dot).
-2. Open `.env` in any text editor and paste your keys after the `=` signs:
-   - `SUPADATA_API_KEY` — from your [Supadata dashboard](https://supadata.ai)
-   - `TRANSCRIPTAPI_API_KEY` — from your [TranscriptAPI dashboard](https://transcriptapi.com)
-   - `GEMINI_API_KEY` — from [Google AI Studio](https://aistudio.google.com/apikey)
-
-A missing key does not crash anything — that provider is simply reported as "skipped".
-
-The `.env` file stays on your machine and is ignored by git. Never share it.
-
-## 3. Choose the videos to benchmark
-
-Copy `videos.example.json` to `videos.json` and replace the example links with the
-YouTube videos you want to test. Normal links, `youtu.be` short links and Shorts
-links all work. Invalid links stop the run with a clear error — nothing is
-silently skipped.
-
-## 4. Choose the transcript provider(s)
-
-In `.env`, set `TRANSCRIPT_PROVIDER` to one of:
-
-- `supadata` — test only Supadata
-- `transcriptapi` — test only TranscriptAPI
-- `all` — test both independently against every video (recommended for the benchmark)
-
-A provider whose API key is missing is reported as **skipped**, never silently dropped.
-
-## 5. Run the benchmark
-
-```
-npm run bench            # normal run (may reuse cached transcripts)
-npm run bench:no-cache   # force live transcript requests (real latency numbers)
-npm run cache:clear      # delete the local transcript cache
+```text
+npm run build
+npm start
 ```
 
-Each run fetches the captions, sends them to Gemini once, and prints the verdict
-(WATCH / SKIM / SKIP), the one-line reason and the summary for every video.
-Everything for one video must finish within the time limit (30 seconds, set by
-`END_TO_END_TIMEOUT_MS` in `.env`).
+The backend and PWA run at `http://127.0.0.1:8787`. The backend owns both API keys and uses
+the existing validated cache, TranscriptAPI adapter, Gemini provider, frozen prompt, and
+15000 ms pipeline deadline. Browser code receives only the final verdict, reason, summary,
+safe timings, and retry counts.
 
-Tip: for honest speed numbers use `npm run bench:no-cache`. A normal run reuses
-captions already saved on your computer ("cached"), which is faster but says
-nothing about real-world speed. Cached runs still get a fresh summary.
+Both browser clients call that one backend; neither reads another client's state or accesses
+cache files. The backend saves complete summary responses by video ID, Gemini model, and prompt
+version, so the PWA and extension receive the exact same saved result for the same key. Storage
+is behind the `SummaryCache` interface. Its `.cache/summaries` filesystem implementation is for
+local development and can be replaced by hosted durable storage without changing either client.
+An internal regenerate seam exists, but no regenerate control or public API option is exposed yet.
 
-### Reading the terminal report
+For the Chrome extension:
 
-For each provider you see:
+1. Open `chrome://extensions` and enable Developer mode.
+2. Choose **Load unpacked** and select this repository's `dist/extension` directory.
+3. Open a YouTube video and click the extension toolbar action to open its side panel.
 
-- how many live runs were tried, and how many worked or failed
-- **Median** — the typical time (half the runs were faster than this)
-- **p95** — almost the worst case (95% of runs were faster than this)
-- how many runs finished within the time limit
-- which videos failed and why, in one short line each
+For an Android share-target smoke test on a USB-connected device, run
+`adb reverse tcp:8787 tcp:8787`, open `http://localhost:8787` in Chrome on the phone, and
+install the PWA. It will then appear as a target when sharing a YouTube URL. A shared link is
+prefilled but never submitted automatically.
 
-Cached runs are listed separately and never mixed into the timing numbers.
+This is intentionally a local MVP: there is no deployment, remote server, authentication,
+account system, or secret in either browser bundle.
 
-### Detailed results
+## Run it
 
-Every run also writes a timestamped JSON file into the `results/` folder with the
-full per-video measurements, verdicts and summaries.
-
-## Checks and tests
-
+```text
+npm run bench            # may reuse cached transcripts
+npm run bench:cache-only # Gemini only; fails instead of fetching on a cache miss
+npm run bench:model-comparison # comparison-only generateContent route; cache only
+npm run bench:no-cache   # forces live transcripts; use for honest speed results
+npm run cache:clear      # removes local transcript and saved-summary caches
 ```
-npm run typecheck     # TypeScript type checking
-npm test              # unit tests (mocked — no API keys or credits used)
-npm run format        # auto-format all files
-npm run format:check  # verify formatting without changing files
+
+Every live video shares one 15000 ms deadline across transcript retrieval, one allowed
+transcript retry, Gemini, and one allowed Gemini retry. `GEMINI_PACING_MS` delays the next
+video only after the measured run finishes, so quota pacing cannot alter the measurement.
+Cached transcript runs are reported separately and never enter live reliability or speed
+statistics.
+
+Unknown command options stop immediately. This prevents a mistyped `--no-cache` from
+silently running with cache enabled.
+
+## Reporting and saved results
+
+The report keeps separate:
+
+- transcript success, failures, retries, and transcript-only time
+- Gemini success, failures, retries, and Gemini-only time
+- end-to-end time and deadline success
+- cached and live statistics
+
+A Gemini failure never counts as a transcript failure. Each run also saves a timestamped
+JSON file under `results/` with execution order, model and package versions, prompt version,
+requested and returned language, transcript hash, stage timings/retries, and final output.
+It never stores API keys or full transcripts.
+
+The manifest language is sent to TranscriptAPI and checked against its returned language.
+Gemini receives the actual caption language and must return English. Prompt v28 treats the
+detailed summary as the product and the verdict as a small quality judgment. Summaries must
+preserve concrete facts instead of replacing them with vague phrases, and genuinely
+multi-topic videos use labeled Markdown bullets. Length follows information density rather
+than a tiny fixed word or sentence limit. WATCH includes ordinary videos that are enjoyable,
+interesting, informative, useful, well told, entertaining, or worth experiencing. SKIM
+requires worthwhile material mixed with noticeable padding or weak sections. SKIP is
+reserved for obvious time-wasters; being easy to summarize is not a reason to reject a video.
+
+Validation and generic cleanup enforce separate reason and summary fields, one reason
+sentence, plain wording, no repeated ideas, no prompt leakage, no invented runtime, and no
+claims about unseen visuals. High character limits remain as safety bounds, not summary
+targets. Rejected candidates and their token usage remain auditable in benchmark results.
+The cleanup is deliberately video-agnostic.
+
+The current eight-video quality run and every final output are in
+[`QUALITY_BENCHMARK_REPORT.md`](QUALITY_BENCHMARK_REPORT.md). The older two-provider evidence
+is preserved in [`BENCHMARK_REPORT.md`](BENCHMARK_REPORT.md) as historical evidence only.
+The older prompt-tuning comparison is preserved in
+[`PROMPT_QUALITY_COMPARISON.md`](PROMPT_QUALITY_COMPARISON.md) as historical evidence.
+The 2026-07-14 cached-only model-comparison attempt, costs, availability failure, and current
+outputs are in [`MODEL_COMPARISON_REPORT.md`](MODEL_COMPARISON_REPORT.md).
+
+## Checks
+
+```text
+npm run build
+npm run format:check
+npm run typecheck
+npm test
 ```
+
+All tests use mocks and make no paid network requests.

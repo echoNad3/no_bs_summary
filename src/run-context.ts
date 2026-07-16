@@ -9,8 +9,16 @@ export interface RunContext {
   signal: AbortSignal;
   /** Wall-clock time (Date.now() ms) when the run must be finished. */
   deadlineAt: number;
-  /** Set to true by the HTTP helper if a retry happened during this run. */
-  retried: boolean;
+  /** Retries are counted separately so transcript reliability is never confused with Gemini. */
+  transcriptRetries: number;
+  summaryRetries: number;
+}
+
+export type RetryStage = 'transcript' | 'summary';
+
+export function recordRetry(ctx: RunContext, stage: RetryStage): void {
+  if (stage === 'transcript') ctx.transcriptRetries += 1;
+  else ctx.summaryRetries += 1;
 }
 
 export function createRunContext(timeoutMs: number): {
@@ -22,7 +30,8 @@ export function createRunContext(timeoutMs: number): {
   const ctx: RunContext = {
     signal: controller.signal,
     deadlineAt: Date.now() + timeoutMs,
-    retried: false,
+    transcriptRetries: 0,
+    summaryRetries: 0,
   };
   return { ctx, dispose: () => clearTimeout(timer) };
 }

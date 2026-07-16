@@ -1,3 +1,17 @@
+import { z } from 'zod';
+import type { RunContext } from '../run-context.js';
+
+export const videoIdSchema = z.string().regex(/^[A-Za-z0-9_-]{11}$/);
+export const languageSchema = z
+  .string()
+  .trim()
+  .regex(/^(?:asr-)?[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/);
+export const transcriptSegmentSchema = z.object({
+  text: z.string().trim().min(1),
+  startMs: z.number().finite().nonnegative(),
+  durationMs: z.number().finite().nonnegative(),
+});
+
 /**
  * One timestamped piece of a transcript, as supplied by the provider.
  * Times are in milliseconds from the start of the video.
@@ -24,8 +38,6 @@ export interface TranscriptResult {
   metadata?: Record<string, unknown>;
 }
 
-import type { RunContext } from '../run-context.js';
-
 /**
  * A transcript source. Implementations must:
  * - use only official, documented APIs
@@ -36,7 +48,20 @@ import type { RunContext } from '../run-context.js';
 export interface TranscriptProvider {
   /** Stable machine-readable name, e.g. "supadata". */
   readonly name: string;
-  fetchTranscript(videoId: string, ctx: RunContext): Promise<TranscriptResult>;
+  fetchTranscript(
+    videoId: string,
+    ctx: RunContext,
+    requestedLanguage?: string,
+  ): Promise<TranscriptResult>;
+}
+
+/** Plain and ASR-prefixed codes for the same base language are equivalent. */
+export function sameLanguageFamily(actual: string, requested: string): boolean {
+  return baseLanguage(actual) === baseLanguage(requested);
+}
+
+function baseLanguage(language: string): string {
+  return language.toLowerCase().replace(/^asr-/, '').split('-')[0] ?? '';
 }
 
 /**
@@ -44,10 +69,7 @@ export interface TranscriptProvider {
  * captions" or "the API key is wrong". Retrying cannot fix these.
  */
 export class TranscriptError extends Error {
-  constructor(
-    message: string,
-    readonly stage: 'transcript' = 'transcript',
-  ) {
+  constructor(message: string) {
     super(message);
     this.name = 'TranscriptError';
   }

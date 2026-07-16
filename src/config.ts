@@ -15,20 +15,27 @@ const optionalKey = z.preprocess(
 );
 
 const envSchema = z.object({
-  SUPADATA_API_KEY: optionalKey,
   TRANSCRIPTAPI_API_KEY: optionalKey,
   GEMINI_API_KEY: optionalKey,
-  TRANSCRIPT_PROVIDER: z.preprocess(
-    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
-    z.enum(['supadata', 'transcriptapi', 'all']).default('all'),
-  ),
   GEMINI_MODEL: z.preprocess(
     (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
     z.string().default('gemini-3.1-flash-lite'),
   ),
   END_TO_END_TIMEOUT_MS: z.preprocess(
     (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
-    z.coerce.number().int().positive().default(30000),
+    z.coerce.number().int().positive().default(15000),
+  ),
+  GEMINI_PACING_MS: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.coerce.number().int().nonnegative().default(4500),
+  ),
+  APP_HOST: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().trim().min(1).default('127.0.0.1'),
+  ),
+  APP_PORT: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.coerce.number().int().min(1).max(65535).default(8787),
   ),
 });
 

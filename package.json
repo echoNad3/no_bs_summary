@@ -2,16 +2,25 @@
   "name": "no-bullshit-summary-benchmark",
   "version": "0.1.0",
   "private": true,
-  "description": "Feasibility benchmark: can captioned YouTube videos produce blunt, useful summaries in under 15 seconds?",
+  "description": "Local benchmark and MVP for blunt, useful summaries of captioned YouTube videos.",
   "type": "module",
   "engines": {
     "node": ">=24"
   },
   "scripts": {
     "bench": "tsx src/index.ts",
+    "bench:cache-only": "tsx src/index.ts --cache-only",
+    "bench:model-comparison": "tsx src/model-comparison.ts",
     "bench:no-cache": "tsx src/index.ts --no-cache",
     "cache:clear": "tsx src/index.ts --clear-cache",
-    "typecheck": "tsc --noEmit",
+    "dev:api": "tsx src/server.ts",
+    "build:server": "tsc -p tsconfig.server.json",
+    "build:pwa": "vite build --config vite.pwa.config.ts --configLoader runner",
+    "build:extension": "vite build --config vite.extension.config.ts --configLoader runner",
+    "build": "npm run build:server && npm run build:pwa && npm run build:extension",
+    "smoke:extension": "node scripts/extension-smoke.mjs",
+    "start": "node dist/server/server.js",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.pwa.json && tsc -p tsconfig.extension.json",
     "test": "vitest run",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
@@ -22,10 +31,13 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "@types/chrome": "^0.2.2",
     "@types/node": "^24.10.1",
+    "playwright": "^1.61.1",
     "prettier": "^3.6.2",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",
+    "vite": "^7.3.6",
     "vitest": "^3.2.4"
   }
 }

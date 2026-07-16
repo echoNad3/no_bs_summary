@@ -1,3 +1,4 @@
+import { recordRetry } from './run-context.js';
 import type { RunContext } from './run-context.js';
 
 /**
@@ -13,25 +14,28 @@ import type { RunContext } from './run-context.js';
 
 export interface FetchOutcome {
   response: Response;
-  retried: boolean;
+  /** Safe diagnostic detail from the first failed attempt. Never contains request headers. */
+  firstFailure?: string;
 }
 
-function isRetryableStatus(status: number): boolean {
-  return status === 408 || status === 429 || (status >= 500 && status < 600);
+export interface RetryPolicy {
+  isRetryableStatus(status: number): boolean;
+  /** Used when the provider does not send Retry-After. */
+  defaultDelayMs: number;
 }
 
 /** Parse Retry-After (seconds or HTTP date) into milliseconds to wait. */
-function retryAfterMs(response: Response): number {
+function retryAfterMs(response: Response): number | undefined {
   const header = response.headers.get('retry-after');
-  if (!header) return 0;
+  if (!header) return undefined;
   const seconds = Number(header);
   if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
   const date = Date.parse(header);
   if (!Number.isNaN(date)) return Math.max(0, date - Date.now());
-  return 0;
+  return undefined;
 }
 
-function sleep(ms: number, signal: AbortSignal): Promise<void> {
+export function sleepWithinDeadline(ms: number, signal: AbortSignal): Promise<void> {
   if (ms <= 0) return Promise.resolve();
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -55,37 +59,46 @@ export async function fetchWithOneRetry(
   url: string,
   init: RequestInit,
   ctx: RunContext,
+  policy: RetryPolicy,
 ): Promise<FetchOutcome> {
   let firstError: unknown;
   let firstResponse: Response | undefined;
+  let firstFailure: string | undefined;
 
   try {
     firstResponse = await fetch(url, { ...init, signal: ctx.signal });
-    if (!isRetryableStatus(firstResponse.status)) {
-      return { response: firstResponse, retried: false };
+    if (!policy.isRetryableStatus(firstResponse.status)) {
+      return { response: firstResponse };
     }
+    firstFailure = `HTTP ${firstResponse.status}`;
   } catch (error) {
     if (!isNetworkError(error)) throw error; // includes AbortError (deadline hit)
     firstError = error;
+    firstFailure = error instanceof Error ? error.message : String(error);
   }
 
   // Decide whether a single retry still fits inside the deadline.
-  const waitMs = firstResponse ? retryAfterMs(firstResponse) : 0;
-  if (Date.now() + waitMs >= ctx.deadlineAt) {
-    if (firstResponse) return { response: firstResponse, retried: false };
+  const waitMs = firstResponse
+    ? (retryAfterMs(firstResponse) ?? policy.defaultDelayMs)
+    : policy.defaultDelayMs;
+  if (ctx.signal.aborted || Date.now() + waitMs >= ctx.deadlineAt) {
+    if (firstResponse) return { response: firstResponse };
     throw firstError;
   }
 
-  await sleep(waitMs, ctx.signal);
-  ctx.retried = true;
+  await sleepWithinDeadline(waitMs, ctx.signal);
+  recordRetry(ctx, 'transcript');
 
   try {
     const secondResponse = await fetch(url, { ...init, signal: ctx.signal });
-    return { response: secondResponse, retried: true };
+    return { response: secondResponse, firstFailure };
   } catch (secondError) {
-    if (firstError instanceof Error && secondError instanceof Error) {
-      secondError.message = `${secondError.message} (first attempt also failed: ${firstError.message})`;
-    }
-    throw secondError;
+    const secondMessage = secondError instanceof Error ? secondError.message : String(secondError);
+    const combined = new Error(
+      `${secondMessage} (first attempt also failed: ${firstFailure ?? 'unknown failure'})`,
+      { cause: secondError },
+    );
+    if (secondError instanceof Error) combined.name = secondError.name;
+    throw combined;
   }
 }

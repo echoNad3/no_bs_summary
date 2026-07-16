@@ -1,8 +1,9 @@
 {
   "videos": [
-    "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-    "https://youtu.be/dQw4w9WgXcQ",
-    "https://www.youtube.com/shorts/dQw4w9WgXcQ",
-    "https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=42s&list=PLxyz&si=tracking"
+    {
+      "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+      "title": "Rick Astley - Never Gonna Give You Up",
+      "language": "en"
+    }
   ]
 }
