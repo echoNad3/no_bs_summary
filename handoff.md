@@ -62,9 +62,21 @@ Worker secret, never in the repo or browser bundles.
 
 ## Current state (2026-07-16)
 
-Phases A–D are **done and pushed** to the public repo
-`https://github.com/echoNad3/no_bullshit_summary` (branch `main`, CI green). Phase E (deploy)
-is **in progress and blocked on one owner click** — see "Next step".
+**All phases (A–F) are done. The product is live in production:**
+
+- App + API: `https://no-bullshit-summary.echonad3.workers.dev`
+- Repo: `https://github.com/echoNad3/no_bullshit_summary` (public, `main`, CI green)
+- Worker secrets set (never in the repo): `GEMINI_API_KEY`, `TRANSCRIPTAPI_API_KEY`,
+  `APP_PASSWORD`. The app password was generated fresh at deploy time and given to the owner
+  in chat; it exists only as a Worker secret. To rotate it:
+  `npx wrangler secret put APP_PASSWORD`, then everyone re-enters it in their clients.
+- Production smoke (2026-07-16): health 200; PWA served with CSP + security headers; wrong
+  password → 401; disallowed web origin → 403; chrome-extension CORS preflight → 204 with the
+  right allow headers; one live summarize of `dQw4w9WgXcQ` (WATCH, 1.8 s, source LIVE — the
+  only paid TranscriptAPI call, budget was ≤ 2); immediate repeat returned a byte-identical
+  KV-cached response; `/share` SPA fallback 200.
+- Extension zip for friends: `dist/no-bullshit-summary-extension.zip` (rebuild any time with
+  `npm run build` + zipping `dist/extension`). Not published to the Chrome Web Store.
 
 Everything works **locally**: `npm run build && npm start` serves the PWA and API at
 `http://127.0.0.1:8787`. The extension loads unpacked from `dist/extension`. 175 tests across
@@ -112,24 +124,24 @@ Key architecture facts:
   `results/`. Historical evidence only; don't rerun without being asked. Any future model
   comparison must reuse the same cached transcript hashes and current prompt.
 
-## Remaining plan
+## Completed phases E and F (2026-07-16)
 
-**Phase E — deploy and smoke test (in progress).** After the owner registers the workers.dev
-subdomain: `npm run deploy`; set secrets `GEMINI_API_KEY`, `TRANSCRIPTAPI_API_KEY` (values
-from local `.env`, never displayed) and a freshly generated `APP_PASSWORD` via
-`npx wrangler secret put`; give the app password to the owner in chat (they must know it —
-it is the shared friend password, not an API key). Bake the deployed URL into
-`DEFAULT_BACKEND_URL` in `apps/extension/src/settings.ts`, rebuild, redeploy, zip the
-extension for friends. Production checks: PWA loads with CSP, wrong password → 401, one
-fresh video summarizes end-to-end (≤ 2 live TranscriptAPI requests total), repeat returns the
-identical KV-cached result, CORS preflight for a chrome-extension origin passes.
+- **Phase E — deploy.** Deployed via `npm run deploy` under the owner's wrangler login.
+  Extension `DEFAULT_BACKEND_URL` (`apps/extension/src/settings.ts`) now points at
+  production; local dev switches via the side-panel settings. `preview_urls` disabled in
+  wrangler.jsonc — one stable URL. The extension smoke script explicitly points the side
+  panel at `http://127.0.0.1:8787` because the shipped default is production. All production
+  checks above passed.
+- **Phase F — docs.** README rewritten for the deployed reality (live URL, friend setup,
+  extension install, local dev, self-hosting, costs, limits).
 
-**Phase F — docs.** Rewrite README for the deployed reality: what it is, the URL, friend
-setup (URL + password + extension install), local development, self-hosting, secrets, known
-limitations. Update this file; end with the owner's exact next manual action.
+Deploy blockers hit (each was a one-time owner dashboard action, both done 2026-07-16):
+Cloudflare email verification; workers.dev subdomain registration (`echonad3`).
 
-Deploy blockers hit so far (each was a one-time owner action): Cloudflare email verification
-(done 2026-07-16); workers.dev subdomain registration (pending, dashboard-only).
+Incident note: the generated app password briefly landed in a local commit
+(`.app-password.tmp` swept up by `git add -A`); it was amended out before any push and the
+file is now gitignored. Nothing secret has ever been pushed. Lesson: stage explicitly when a
+secret-bearing temp file exists.
 
 ## Standard verification after any change
 
@@ -158,7 +170,9 @@ npm run smoke:extension    # needs `npm start` running in another terminal
 
 ## Next step
 
-Owner action: register the workers.dev subdomain at
-https://dash.cloudflare.com/be852ace91fb2c92a73a263bf61090a0/workers/onboarding
-(one click + pick any name). Then finish Phase E: deploy, secrets, bake URL into the
-extension default, production smoke tests, extension zip, then Phase F docs.
+Nothing is blocked. The owner's only remaining manual item is optional: click the unpacked
+extension's toolbar button in regular Chrome once to confirm the native side-panel placement
+(Playwright verifies everything except that one browser-chrome click).
+
+Likely future work if asked: raise `DAILY_SUMMARY_LIMIT`, rotate `APP_PASSWORD`, or publish
+the extension to the Chrome Web Store ($5 one-time developer fee + review).
