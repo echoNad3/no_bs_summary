@@ -1,0 +1,4 @@
+# Copy this file to `.dev.vars` for local `wrangler dev`. Never commit `.dev.vars`.
+GEMINI_API_KEY=
+TRANSCRIPTAPI_API_KEY=
+APP_PASSWORD=

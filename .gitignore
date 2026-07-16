@@ -1,5 +1,9 @@
 # Secrets — never commit API keys
 .env
+.dev.vars
+
+# Wrangler local state
+.wrangler/
 
 # Dependencies
 node_modules/

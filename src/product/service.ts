@@ -1,4 +1,4 @@
-import type { TranscriptCache } from '../cache.js';
+import type { TranscriptStore } from '../transcript/store.js';
 import { runBenchmark } from '../benchmark.js';
 import type { RunRecord } from '../benchmark.js';
 import type { SummaryProvider } from '../summary/provider.js';
@@ -10,12 +10,12 @@ import {
   type SummarizeRequest,
   type SummarizeResponse,
 } from './schema.js';
-import { summaryCacheKey, type SummaryCache, type SummaryCacheIdentity } from './summary-cache.js';
+import { summaryCacheKey, type SummaryCache, type SummaryCacheIdentity } from './summary-store.js';
 
 export interface SummaryServiceOptions {
   transcriptProvider: TranscriptProvider;
   summaryProvider: SummaryProvider;
-  cache: TranscriptCache;
+  cache: TranscriptStore;
   summaryCache: SummaryCache;
   summaryModel: string;
   summaryPromptVersion: string;

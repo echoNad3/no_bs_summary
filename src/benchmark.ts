@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
-import { cacheKey, TranscriptCache } from './cache.js';
+import { cacheKey } from './transcript/store.js';
+import type { TranscriptStore } from './transcript/store.js';
 import { createRunContext, isAbortError } from './run-context.js';
 import type { RunContext } from './run-context.js';
 import { SummaryValidationError } from './summary/provider.js';
@@ -73,7 +74,7 @@ export interface ProviderEntry {
 export interface BenchmarkOptions {
   videos: BenchmarkVideo[];
   providers: ProviderEntry[];
-  cache: TranscriptCache;
+  cache: TranscriptStore;
   useCache: boolean;
   /** Never fetch a transcript. A missing or invalid cache entry becomes a cache failure. */
   cacheOnly?: boolean;

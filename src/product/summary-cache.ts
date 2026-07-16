@@ -1,43 +1,24 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { z } from 'zod';
-import { videoIdSchema } from '../transcript/provider.js';
-import { summarizeResponseSchema, type SummarizeResponse } from './schema.js';
+import {
+  cachedSummaryEntrySchema,
+  summaryCacheIdentitySchema,
+  summaryCacheKey,
+} from './summary-store.js';
+import type { SummaryCache, SummaryCacheIdentity } from './summary-store.js';
+import type { SummarizeResponse } from './schema.js';
 
-export const SUMMARY_CACHE_VERSION = 1;
+/**
+ * Local filesystem implementation of the summary storage contract. The
+ * contract, schemas, and key derivation live in summary-store.ts so the
+ * Cloudflare Worker's KV implementation can share them without node:fs.
+ */
 
-const summaryCacheIdentitySchema = z.object({
-  videoId: videoIdSchema,
-  model: z.string().trim().min(1).max(200),
-  promptVersion: z.string().trim().min(1).max(200),
-});
+export { SUMMARY_CACHE_VERSION, summaryCacheKey } from './summary-store.js';
+export type { SummaryCache, SummaryCacheIdentity } from './summary-store.js';
 
-const cachedSummarySchema = z.object({
-  identity: summaryCacheIdentitySchema,
-  response: summarizeResponseSchema,
-});
-
-export type SummaryCacheIdentity = z.infer<typeof summaryCacheIdentitySchema>;
-
-/** Replaceable backend storage contract. A hosted store can implement this without client changes. */
-export interface SummaryCache {
-  read(identity: SummaryCacheIdentity): Promise<SummarizeResponse | undefined>;
-  write(identity: SummaryCacheIdentity, response: SummarizeResponse): Promise<void>;
-}
-
-export function summaryCacheKey(rawIdentity: SummaryCacheIdentity): string {
-  const identity = summaryCacheIdentitySchema.parse(rawIdentity);
-  return [
-    `v${SUMMARY_CACHE_VERSION}`,
-    'summary',
-    identity.videoId,
-    hashKeyPart(identity.model),
-    hashKeyPart(identity.promptVersion),
-  ].join('-');
-}
-
-/** Development implementation. Production hosting can replace it with durable shared storage. */
+/** Development implementation. Production hosting replaces it with KvSummaryCache. */
 export class FileSummaryCache implements SummaryCache {
   constructor(private readonly dir: string) {}
 
@@ -52,7 +33,7 @@ export class FileSummaryCache implements SummaryCache {
     }
 
     try {
-      const cached = cachedSummarySchema.parse(JSON.parse(raw));
+      const cached = cachedSummaryEntrySchema.parse(JSON.parse(raw));
       if (
         cached.identity.videoId !== identity.videoId ||
         cached.identity.model !== identity.model ||
@@ -67,7 +48,7 @@ export class FileSummaryCache implements SummaryCache {
   }
 
   async write(rawIdentity: SummaryCacheIdentity, response: SummarizeResponse): Promise<void> {
-    const entry = cachedSummarySchema.parse({ identity: rawIdentity, response });
+    const entry = cachedSummaryEntrySchema.parse({ identity: rawIdentity, response });
     await fs.mkdir(this.dir, { recursive: true });
     const target = this.filePath(entry.identity);
     const temp = `${target}.tmp-${randomBytes(4).toString('hex')}`;
@@ -82,10 +63,6 @@ export class FileSummaryCache implements SummaryCache {
   private filePath(identity: SummaryCacheIdentity): string {
     return path.join(this.dir, `${summaryCacheKey(identity)}.json`);
   }
-}
-
-function hashKeyPart(value: string): string {
-  return createHash('sha256').update(value, 'utf8').digest('hex');
 }
 
 async function replaceFile(source: string, target: string): Promise<void> {
