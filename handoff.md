@@ -168,11 +168,49 @@ npm run cache:clear        # wipe local transcript + summary caches
 npm run smoke:extension    # needs `npm start` running in another terminal
 ```
 
-## Next step
+## Next task: publish the extension to the Chrome Web Store (unlisted)
 
-Nothing is blocked. The owner's only remaining manual item is optional: click the unpacked
-extension's toolbar button in regular Chrome once to confirm the native side-panel placement
-(Playwright verifies everything except that one browser-chrome click).
+Decided with the owner 2026-07-16. Chrome forbids installing extensions from arbitrary
+websites — the Web Store is the only one-click install path. Goal: an **unlisted** store
+listing (only people with the link find it) so friends install with one click and updates
+push automatically. The zip-sharing workflow dies once this ships.
 
-Likely future work if asked: raise `DAILY_SUMMARY_LIMIT`, rotate `APP_PASSWORD`, or publish
-the extension to the Chrome Web Store ($5 one-time developer fee + review).
+**Owner-only steps (cannot be automated):**
+
+1. Register as a Chrome Web Store developer at https://chrome.google.com/webstore/devconsole
+   with the Google account they want to own the extension — one-time $5 fee.
+2. Upload the prepared package zip (or grant whatever access the session has), fill nothing
+   by hand — all listing text/assets should already be prepared by the AI in the repo.
+3. Submit for review; wait (usually a few days). After approval, share the listing URL.
+
+**Implementation checklist for the AI session that picks this up:**
+
+- The extension manifest (`apps/extension/public/manifest.json`) has **no `icons` field** —
+  the store requires PNG icons (16, 32, 48, 128 px; SVG is not supported in extension
+  manifests). Derive PNGs from `apps/pwa/public/icons/icon-512.svg`, add to the manifest and
+  the build, and give the `action` an icon too.
+- Set `"version"` properly and bump it on every store update; the store rejects re-uploads
+  of the same version.
+- Review `host_permissions` before submission: YouTube hosts are justified (reading the
+  active tab's URL/title while the panel stays open); `http://127.0.0.1:8787/*` is dev-only
+  and will draw reviewer questions — consider dropping it (server-side CORS already allows
+  the extension origin for local dev) or be ready to justify it.
+- Prepare the store listing in the repo (e.g. `store/` directory): single-purpose
+  description, permission justifications, at least one 1280×800 or 640×400 screenshot of
+  the side panel, category, language.
+- Privacy disclosures: the extension sends the video URL/title and the user-entered app
+  password to the user-configured backend; nothing else leaves the browser, no analytics.
+  Host a plain `/privacy` page on the Worker (static route or asset) and use its URL in the
+  listing.
+- Package with `npm run build`, zip `dist/extension` contents (zip root = manifest.json,
+  not a folder).
+- After approval: update README (replace zip/Load-unpacked instructions with the store
+  link), the PWA footer if useful, and this file. Verify one-click install + side panel
+  against production.
+
+## Other known follow-ups (only if asked)
+
+- Optional manual check: click the extension's toolbar button in regular Chrome once to
+  confirm native side-panel placement (Playwright can't click browser chrome).
+- Raise `DAILY_SUMMARY_LIMIT` in wrangler.jsonc if friends hit the cap.
+- Rotate `APP_PASSWORD` via `npx wrangler secret put APP_PASSWORD` if it leaks.
