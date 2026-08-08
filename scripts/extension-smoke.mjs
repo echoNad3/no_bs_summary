@@ -109,15 +109,17 @@ try {
   await pwaPage.goto('http://127.0.0.1:8787/');
   await pwaPage.locator('h1').waitFor({ state: 'visible' });
   assert.equal(await pwaPage.locator('h1').innerText(), 'No BS Summary');
-  assert.equal(await pwaPage.locator('#options').getAttribute('open'), '');
+  const pwaSettings = pwaPage.locator('#settings-dialog');
+  assert.equal(await pwaSettings.isVisible(), true);
   await pwaPage.locator('#password').fill('test-password');
-  await pwaPage.locator('#help-button').click();
-  assert.equal(await pwaPage.locator('#help-dialog').isVisible(), true);
-  await pwaPage.locator('#close-help').click();
   await pwaPage.locator('#text-size').selectOption('large');
   assert.equal(await pwaPage.locator('html').getAttribute('data-text-size'), 'large');
   await pwaPage.locator('#test-connection').click();
-  await waitForText(pwaPage.locator('#connection-status'), 'Connected. Local backend ready.');
+  await waitForText(pwaPage.locator('#connection-status'), 'Connected.');
+  await pwaPage.locator('#close-settings').click();
+  await pwaPage.locator('#help-button').click();
+  assert.equal(await pwaPage.locator('#help-dialog').isVisible(), true);
+  await pwaPage.locator('#close-help').click();
   await assertNoHorizontalOverflow(pwaPage);
   await pwaPage.locator('#url').fill(youtubeUrl);
   await pwaPage.locator('#video-thumbnail').waitFor({ state: 'visible' });
@@ -127,7 +129,7 @@ try {
   const pwaPayload = await (await pwaResponsePromise).json();
   await pwaPage.locator('#result').waitFor({ state: 'visible', timeout: 20_000 });
   await assertLoadingRecorded(pwaPage);
-  assert.equal(await pwaPage.locator('#options').getAttribute('open'), null);
+  assert.equal(await pwaSettings.isHidden(), true);
   const pwaOutput = await readRenderedOutput(pwaPage);
   assertSummaryOutput(pwaOutput);
   await assertDetailedTopics(pwaPage);
@@ -219,7 +221,7 @@ try {
         },
         transcriptApiCredits: {
           availableViaApi: false,
-          dashboardUrl: 'https://transcriptapi.com/dashboard/billing',
+          dashboardUrl: 'https://transcriptapi.com/billing',
         },
       }),
     });
@@ -239,24 +241,25 @@ try {
   const urlInput = sidePanelPage.locator('#url');
   const titleInput = sidePanelPage.locator('#title');
   const detectedTitle = sidePanelPage.locator('#detected-title');
-  const fallbackControls = sidePanelPage.locator('#fallback-controls');
+  const settingsDialog = sidePanelPage.locator('#settings-dialog');
   await waitForValue(urlInput, youtubeUrl);
   assert.equal(await titleInput.inputValue(), 'PyroLIVE Smoke');
   assert.equal(await detectedTitle.innerText(), 'PyroLIVE Smoke');
-  assert.equal(await fallbackControls.getAttribute('open'), '');
+  assert.equal(await settingsDialog.isVisible(), true);
   assert.equal(await urlInput.isVisible(), true);
   await sidePanelPage.locator('#password').fill('test-password');
   await sidePanelPage.locator('#video-thumbnail').waitFor({ state: 'visible' });
-  await sidePanelPage.locator('#help-button').click();
-  assert.equal(await sidePanelPage.locator('#help-dialog').isVisible(), true);
-  await sidePanelPage.locator('#close-help').click();
   await sidePanelPage.locator('#text-size').selectOption('extra-large');
   assert.equal(await sidePanelPage.locator('html').getAttribute('data-text-size'), 'extra-large');
   await sidePanelPage.locator('#test-connection').click();
   await waitForText(
     sidePanelPage.locator('#connection-status'),
-    'Connected. Cloud cache ready. 296 of 300 new-summary slots remain today.',
+    'Connected. 296/300 new summaries left today.',
   );
+  await sidePanelPage.locator('#close-settings').click();
+  await sidePanelPage.locator('#help-button').click();
+  assert.equal(await sidePanelPage.locator('#help-dialog').isVisible(), true);
+  await sidePanelPage.locator('#close-help').click();
   report.checks.currentYouTubeUrlDetected = true;
   report.checks.detectedTitleReplacesUrl = true;
 
@@ -283,8 +286,8 @@ try {
       .evaluate((element) => element.classList.contains('has-result')),
     true,
   );
-  assert.equal(await fallbackControls.isHidden(), true);
-  assert.equal(await sidePanelPage.locator('header').isHidden(), true);
+  assert.equal(await settingsDialog.isHidden(), true);
+  assert.equal(await sidePanelPage.locator('header').isVisible(), true);
   const [buttonWidth, formWidth] = await Promise.all([
     submit.evaluate((element) => element.getBoundingClientRect().width),
     sidePanelPage
@@ -339,14 +342,14 @@ try {
       .evaluate((element) => element.classList.contains('has-result')),
     false,
   );
-  assert.equal(await fallbackControls.getAttribute('open'), null);
+  assert.equal(await settingsDialog.isHidden(), true);
   report.checks.activeYouTubeTabRefresh = true;
   report.checks.lockedVideoPreserved = true;
 
-  await fallbackControls.evaluate((element) => {
-    element.open = true;
-  });
+  await sidePanelPage.locator('#settings-button').click();
+  assert.equal(await settingsDialog.isVisible(), true);
   await urlInput.fill('https://example.com');
+  await sidePanelPage.locator('#close-settings').click();
   await submit.click();
   await waitForText(status, 'Not a YouTube link: "https://example.com"');
   assert.equal(await sidePanelPage.locator('#error-actions').isVisible(), true);
@@ -401,10 +404,7 @@ try {
   await context.setOffline(true);
   await pwaPage.reload({ waitUntil: 'domcontentloaded' });
   assert.equal(await pwaPage.locator('h1').innerText(), 'No BS Summary');
-  await waitForText(
-    pwaPage.locator('#status'),
-    'You are offline. The app is ready, but summaries need a connection.',
-  );
+  await waitForText(pwaPage.locator('#status'), 'Offline. Summaries need a connection.');
   assert.equal(await pwaPage.locator('#submit').isDisabled(), true);
   await context.setOffline(false);
   report.checks.firstOfflineLaunch = true;
@@ -508,7 +508,7 @@ async function assertLoadingRecorded(page) {
         state.busy === 'true' &&
         state.disabled === true &&
         state.submitText === 'Working...' &&
-        /^Reading captions and cutting the padding\.\.\. \d+s$/u.test(state.statusText),
+        /^Reading captions.+ \d+s$/u.test(state.statusText),
     ),
     `Loading state was not observed: ${JSON.stringify(states)}`,
   );

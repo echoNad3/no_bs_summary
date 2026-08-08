@@ -1,11 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { RunContext } from '../src/run-context.js';
-import { SupadataProvider } from '../src/transcript/supadata.js';
+import type { RequestContext } from '../src/request-context.js';
 import { TranscriptApiProvider } from '../src/transcript/transcriptapi.js';
 
 const ID = 'dQw4w9WgXcQ';
 
-function ctx(): RunContext {
+function ctx(): RequestContext {
   return {
     signal: new AbortController().signal,
     deadlineAt: Date.now() + 15000,
@@ -20,130 +19,6 @@ function json(status: number, body: unknown, headers: Record<string, string> = {
 
 afterEach(() => {
   vi.unstubAllGlobals();
-});
-
-describe('SupadataProvider', () => {
-  it('requests native mode with segments and normalizes the response', async () => {
-    const mock = vi.fn().mockResolvedValue(
-      json(200, {
-        content: [
-          { text: ' hello ', offset: 0, duration: 1000, lang: 'en' },
-          { text: 'hello', offset: 1000, duration: 1000, lang: 'en' }, // consecutive duplicate
-          { text: 'world', offset: 2000, duration: 1000, lang: 'en' },
-        ],
-        lang: 'en',
-        availableLangs: ['en', 'de'],
-      }),
-    );
-    vi.stubGlobal('fetch', mock);
-
-    const result = await new SupadataProvider('key').fetchTranscript(ID, ctx());
-
-    const calledUrl = String(mock.mock.calls[0]?.[0]);
-    expect(calledUrl).toContain('mode=native');
-    expect(calledUrl).toContain('text=false');
-    expect(calledUrl).toContain('lang=en');
-    expect(calledUrl).toContain(encodeURIComponent(`https://www.youtube.com/watch?v=${ID}`));
-    const headers = (mock.mock.calls[0]?.[1] as RequestInit).headers as Record<string, string>;
-    expect(headers['x-api-key']).toBe('key');
-
-    expect(result.provider).toBe('supadata');
-    expect(result.videoId).toBe(ID);
-    expect(result.language).toBe('en');
-    expect(result.text).toBe('hello world');
-    expect(result.segments).toHaveLength(2);
-    expect(result.metadata).toEqual({ availableLangs: ['en', 'de'] });
-  });
-
-  it('fails clearly on an async job answer (202)', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json(202, { jobId: 'j1' })));
-    await expect(new SupadataProvider('key').fetchTranscript(ID, ctx())).rejects.toThrow(
-      'async job',
-    );
-  });
-
-  it('fails clearly when no captions exist (206)', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 206 })));
-    await expect(new SupadataProvider('key').fetchTranscript(ID, ctx())).rejects.toThrow(
-      'no existing captions',
-    );
-  });
-
-  it('fails clearly on a bad API key without leaking it', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json(403, {})));
-    const error = await new SupadataProvider('secret-key')
-      .fetchTranscript(ID, ctx())
-      .catch((e: unknown) => e as Error);
-    expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toContain('API key');
-    expect((error as Error).message).not.toContain('secret-key');
-  });
-
-  it('rejects a response in an unexpected shape', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json(200, { nope: true })));
-    await expect(new SupadataProvider('key').fetchTranscript(ID, ctx())).rejects.toThrow(
-      'unexpected format',
-    );
-  });
-
-  it('rejects an empty transcript', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(json(200, { content: [], lang: 'en', availableLangs: ['en'] })),
-    );
-    await expect(new SupadataProvider('key').fetchTranscript(ID, ctx())).rejects.toThrow(
-      'unexpected format',
-    );
-  });
-
-  it('requires documented language fields and valid timing values', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi
-        .fn()
-        .mockResolvedValueOnce(
-          json(200, {
-            content: [{ text: 'missing language', offset: 0, duration: 1, lang: 'en' }],
-            availableLangs: ['en'],
-          }),
-        )
-        .mockResolvedValueOnce(
-          json(200, {
-            content: [{ text: 'bad timing', offset: -1, duration: 1, lang: 'en' }],
-            lang: 'en',
-            availableLangs: ['en'],
-          }),
-        ),
-    );
-    const provider = new SupadataProvider('key');
-    await expect(provider.fetchTranscript(ID, ctx())).rejects.toThrow('unexpected format');
-    await expect(provider.fetchTranscript(ID, ctx())).rejects.toThrow('unexpected format');
-  });
-
-  it('retries a documented Supadata infrastructure failure once', async () => {
-    const mock = vi
-      .fn()
-      .mockResolvedValueOnce(json(500, {}, { 'retry-after': '0' }))
-      .mockResolvedValueOnce(
-        json(200, {
-          content: [{ text: 'ok', offset: 0, duration: 1, lang: 'en' }],
-          lang: 'en',
-          availableLangs: ['en'],
-        }),
-      );
-    vi.stubGlobal('fetch', mock);
-    const context = ctx();
-    await new SupadataProvider('key').fetchTranscript(ID, context);
-    expect(mock).toHaveBeenCalledTimes(2);
-    expect(context.transcriptRetries).toBe(1);
-  });
-
-  it('does not retry Supadata plan-limit errors', async () => {
-    const mock = vi.fn().mockResolvedValue(json(429, {}));
-    vi.stubGlobal('fetch', mock);
-    await expect(new SupadataProvider('key').fetchTranscript(ID, ctx())).rejects.toThrow('429');
-    expect(mock).toHaveBeenCalledTimes(1);
-  });
 });
 
 describe('TranscriptApiProvider', () => {

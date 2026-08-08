@@ -1,25 +1,25 @@
-# Secrets — never commit API keys
+# Secrets
 .env
 .dev.vars
 
-# Wrangler local state
+# Local state
 .wrangler/
+.cache/
 build-check/
 *.cpuprofile
 
-# Dependencies
+# Dependencies and builds
 node_modules/
 dist/
 
-# Local benchmark data
-.cache/
+# Private project files
+handoff.md
+store/
 results/
 model-comparison-artifact.json
-
-# Personal video list (commit videos.example.json instead)
 videos.json
 
-# Editor/OS noise
+# Editor and OS files
 .DS_Store
 Thumbs.db
 .app-password.tmp

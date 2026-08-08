@@ -35,7 +35,9 @@ const titleInput = requiredElement<HTMLInputElement>('title');
 const languageInput = requiredElement<HTMLInputElement>('language');
 const passwordInput = requiredElement<HTMLInputElement>('password');
 const showPasswordInput = requiredElement<HTMLInputElement>('show-password');
-const options = requiredElement<HTMLDetailsElement>('options');
+const settingsDialog = requiredElement<HTMLDialogElement>('settings-dialog');
+const settingsButton = requiredElement<HTMLButtonElement>('settings-button');
+const closeSettingsButton = requiredElement<HTMLButtonElement>('close-settings');
 const submitButton = requiredElement<HTMLButtonElement>('submit');
 const status = requiredElement<HTMLParagraphElement>('status');
 const result = requiredElement<HTMLElement>('result');
@@ -43,7 +45,9 @@ const shareNote = requiredElement<HTMLParagraphElement>('share-note');
 const copyButton = requiredElement<HTMLButtonElement>('copy-summary');
 const openVideoLink = requiredElement<HTMLAnchorElement>('open-video');
 const installButton = requiredElement<HTMLButtonElement>('install-app');
+const installPromptElement = requiredElement<HTMLElement>('install-prompt');
 const updateButton = requiredElement<HTMLButtonElement>('update-app');
+const updatePromptElement = requiredElement<HTMLElement>('update-prompt');
 const shareButton = requiredElement<HTMLButtonElement>('share-summary');
 const cancelButton = requiredElement<HTMLButtonElement>('cancel-request');
 const retryButton = requiredElement<HTMLButtonElement>('retry-request');
@@ -71,7 +75,6 @@ let reloadForUpdate = false;
 
 const savedPassword = loadSavedPassword();
 passwordInput.value = savedPassword;
-options.open = savedPassword === '';
 const savedTextSize = loadTextSize();
 textSizeInput.value = savedTextSize;
 applyTextSize(savedTextSize);
@@ -129,6 +132,12 @@ textSizeInput.addEventListener('change', () => {
 
 helpButton.addEventListener('click', () => helpDialog.showModal());
 closeHelpButton.addEventListener('click', () => helpDialog.close());
+settingsButton.addEventListener('click', openSettings);
+closeSettingsButton.addEventListener('click', () => settingsDialog.close());
+settingsDialog.addEventListener('close', () => {
+  savePassword(passwordInput.value.trim());
+  saveTextSize(parseTextSize(textSizeInput.value));
+});
 videoThumbnail.addEventListener('error', () => {
   videoPreview.hidden = true;
 });
@@ -145,22 +154,23 @@ installButton.addEventListener('click', () => {
 window.addEventListener('beforeinstallprompt', (event) => {
   event.preventDefault();
   installPrompt = event as BeforeInstallPromptEvent;
-  installButton.hidden = false;
+  installPromptElement.hidden = false;
 });
 
 window.addEventListener('appinstalled', () => {
   installPrompt = undefined;
-  installButton.hidden = true;
+  installPromptElement.hidden = true;
 });
 
 window.addEventListener('online', updateConnectivity);
 window.addEventListener('offline', updateConnectivity);
 updateConnectivity();
+if (!savedPassword) openSettings();
 
 async function submitSummary(): Promise<void> {
   if (activeRequest || !form.reportValidity()) return;
   if (!navigator.onLine) {
-    setStatus('You are offline. Reconnect, then try again.', 'error', 'offline');
+    setStatus('Offline. Reconnect and retry.', 'error', 'offline');
     return;
   }
 
@@ -186,7 +196,7 @@ async function submitSummary(): Promise<void> {
       signal: controller.signal,
     });
     if (activeRequest !== controller) return;
-    options.open = false;
+    if (settingsDialog.open) settingsDialog.close();
     renderResult(response, input);
     saveLastSummary(renderedSummary);
     setStatus('Summary ready.', 'success');
@@ -200,7 +210,7 @@ async function submitSummary(): Promise<void> {
     );
     errorActions.hidden = false;
     if (error instanceof ApiClientError && error.code === 'UNAUTHORIZED') {
-      options.open = true;
+      openSettings();
       passwordInput.focus();
     }
   } finally {
@@ -302,7 +312,7 @@ async function copySummary(): Promise<void> {
       copyButton.textContent = 'Copy summary';
     }, 2_000);
   } catch {
-    setStatus('Could not copy the summary. Select the text and copy it manually.', 'error');
+    setStatus('Copy failed. Select the text and copy it.', 'error');
   }
 }
 
@@ -318,7 +328,7 @@ async function shareSummary(): Promise<void> {
     });
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') return;
-    setStatus('Could not open the share menu. Copy the summary instead.', 'error');
+    setStatus('Share failed. Copy it instead.', 'error');
   }
 }
 
@@ -330,8 +340,8 @@ async function testConnection(): Promise<void> {
   try {
     const backend = await checkBackend('', { password, timeoutMs: 8_000 });
     connectionStatus.textContent = backend.dailyGeneration
-      ? `Connected. Cloud cache ready. ${backend.dailyGeneration.remaining} of ${backend.dailyGeneration.limit} new-summary slots remain today.`
-      : 'Connected. Local backend ready.';
+      ? `Connected. ${backend.dailyGeneration.remaining}/${backend.dailyGeneration.limit} new summaries left today.`
+      : 'Connected.';
   } catch (error) {
     connectionStatus.textContent =
       error instanceof ApiClientError ? error.message : 'Connection test failed.';
@@ -349,7 +359,7 @@ async function copyDiagnostics(): Promise<void> {
     );
     diagnosticsButton.textContent = 'Copied diagnostics';
   } catch {
-    setStatus('Could not copy diagnostics.', 'error');
+    setStatus('Diagnostics copy failed.', 'error');
   }
 }
 
@@ -361,7 +371,7 @@ function startElapsedTimer(): void {
 
 function updateElapsedStatus(): void {
   const seconds = Math.floor((Date.now() - requestStartedAt) / 1_000);
-  setStatus(`Reading captions and cutting the padding... ${seconds}s`);
+  setStatus(`Reading captions… ${seconds}s`);
 }
 
 function stopElapsedTimer(): void {
@@ -387,7 +397,7 @@ function restoreLastSummary(): void {
     urlInput.value = saved.url;
     titleInput.value = saved.title ?? '';
     languageInput.value = saved.response.language;
-    options.open = false;
+    if (settingsDialog.open) settingsDialog.close();
     renderResult(
       saved.response,
       { url: saved.url, title: saved.title, language: saved.response.language },
@@ -434,10 +444,10 @@ async function installApp(): Promise<void> {
   if (!installPrompt) return;
   const prompt = installPrompt;
   installPrompt = undefined;
-  installButton.hidden = true;
+  installPromptElement.hidden = true;
   await prompt.prompt();
   const choice = await prompt.userChoice;
-  if (choice.outcome === 'dismissed') installButton.hidden = false;
+  if (choice.outcome === 'dismissed') installPromptElement.hidden = false;
 }
 
 function updateConnectivity(): void {
@@ -445,11 +455,7 @@ function updateConnectivity(): void {
   submitButton.disabled = Boolean(activeRequest) || !online;
   if (!online) {
     cancelActiveRequest();
-    setStatus(
-      'You are offline. The app is ready, but summaries need a connection.',
-      'error',
-      'offline',
-    );
+    setStatus('Offline. Summaries need a connection.', 'error', 'offline');
   } else if (status.dataset.code === 'offline') {
     setStatus('Back online.');
   }
@@ -502,12 +508,12 @@ async function registerServiceWorker(): Promise<void> {
   try {
     const registration = await navigator.serviceWorker.register('/sw.js');
     serviceWorkerRegistration = registration;
-    if (registration.waiting) updateButton.hidden = false;
+    if (registration.waiting) updatePromptElement.hidden = false;
     registration.addEventListener('updatefound', () => {
       const installing = registration.installing;
       installing?.addEventListener('statechange', () => {
         if (installing.state === 'installed' && navigator.serviceWorker.controller) {
-          updateButton.hidden = false;
+          updatePromptElement.hidden = false;
         }
       });
     });
@@ -517,4 +523,8 @@ async function registerServiceWorker(): Promise<void> {
   } catch {
     // The online app still works when service worker registration is blocked.
   }
+}
+
+function openSettings(): void {
+  if (!settingsDialog.open) settingsDialog.showModal();
 }

@@ -5,20 +5,6 @@ import { MemoryTranscriptStore } from './transcript/store.js';
 import { GEMINI_PROMPT_VERSION, GeminiSummaryProvider } from './summary/gemini.js';
 import { TranscriptApiProvider } from './transcript/transcriptapi.js';
 
-/**
- * Cloudflare Worker entry: the production backend and PWA host.
- *
- * Mirrors the local Node server (server.ts) API exactly, with production
- * hardening: a shared app password on /api/summarize, restricted CORS, an
- * in-memory per-IP rate limit, a KV-backed daily request meter that bounds
- * API spend, and security headers on served assets. Summaries persist in
- * Workers KV; full transcripts are never written to durable cloud storage.
- *
- * Env uses minimal structural types instead of generated Workers types so the
- * whole repo type-checks and unit-tests under one Node TypeScript setup.
- * Keep the fields in sync with wrangler.jsonc bindings and secrets.
- */
-
 const MAX_BODY_BYTES = 16 * 1024;
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_DAILY_SUMMARY_LIMIT = 300;
@@ -33,11 +19,9 @@ export interface AssetsFetcherLike {
 export interface WorkerEnv {
   ASSETS: AssetsFetcherLike;
   SUMMARIES: KvNamespaceLike;
-  /** Secrets — set with `wrangler secret put`, never in wrangler.jsonc. */
   GEMINI_API_KEY?: string;
   TRANSCRIPTAPI_API_KEY?: string;
   APP_PASSWORD?: string;
-  /** Plain vars. */
   GEMINI_MODEL?: string;
   END_TO_END_TIMEOUT_MS?: string;
   DAILY_SUMMARY_LIMIT?: string;
@@ -49,7 +33,6 @@ export interface WorkerDeps {
   now?: () => number;
 }
 
-/** Sliding-window request counter, intentionally per-isolate and approximate. */
 export class SlidingWindowRateLimiter {
   private readonly log = new Map<string, number[]>();
 
@@ -76,8 +59,7 @@ export class SlidingWindowRateLimiter {
   }
 }
 
-// Deliberate cross-request isolate state: request pacing and in-flight collapse
-// only work when they survive across requests. Never store per-request data here.
+// Shared only for rate limits and duplicate-request collapse.
 const defaultRateLimiter = new SlidingWindowRateLimiter();
 let cachedService: { fingerprint: string; service: SummaryService } | undefined;
 
@@ -113,7 +95,7 @@ export async function handleRequest(
         event: 'unhandled_error',
         method: request.method,
         path: new URL(request.url).pathname,
-        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+        error: error instanceof Error ? error.name : 'UnknownError',
       }),
     );
     return json(500, { error: { code: 'INTERNAL_ERROR', message: 'Unexpected server error.' } });
@@ -160,7 +142,7 @@ async function routeRequest(
         dailyGeneration: await readDailyBudget(env, now()),
         transcriptApiCredits: {
           availableViaApi: false,
-          dashboardUrl: 'https://transcriptapi.com/dashboard/billing',
+          dashboardUrl: 'https://transcriptapi.com/billing',
         },
       },
       corsHeaders,
@@ -245,16 +227,11 @@ function corsHeadersFor(request: Request, url: URL): Record<string, string> | un
   };
 }
 
-/**
- * Constant-time password check. Hashing both sides gives equal-length inputs,
- * so neither length nor content leaks through timing.
- */
 export async function passwordMatches(
   supplied: string | null,
   expected: string | undefined,
 ): Promise<boolean> {
   if (!expected || expected.trim() === '') {
-    // Fail closed if the APP_PASSWORD secret is missing.
     throw new ProductError(
       500,
       'SERVER_MISCONFIGURED',
@@ -276,10 +253,6 @@ export async function passwordMatches(
   return diff === 0;
 }
 
-/**
- * Global daily meter in KV. Approximate by design (KV counters are not
- * atomic); it exists to bound worst-case API spend, not for precision.
- */
 export interface DailyGenerationBudget {
   used: number;
   limit: number;
@@ -328,9 +301,22 @@ async function readJsonBody(request: Request): Promise<unknown> {
   if (!contentType.toLowerCase().startsWith('application/json')) {
     throw new ProductError(415, 'UNSUPPORTED_MEDIA_TYPE', 'Use application/json.');
   }
-  const raw = await request.text();
-  if (raw.length > MAX_BODY_BYTES) {
-    throw new ProductError(413, 'REQUEST_TOO_LARGE', 'Request body is too large.');
+  const reader = request.body?.getReader();
+  const decoder = new TextDecoder();
+  let raw = '';
+  let size = 0;
+  if (reader) {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_BODY_BYTES) {
+        await reader.cancel();
+        throw new ProductError(413, 'REQUEST_TOO_LARGE', 'Request body is too large.');
+      }
+      raw += decoder.decode(value, { stream: true });
+    }
+    raw += decoder.decode();
   }
   try {
     return JSON.parse(raw) as unknown;

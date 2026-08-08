@@ -71,6 +71,8 @@ try {
     (expected) => document.querySelector('#detected-title')?.textContent === expected,
     videoTitle,
   );
+  await panelPage.locator('#password').fill('store-preview');
+  await panelPage.locator('#close-settings').click();
   await panelPage.locator('#submit').click();
   await panelPage.locator('#result').waitFor({ state: 'visible' });
 

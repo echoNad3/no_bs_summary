@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { RunContext } from '../run-context.js';
+import type { RequestContext } from '../request-context.js';
 
 export const videoIdSchema = z.string().regex(/^[A-Za-z0-9_-]{11}$/);
 export const languageSchema = z
@@ -46,11 +46,11 @@ export interface TranscriptResult {
  * - respect the run context so requests stop at the end-to-end deadline
  */
 export interface TranscriptProvider {
-  /** Stable machine-readable name, e.g. "supadata". */
+  /** Stable machine-readable name. */
   readonly name: string;
   fetchTranscript(
     videoId: string,
-    ctx: RunContext,
+    ctx: RequestContext,
     requestedLanguage?: string,
   ): Promise<TranscriptResult>;
 }

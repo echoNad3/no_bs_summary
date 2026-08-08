@@ -22,9 +22,13 @@
   </head>
   <body>
     <main class="app-shell">
-      <header class="hero">
-        <div class="hero-topline">
-          <p class="eyebrow">YOUTUBE · CAPTIONS ONLY</p>
+      <header class="app-header">
+        <div class="brand-copy">
+          <h1>No BS Summary</h1>
+          <p class="lede">Paste a YouTube link. Get the point.</p>
+        </div>
+        <div class="header-actions">
+          <button id="settings-button" class="header-button" type="button">Settings</button>
           <button
             id="help-button"
             class="icon-button"
@@ -35,41 +39,56 @@
             i
           </button>
         </div>
-        <h1>No BS Summary</h1>
-        <p class="lede">Paste a YouTube link. Get the point and whether it is worth watching.</p>
       </header>
 
-      <section class="panel" aria-labelledby="form-title">
-        <h2 id="form-title">Summarize a video</h2>
+      <section class="panel" aria-label="Summarize a video">
         <p id="share-note" class="share-note" hidden>
           Shared link ready. Check it, then summarize.
         </p>
         <form id="summary-form" novalidate>
           <label for="url">YouTube link</label>
-          <input
-            id="url"
-            name="url"
-            type="url"
-            inputmode="url"
-            autocomplete="url"
-            autocapitalize="none"
-            autocorrect="off"
-            enterkeyhint="go"
-            spellcheck="false"
-            placeholder="https://youtu.be/…"
-            required
-          />
+          <div class="link-row">
+            <input
+              id="url"
+              name="url"
+              type="url"
+              inputmode="url"
+              autocomplete="url"
+              autocapitalize="none"
+              autocorrect="off"
+              enterkeyhint="go"
+              spellcheck="false"
+              placeholder="https://youtu.be/…"
+              required
+            />
+            <div class="submit-actions">
+              <button id="submit" type="submit">Cut the BS</button>
+              <button id="cancel-request" class="secondary-button" type="button" hidden>
+                Cancel
+              </button>
+            </div>
+          </div>
           <div id="video-preview" class="video-preview" hidden>
             <img id="video-thumbnail" alt="" width="160" height="90" />
             <div>
-              <span class="preview-label">Video preview</span>
               <strong id="preview-title">YouTube video</strong>
             </div>
           </div>
+          <input id="title" name="title" type="hidden" />
 
-          <details id="options">
-            <summary id="options-label">Options and app password</summary>
-            <div class="details-grid">
+          <dialog id="settings-dialog" aria-labelledby="settings-title">
+            <div class="dialog-heading">
+              <h2 id="settings-title">Settings</h2>
+              <button
+                id="close-settings"
+                class="icon-button"
+                type="button"
+                aria-label="Close settings"
+              >
+                ×
+              </button>
+            </div>
+            <div class="settings-fields">
               <label for="password">App password</label>
               <div class="password-control">
                 <input
@@ -85,43 +104,37 @@
                   Show
                 </label>
               </div>
-              <p id="password-help" class="field-help">
-                Ask the owner for the shared password. Saved on this device.
-              </p>
-              <label for="title">Video title</label>
-              <input id="title" name="title" type="text" maxlength="300" />
-              <label for="language">Caption language</label>
-              <input
-                id="language"
-                name="language"
-                type="text"
-                value="en"
-                maxlength="20"
-                autocapitalize="none"
-                enterkeyhint="done"
-                spellcheck="false"
-                required
-              />
-              <p class="field-help">Use a caption code such as en, de, es, or pt-BR.</p>
-              <label for="text-size">Text size</label>
-              <select id="text-size" name="text-size">
-                <option value="normal">Normal</option>
-                <option value="large">Large</option>
-                <option value="extra-large">Extra large</option>
-              </select>
+              <p id="password-help" class="field-help">Saved only on this device.</p>
+              <div class="settings-row">
+                <div>
+                  <label for="language">Caption language</label>
+                  <input
+                    id="language"
+                    name="language"
+                    type="text"
+                    value="en"
+                    maxlength="20"
+                    autocapitalize="none"
+                    enterkeyhint="done"
+                    spellcheck="false"
+                    required
+                  />
+                </div>
+                <div>
+                  <label for="text-size">Text size</label>
+                  <select id="text-size" name="text-size">
+                    <option value="normal">Normal</option>
+                    <option value="large">Large</option>
+                    <option value="extra-large">Extra large</option>
+                  </select>
+                </div>
+              </div>
               <button id="test-connection" class="secondary-button option-button" type="button">
-                Test password and connection
+                Test connection
               </button>
               <p id="connection-status" class="field-help" role="status" aria-live="polite"></p>
             </div>
-          </details>
-
-          <div class="submit-actions">
-            <button id="submit" type="submit">Cut the BS</button>
-            <button id="cancel-request" class="secondary-button" type="button" hidden>
-              Cancel
-            </button>
-          </div>
+          </dialog>
         </form>
         <p id="status" class="status" role="status" aria-live="polite" aria-atomic="true"></p>
         <div id="error-actions" class="error-actions" hidden>
@@ -151,14 +164,13 @@
       </section>
 
       <footer>
-        <p class="install-copy">
-          Install for one-click access and Android share-sheet support.
-          <button id="install-app" class="footer-action" type="button" hidden>Install app</button>
+        <p id="install-prompt" class="footer-prompt" hidden>
+          <button id="install-app" class="footer-action" type="button">Install app</button>
         </p>
-        <p>
-          <button id="update-app" class="footer-action" type="button" hidden>Update app now</button>
+        <p id="update-prompt" class="footer-prompt" hidden>
+          <button id="update-app" class="footer-action" type="button">Update app</button>
         </p>
-        <p>API keys stay in the backend. <a href="/privacy">Privacy</a></p>
+        <a href="/privacy">Privacy</a>
       </footer>
 
       <dialog id="help-dialog" aria-labelledby="help-title">
@@ -169,28 +181,19 @@
           </button>
         </div>
         <ol>
-          <li>Enter the shared app password once.</li>
-          <li>Paste a YouTube link, or share a video to this app from Android.</li>
-          <li>
-            Tap <strong>Cut the BS</strong>. Completed summaries are cached in the cloud, so
-            repeating the same video and caption language does not spend another TranscriptAPI or
-            Gemini request.
-          </li>
+          <li>Add the shared password in <strong>Settings</strong>.</li>
+          <li>Paste or share a YouTube link.</li>
+          <li>Tap <strong>Cut the BS</strong>.</li>
         </ol>
+        <p>Cached repeats use no new API request.</p>
         <h3>Missing from the Android share menu?</h3>
         <p>
-          Install this app from Chrome using <strong>Install app</strong>. A normal home-screen
-          shortcut is not enough. After an app update, uninstall and reinstall it if Android still
-          has the old share settings.
+          Install from Chrome. A home-screen shortcut will not register in the share menu. Reinstall
+          after an update if Android still has the old settings.
         </p>
+        <p>In ReVanced, use <strong>Share → More</strong> to open Android's system share sheet.</p>
         <p>
-          In ReVanced, open the full Android system share sheet using <strong>More</strong>. If your
-          build has a custom “Change share sheet” option, disable it.
-        </p>
-        <p>
-          <a href="https://transcriptapi.com/dashboard/billing" rel="noreferrer"
-            >Check actual TranscriptAPI credits</a
-          >
+          <a href="https://transcriptapi.com/billing" rel="noreferrer">TranscriptAPI billing</a>
         </p>
       </dialog>
     </main>

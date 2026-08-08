@@ -1,5 +1,5 @@
-import { recordRetry } from './run-context.js';
-import type { RunContext } from './run-context.js';
+import { recordRetry } from './request-context.js';
+import type { RequestContext } from './request-context.js';
 
 /**
  * fetch() with at most ONE retry, and only for problems that are usually
@@ -58,7 +58,7 @@ function isNetworkError(error: unknown): boolean {
 export async function fetchWithOneRetry(
   url: string,
   init: RequestInit,
-  ctx: RunContext,
+  ctx: RequestContext,
   policy: RetryPolicy,
 ): Promise<FetchOutcome> {
   let firstError: unknown;

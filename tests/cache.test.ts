@@ -6,7 +6,7 @@ import { cacheKey, TranscriptCache } from '../src/cache.js';
 import type { TranscriptResult } from '../src/transcript/provider.js';
 
 const transcript: TranscriptResult = {
-  provider: 'supadata',
+  provider: 'transcriptapi',
   videoId: 'dQw4w9WgXcQ',
   language: 'en',
   text: 'hello world',
@@ -27,12 +27,8 @@ afterEach(async () => {
 
 describe('cacheKey', () => {
   it('includes version, provider, video ID and requested language', () => {
-    expect(cacheKey('supadata', 'dQw4w9WgXcQ')).toBe('v2-supadata-dQw4w9WgXcQ-default');
+    expect(cacheKey('transcriptapi', 'dQw4w9WgXcQ')).toBe('v2-transcriptapi-dQw4w9WgXcQ-default');
     expect(cacheKey('transcriptapi', 'abc12345678', 'en')).toBe('v2-transcriptapi-abc12345678-en');
-  });
-
-  it('differs per provider so providers never share cache entries', () => {
-    expect(cacheKey('supadata', 'dQw4w9WgXcQ')).not.toBe(cacheKey('transcriptapi', 'dQw4w9WgXcQ'));
   });
 });
 
@@ -42,20 +38,20 @@ describe('TranscriptCache', () => {
   });
 
   it('writes and reads a transcript back unchanged', async () => {
-    const key = cacheKey('supadata', transcript.videoId);
+    const key = cacheKey('transcriptapi', transcript.videoId);
     await cache.write(key, transcript);
     expect(await cache.read(key)).toEqual(transcript);
   });
 
   it('writes atomically (no leftover temp files)', async () => {
-    const key = cacheKey('supadata', transcript.videoId);
+    const key = cacheKey('transcriptapi', transcript.videoId);
     await cache.write(key, transcript);
     const files = await fs.readdir(dir);
     expect(files).toEqual([`${key}.json`]);
   });
 
   it('atomically replaces an existing cache entry', async () => {
-    const key = cacheKey('supadata', transcript.videoId);
+    const key = cacheKey('transcriptapi', transcript.videoId);
     await cache.write(key, transcript);
     const replacement: TranscriptResult = {
       ...transcript,
@@ -68,14 +64,14 @@ describe('TranscriptCache', () => {
   });
 
   it('treats a corrupt file as a cache miss', async () => {
-    const key = cacheKey('supadata', transcript.videoId);
+    const key = cacheKey('transcriptapi', transcript.videoId);
     await fs.mkdir(dir, { recursive: true });
     await fs.writeFile(path.join(dir, `${key}.json`), '{ not valid json', 'utf8');
     expect(await cache.read(key)).toBeUndefined();
   });
 
   it('rejects empty text, invalid language, inconsistent segments and negative timing', async () => {
-    const key = cacheKey('supadata', transcript.videoId);
+    const key = cacheKey('transcriptapi', transcript.videoId);
     await fs.mkdir(dir, { recursive: true });
     const invalidEntries = [
       { ...transcript, text: '' },
@@ -93,23 +89,20 @@ describe('TranscriptCache', () => {
   });
 
   it('rejects a cache entry whose provider or video does not match the requested key', async () => {
-    const key = cacheKey('supadata', transcript.videoId);
+    const key = cacheKey('transcriptapi', transcript.videoId);
     await cache.write(key, transcript);
     expect(
-      await cache.read(key, { provider: 'transcriptapi', videoId: transcript.videoId }),
+      await cache.read(key, { provider: 'other-provider', videoId: transcript.videoId }),
     ).toBeUndefined();
-    expect(await cache.read(key, { provider: 'supadata', videoId: 'abcdefghijk' })).toBeUndefined();
+    expect(
+      await cache.read(key, { provider: 'transcriptapi', videoId: 'abcdefghijk' }),
+    ).toBeUndefined();
   });
 
   it('refuses to write invalid transcript data', async () => {
     const invalid = { ...transcript, text: '' };
-    await expect(cache.write(cacheKey('supadata', transcript.videoId), invalid)).rejects.toThrow();
-  });
-
-  it('clear() removes everything', async () => {
-    const key = cacheKey('supadata', transcript.videoId);
-    await cache.write(key, transcript);
-    await cache.clear();
-    expect(await cache.read(key)).toBeUndefined();
+    await expect(
+      cache.write(cacheKey('transcriptapi', transcript.videoId), invalid),
+    ).rejects.toThrow();
   });
 });

@@ -1,20 +1,16 @@
-// Cloudflare Worker configuration. Secrets (GEMINI_API_KEY,
-// TRANSCRIPTAPI_API_KEY, APP_PASSWORD) are NOT set here — use:
-//   npx wrangler secret put <NAME>
-// For local `wrangler dev`, copy .dev.vars.example to .dev.vars.
+// Set secrets with `wrangler secret put <NAME>`.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "no-bullshit-summary",
   "main": "src/worker.ts",
-  // One stable URL only — no per-version preview URLs.
   "preview_urls": false,
-  "compatibility_date": "2026-07-16",
+  "compatibility_date": "2026-08-08",
   "compatibility_flags": ["nodejs_compat"],
   "assets": {
     "directory": "./dist/pwa",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    // Every request goes through the Worker so security headers apply to assets too.
+    // Applies security headers to the app shell.
     "run_worker_first": true,
   },
   "kv_namespaces": [

@@ -89,7 +89,7 @@ describe('FileSummaryCache', () => {
     await expect(cache.read(identity)).resolves.toBeUndefined();
   });
 
-  it('overwrites an existing key for a future regenerate request', async () => {
+  it('overwrites an existing key', async () => {
     const cache = new FileSummaryCache(dir);
     await cache.write(identity, response);
     const replacement: SummarizeResponse = { ...response, verdict: 'SKIM' };

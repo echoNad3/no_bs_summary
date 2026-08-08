@@ -11,16 +11,9 @@ import {
 import type { SummaryCache, SummaryCacheIdentity } from './summary-store.js';
 import type { SummarizeResponse } from './schema.js';
 
-/**
- * Local filesystem implementation of the summary storage contract. The
- * contract, schemas, and key derivation live in summary-store.ts so the
- * Cloudflare Worker's KV implementation can share them without node:fs.
- */
-
 export { SUMMARY_CACHE_VERSION, summaryCacheKey } from './summary-store.js';
 export type { SummaryCache, SummaryCacheIdentity } from './summary-store.js';
 
-/** Development implementation. Production hosting replaces it with KvSummaryCache. */
 export class FileSummaryCache implements SummaryCache {
   constructor(private readonly dir: string) {}
 
@@ -54,7 +47,7 @@ export class FileSummaryCache implements SummaryCache {
           if (currentEntryMatches(cached, identity)) return cached.response;
         }
       } catch {
-        // Corrupt entry: try the migration key or treat it as a miss.
+        // Try the migration key.
       }
     }
     return undefined;

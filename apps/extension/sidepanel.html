@@ -16,8 +16,9 @@
   <body>
     <main class="panel-shell">
       <header>
-        <div class="hero-topline">
-          <p class="eyebrow">YOUTUBE · CAPTIONS ONLY</p>
+        <h1>No BS Summary</h1>
+        <div class="header-actions">
+          <button id="settings-button" class="header-button" type="button">Settings</button>
           <button
             id="help-button"
             class="icon-button"
@@ -28,8 +29,6 @@
             i
           </button>
         </div>
-        <h1>No BS Summary</h1>
-        <p class="lede">Get the point without leaving YouTube.</p>
       </header>
 
       <form id="summary-form" novalidate>
@@ -45,9 +44,19 @@
         </div>
         <input id="title" name="title" type="hidden" />
 
-        <details id="fallback-controls">
-          <summary>Settings, another link, or caption language</summary>
-          <div class="fallback-fields">
+        <dialog id="settings-dialog" aria-labelledby="settings-title">
+          <div class="dialog-heading">
+            <h2 id="settings-title">Settings</h2>
+            <button
+              id="close-settings"
+              class="icon-button"
+              type="button"
+              aria-label="Close settings"
+            >
+              ×
+            </button>
+          </div>
+          <div class="settings-fields">
             <label for="password">App password</label>
             <div class="password-control">
               <input
@@ -63,9 +72,7 @@
                 Show
               </label>
             </div>
-            <p id="password-help" class="help">
-              Ask the owner for the shared password. Saved in Chrome.
-            </p>
+            <p id="password-help" class="help">Saved in Chrome.</p>
 
             <label for="url">YouTube link</label>
             <input
@@ -82,40 +89,42 @@
               required
             />
 
-            <label for="language">Caption language</label>
-            <input
-              id="language"
-              name="language"
-              type="text"
-              value="en"
-              maxlength="20"
-              autocapitalize="none"
-              enterkeyhint="done"
-              spellcheck="false"
-              required
-            />
-            <p class="help">For example: en, de, es, or pt-BR.</p>
-            <label for="text-size">Text size</label>
-            <select id="text-size" name="text-size">
-              <option value="normal">Normal</option>
-              <option value="large">Large</option>
-              <option value="extra-large">Extra large</option>
-            </select>
+            <div class="settings-row">
+              <div>
+                <label for="language">Caption language</label>
+                <input
+                  id="language"
+                  name="language"
+                  type="text"
+                  value="en"
+                  maxlength="20"
+                  autocapitalize="none"
+                  enterkeyhint="done"
+                  spellcheck="false"
+                  required
+                />
+              </div>
+              <div>
+                <label for="text-size">Text size</label>
+                <select id="text-size" name="text-size">
+                  <option value="normal">Normal</option>
+                  <option value="large">Large</option>
+                  <option value="extra-large">Extra large</option>
+                </select>
+              </div>
+            </div>
             <button id="test-connection" class="secondary-button option-button" type="button">
-              Test password and connection
+              Test connection
             </button>
             <p id="connection-status" class="help" role="status" aria-live="polite"></p>
           </div>
-        </details>
+        </dialog>
 
         <div class="submit-actions">
           <button id="submit" type="submit">Cut the BS</button>
           <button id="cancel-request" class="secondary-button" type="button" hidden>Cancel</button>
         </div>
-        <p class="data-disclosure">
-          Clicking sends this video link, its title, the caption language, and your app password to
-          the summary backend.
-        </p>
+        <p class="data-disclosure">Sends the link, title, language, and password to the backend.</p>
       </form>
       <p id="status" class="status" role="status" aria-live="polite" aria-atomic="true"></p>
       <div id="error-actions" class="error-actions" hidden>
@@ -139,8 +148,6 @@
         </div>
       </section>
 
-      <footer>The backend does the paid API work. No API keys are stored here.</footer>
-
       <dialog id="help-dialog" aria-labelledby="help-title">
         <div class="dialog-heading">
           <h2 id="help-title">How this works</h2>
@@ -149,17 +156,15 @@
           </button>
         </div>
         <ol>
-          <li>Open a YouTube video, then open this side panel.</li>
-          <li>Enter the shared password once and tap <strong>Cut the BS</strong>.</li>
-          <li>
-            Completed summaries are cached in the cloud. Repeating the same video and caption
-            language does not spend another TranscriptAPI or Gemini request.
-          </li>
+          <li>Open a YouTube video.</li>
+          <li>Add the shared password in <strong>Settings</strong>.</li>
+          <li>Tap <strong>Cut the BS</strong>.</li>
         </ol>
-        <p>Use <strong>Lock</strong> to keep this video selected while changing tabs.</p>
+        <p>Cached repeats use no new API request.</p>
+        <p><strong>Lock</strong> keeps this video selected when you change tabs.</p>
         <p>
-          <a href="https://transcriptapi.com/dashboard/billing" target="_blank" rel="noreferrer"
-            >Check actual TranscriptAPI credits</a
+          <a href="https://transcriptapi.com/billing" target="_blank" rel="noreferrer"
+            >TranscriptAPI billing</a
           >
         </p>
       </dialog>

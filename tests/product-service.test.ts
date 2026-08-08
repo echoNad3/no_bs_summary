@@ -170,35 +170,6 @@ describe('SummaryService', () => {
     expect(summary.summarize).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps an internal regenerate seam that replaces the saved response', async () => {
-    const summary = {
-      name: 'gemini',
-      summarize: vi
-        .fn()
-        .mockResolvedValueOnce({
-          verdict: 'WATCH',
-          reason: 'The delivery is catchy and commits fully to the bit.',
-          summary: 'The singer promises that he will stay loyal to his partner.',
-        })
-        .mockResolvedValueOnce({
-          verdict: 'SKIM',
-          reason: 'The hook is catchy, but the same promise repeats too often.',
-          summary: 'The lyrics repeatedly promise loyalty and refusing to abandon a partner.',
-        }),
-    } satisfies SummaryProvider;
-    const { instance } = service({ summary });
-    const input = { url: 'https://youtu.be/dQw4w9WgXcQ' };
-
-    const first = await instance.summarize(input);
-    const regenerated = await instance.summarize(input, { regenerate: true });
-    const saved = await instance.summarize(input);
-
-    expect(first.verdict).toBe('WATCH');
-    expect(regenerated.verdict).toBe('SKIM');
-    expect(saved).toEqual(regenerated);
-    expect(summary.summarize).toHaveBeenCalledTimes(2);
-  });
-
   it('rejects bad URLs before calling a provider', async () => {
     const { instance, transcript } = service();
     await expect(instance.summarize({ url: 'https://example.com/nope' })).rejects.toMatchObject({

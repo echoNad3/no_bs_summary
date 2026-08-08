@@ -38,7 +38,9 @@ const result = requiredElement<HTMLElement>('result');
 const videoContext = requiredElement<HTMLElement>('video-context');
 const contextLabel = requiredElement<HTMLSpanElement>('context-label');
 const detectedTitle = requiredElement<HTMLElement>('detected-title');
-const fallbackControls = requiredElement<HTMLDetailsElement>('fallback-controls');
+const settingsDialog = requiredElement<HTMLDialogElement>('settings-dialog');
+const settingsButton = requiredElement<HTMLButtonElement>('settings-button');
+const closeSettingsButton = requiredElement<HTMLButtonElement>('close-settings');
 const cancelButton = requiredElement<HTMLButtonElement>('cancel-request');
 const retryButton = requiredElement<HTMLButtonElement>('retry-request');
 const diagnosticsButton = requiredElement<HTMLButtonElement>('copy-diagnostics');
@@ -123,6 +125,14 @@ lockButton.addEventListener('click', () => {
 
 helpButton.addEventListener('click', () => helpDialog.showModal());
 closeHelpButton.addEventListener('click', () => helpDialog.close());
+settingsButton.addEventListener('click', openSettings);
+closeSettingsButton.addEventListener('click', () => settingsDialog.close());
+settingsDialog.addEventListener('close', () => {
+  void saveSettings({
+    password: passwordInput.value.trim(),
+    textSize: parseTextSize(textSizeInput.value),
+  });
+});
 videoThumbnail.addEventListener('error', () => {
   videoThumbnail.hidden = true;
 });
@@ -151,7 +161,7 @@ async function initialize(): Promise<void> {
   if (savedSummary && savedSummary.response.videoId === detectedVideoId) {
     restoreSummary(savedSummary);
   }
-  if (!settings.password) fallbackControls.open = true;
+  if (!settings.password) openSettings();
 }
 
 async function fillFromActiveTab(force = false): Promise<void> {
@@ -187,7 +197,6 @@ async function fillFromActiveTab(force = false): Promise<void> {
     renderedSummary.url = context.url;
     renderedSummary.title = context.title;
   }
-  if (changedVideo && passwordInput.value.trim()) fallbackControls.open = false;
 }
 
 async function submitSummary(): Promise<void> {
@@ -220,7 +229,7 @@ async function submitSummary(): Promise<void> {
       await saveLastSummary({ ...renderedSummary, savedAt: new Date().toISOString() });
     }
     setStatus('Summary ready.', 'success');
-    fallbackControls.open = false;
+    if (settingsDialog.open) settingsDialog.close();
     document.body.classList.add('has-result');
   } catch (error) {
     if (activeRequest !== controller) return;
@@ -233,7 +242,7 @@ async function submitSummary(): Promise<void> {
     );
     errorActions.hidden = false;
     if (error instanceof ApiClientError && error.code === 'UNAUTHORIZED') {
-      fallbackControls.open = true;
+      openSettings();
       passwordInput.focus();
     }
   } finally {
@@ -302,7 +311,7 @@ function clearDetectedVideo(): void {
   }
 
   videoContext.dataset.detected = 'false';
-  fallbackControls.open = true;
+  openSettings();
   showControlsForNewVideo();
 }
 
@@ -352,7 +361,7 @@ async function copySummary(): Promise<void> {
       copyButton.textContent = 'Copy summary';
     }, 2_000);
   } catch {
-    setStatus('Could not copy the summary. Select the text and copy it manually.', 'error');
+    setStatus('Copy failed. Select the text and copy it.', 'error');
   }
 }
 
@@ -364,8 +373,8 @@ async function testConnection(): Promise<void> {
   try {
     const backend = await checkBackend(DEFAULT_BACKEND_URL, { password, timeoutMs: 8_000 });
     connectionStatus.textContent = backend.dailyGeneration
-      ? `Connected. Cloud cache ready. ${backend.dailyGeneration.remaining} of ${backend.dailyGeneration.limit} new-summary slots remain today.`
-      : 'Connected. Backend ready.';
+      ? `Connected. ${backend.dailyGeneration.remaining}/${backend.dailyGeneration.limit} new summaries left today.`
+      : 'Connected.';
   } catch (error) {
     connectionStatus.textContent =
       error instanceof ApiClientError ? error.message : 'Connection test failed.';
@@ -383,7 +392,7 @@ async function copyDiagnostics(): Promise<void> {
     );
     diagnosticsButton.textContent = 'Copied diagnostics';
   } catch {
-    setStatus('Could not copy diagnostics.', 'error');
+    setStatus('Diagnostics copy failed.', 'error');
   }
 }
 
@@ -395,7 +404,7 @@ function startElapsedTimer(): void {
 
 function updateElapsedStatus(): void {
   const seconds = Math.floor((Date.now() - requestStartedAt) / 1_000);
-  setStatus(`Reading captions and cutting the padding... ${seconds}s`);
+  setStatus(`Reading captions… ${seconds}s`);
 }
 
 function stopElapsedTimer(): void {
@@ -408,7 +417,7 @@ function restoreSummary(saved: SavedSummary): void {
   const title = titleInput.value.trim() || saved.title;
   languageInput.value = saved.response.language;
   renderResult(saved.response, { url, title, language: saved.response.language }, { focus: false });
-  fallbackControls.open = false;
+  if (settingsDialog.open) settingsDialog.close();
   document.body.classList.add('has-result');
 }
 
@@ -445,4 +454,8 @@ function requiredElement<T extends HTMLElement>(id: string): T {
   const element = document.getElementById(id);
   if (!element) throw new Error(`Missing #${id}`);
   return element as T;
+}
+
+function openSettings(): void {
+  if (!settingsDialog.open) settingsDialog.showModal();
 }

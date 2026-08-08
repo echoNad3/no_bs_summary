@@ -1,18 +1,13 @@
 {
-  "name": "no-bs-summary-benchmark",
-  "version": "0.1.0",
+  "name": "no-bs-summary",
+  "version": "0.3.1",
   "private": true,
-  "description": "Local benchmark and MVP for blunt, useful summaries of captioned YouTube videos.",
+  "description": "Blunt YouTube summaries from existing captions.",
   "type": "module",
   "engines": {
     "node": ">=24"
   },
   "scripts": {
-    "bench": "tsx src/index.ts",
-    "bench:cache-only": "tsx src/index.ts --cache-only",
-    "bench:model-comparison": "tsx src/model-comparison.ts",
-    "bench:no-cache": "tsx src/index.ts --no-cache",
-    "cache:clear": "tsx src/index.ts --clear-cache",
     "dev:api": "tsx src/server.ts",
     "dev:worker": "wrangler dev",
     "deploy": "npm run build:pwa && wrangler deploy",
@@ -48,6 +43,6 @@
     "typescript": "^5.9.3",
     "vite": "^7.3.6",
     "vitest": "^3.2.4",
-    "wrangler": "^4.111.0"
+    "wrangler": "^4.120.0"
   }
 }

@@ -16,7 +16,7 @@ describe('extension manifest permissions', () => {
       action: { default_title: string; default_icon: Record<string, string> };
     };
     expect(manifest.name).toBe('No BS Summary');
-    expect(manifest.version).toBe('0.3.0');
+    expect(manifest.version).toBe('0.3.1');
     expect((manifest as { minimum_chrome_version?: string }).minimum_chrome_version).toBe('114');
     expect(manifest.host_permissions).toEqual(
       expect.arrayContaining([
@@ -47,22 +47,22 @@ describe('extension manifest permissions', () => {
 });
 
 describe('extension controls', () => {
-  it('leads with the detected title and keeps manual inputs in one collapsed fallback', async () => {
+  it('leads with the current video and keeps settings out of the main flow', async () => {
     const html = await fs.readFile('apps/extension/sidepanel.html', 'utf8');
-    const fallbackStart = html.indexOf('<details id="fallback-controls">');
-    const fallbackEnd = html.indexOf('</details>', fallbackStart);
+    const settingsStart = html.indexOf('<dialog id="settings-dialog"');
+    const settingsEnd = html.indexOf('</dialog>', settingsStart);
 
     expect(html).toContain('id="detected-title"');
-    expect(fallbackStart).toBeGreaterThan(0);
-    expect(html.slice(fallbackStart, fallbackEnd)).toContain('id="url"');
-    expect(html.slice(fallbackStart, fallbackEnd)).toContain('id="language"');
-    expect(html.slice(fallbackStart, fallbackEnd)).toContain('id="password"');
+    expect(settingsStart).toBeGreaterThan(0);
+    expect(html.slice(settingsStart, settingsEnd)).toContain('id="url"');
+    expect(html.slice(settingsStart, settingsEnd)).toContain('id="language"');
+    expect(html.slice(settingsStart, settingsEnd)).toContain('id="password"');
     expect(html).toContain('id="copy-summary"');
     expect(html).toContain('id="show-password"');
     expect(html).toContain('id="lock-video"');
     expect(html).toContain('id="help-dialog"');
-    expect(html).not.toContain('<details id="fallback-controls" open>');
-    expect(html).toContain('Clicking sends this video link');
+    expect(html).toContain('id="settings-button"');
+    expect(html).toContain('Sends the link, title, language, and password');
   });
 });
 

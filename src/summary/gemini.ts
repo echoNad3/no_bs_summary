@@ -1,8 +1,8 @@
 import { ApiError, GoogleGenAI } from '@google/genai';
 import { z } from 'zod';
 import { sleepWithinDeadline } from '../http.js';
-import { recordRetry } from '../run-context.js';
-import type { RunContext } from '../run-context.js';
+import { recordRetry } from '../request-context.js';
+import type { RequestContext } from '../request-context.js';
 import { SummaryValidationError, summaryResponseSchema, summarySchema } from './provider.js';
 import type { Summary, SummaryProvider, SummarySource } from './provider.js';
 
@@ -164,7 +164,7 @@ export class GeminiSummaryProvider implements SummaryProvider {
 
   async summarize(
     transcriptText: string,
-    ctx: RunContext,
+    ctx: RequestContext,
     source: SummarySource = { title: 'Unknown title', transcriptLanguage: 'unknown' },
   ): Promise<Summary> {
     const params: GeminiCreateParams = {

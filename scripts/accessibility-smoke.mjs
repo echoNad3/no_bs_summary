@@ -27,6 +27,9 @@ try {
   pwaContext = await browser.newContext({ viewport: { width: 412, height: 915 } });
   const pwaPage = await pwaContext.newPage();
   await pwaPage.goto(baseUrl);
+  await pwaPage.locator('#settings-dialog').waitFor({ state: 'visible' });
+  await assertAccessible(pwaPage, 'PWA settings dialog');
+  await pwaPage.locator('#close-settings').click();
   await assertAccessible(pwaPage, 'Android PWA');
   await pwaPage.locator('#help-button').click();
   await assertAccessible(pwaPage, 'PWA instructions dialog');
@@ -43,11 +46,36 @@ try {
   let worker = extensionContext.serviceWorkers()[0];
   if (!worker) worker = await extensionContext.waitForEvent('serviceworker', { timeout: 10_000 });
   const extensionId = new URL(worker.url()).host;
+  await extensionContext.route('https://www.youtube.com/**', async (route) => {
+    await route.fulfill({
+      contentType: 'text/html',
+      body: '<!doctype html><title>Accessibility video - YouTube</title><h1>Video</h1>',
+    });
+  });
+  const youtubePage = await extensionContext.newPage();
+  await youtubePage.goto('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
   const extensionPage = await extensionContext.newPage();
   await extensionPage.setViewportSize({ width: 320, height: 800 });
   await extensionPage.goto(`chrome-extension://${extensionId}/sidepanel.html`);
+  await youtubePage.bringToFront();
+  await extensionPage.waitForFunction(
+    () => document.querySelector('#detected-title')?.textContent === 'Accessibility video',
+  );
+  await extensionPage.locator('#settings-dialog').waitFor({ state: 'visible' });
+  await assertAccessible(extensionPage, 'Extension settings dialog');
+  await extensionPage.evaluate(() => {
+    const dialog = document.querySelector('#settings-dialog');
+    if (!(dialog instanceof HTMLDialogElement)) throw new Error('Settings dialog missing.');
+    dialog.close();
+  });
+  await youtubePage.bringToFront();
+  await extensionPage.locator('#settings-dialog').waitFor({ state: 'hidden' });
   await assertAccessible(extensionPage, 'Chrome side panel');
-  await extensionPage.locator('#help-button').click();
+  await extensionPage.evaluate(() => {
+    const dialog = document.querySelector('#help-dialog');
+    if (!(dialog instanceof HTMLDialogElement)) throw new Error('Help dialog missing.');
+    dialog.showModal();
+  });
   await assertAccessible(extensionPage, 'Extension instructions dialog');
 
   console.log('Accessibility smoke: no Axe violations in the tested surfaces.');

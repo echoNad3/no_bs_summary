@@ -5,11 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#0d0f12" />
-    <meta
-      name="description"
-      content="Privacy policy for the No BS Summary Chrome extension and web app."
-    />
-    <title>Privacy policy · No BS Summary</title>
+    <meta name="description" content="No BS Summary privacy policy." />
+    <title>Privacy · No BS Summary</title>
     <style>
       :root {
         color-scheme: dark;
@@ -24,154 +21,94 @@
         color: #f5f7fa;
         background: #0d0f12;
       }
-
       * {
         box-sizing: border-box;
       }
-
       body {
         margin: 0;
-        background: radial-gradient(circle at 100% 0, rgb(255 122 80 / 16%), transparent 28rem)
-          #0d0f12;
       }
-
       main {
-        width: min(100% - 2rem, 48rem);
+        width: min(100% - 2rem, 42rem);
         margin: 0 auto;
-        padding: max(3rem, env(safe-area-inset-top)) 0 max(4rem, env(safe-area-inset-bottom));
+        padding: max(2rem, env(safe-area-inset-top)) 0 max(3rem, env(safe-area-inset-bottom));
       }
-
-      .eyebrow {
-        margin: 0 0 0.75rem;
-        color: #ff8a61;
-        font-size: 0.75rem;
-        font-weight: 800;
-        letter-spacing: 0.14em;
-      }
-
       h1 {
-        max-width: 10ch;
-        margin: 0 0 1rem;
-        font-size: clamp(2.6rem, 10vw, 5rem);
-        line-height: 0.92;
-        letter-spacing: -0.06em;
+        margin: 0;
+        font-size: clamp(2rem, 8vw, 3rem);
+        letter-spacing: -0.05em;
       }
-
       h2 {
-        margin: 2rem 0 0.65rem;
-        font-size: 1.05rem;
+        margin: 1.75rem 0 0.5rem;
+        font-size: 1rem;
       }
-
       p,
       li {
         color: #b4bcc8;
-        line-height: 1.65;
+        line-height: 1.55;
       }
-
       ul {
         padding-left: 1.2rem;
       }
-
-      strong {
-        color: #f5f7fa;
+      .updated {
+        margin-top: 0.4rem;
+        color: #949eac;
+        font-size: 0.8rem;
       }
-
       a {
         color: #ff8a61;
       }
-
       a:focus-visible {
-        border-radius: 0.2rem;
         outline: 3px solid #ff8a61;
         outline-offset: 3px;
-      }
-
-      .updated {
-        color: #949eac;
-        font-size: 0.82rem;
       }
     </style>
   </head>
   <body>
     <main>
-      <p class="eyebrow">PLAIN-ENGLISH PRIVACY</p>
-      <h1>No BS Summary</h1>
-      <p class="updated">Last updated: August 8, 2026</p>
+      <h1>Privacy</h1>
+      <p class="updated">Updated August 8, 2026</p>
+      <p>No ads. No analytics. No tracking. No accounts. No data sales.</p>
 
-      <p>
-        No BS Summary turns the captions from a YouTube video into a detailed summary. It has no
-        ads, analytics, tracking, accounts, or data sales.
-      </p>
-
-      <h2>What the web app handles</h2>
-      <p>
-        The web app handles the YouTube URL, optional title, caption language, and shared app
-        password you enter. The password is saved only in that browser's local storage so you do not
-        have to enter it every time. The selected text size and most recent completed summary are
-        also saved on that device so reopening the app does not lose what you were reading.
-        Installing the app stores its small interface files for offline launch; new summaries still
-        require a connection. Copying a result writes the generated summary to your system
-        clipboard. Sharing a result sends it to another app only after you choose that action.
-      </p>
-
-      <h2>What the Chrome extension handles</h2>
+      <h2>Data used</h2>
       <ul>
         <li>The URL and title of the active YouTube video.</li>
-        <li>The caption language you choose.</li>
-        <li>The shared app password you enter.</li>
+        <li>Your caption language and shared app password.</li>
+        <li>The captions needed to make the summary.</li>
       </ul>
       <p>
-        The extension reads the active tab only on supported YouTube hosts. It sends the items above
-        to the No BS Summary backend only when you click “Cut the BS.” The app password is saved in
-        Chrome Sync so you do not have to enter it every time. The text-size preference is also
-        synced. The most recent completed summary is stored locally on that device for restoration.
-        The extension does not read page contents, browsing history outside those YouTube hosts,
-        cookies, or personal files.
+        The PWA keeps the password, text size, and latest result in local browser storage. The
+        extension keeps the password and text size in Chrome Sync and the latest result on that
+        device. It only reads supported YouTube tabs.
+      </p>
+      <p>YouTube receives normal request data when the app loads a video thumbnail.</p>
+
+      <h2>Processing and storage</h2>
+      <p>
+        The backend uses TranscriptAPI for captions and Google Gemini for the summary. Gemini
+        storage is off. Cloudflare KV stores the finished summary, verdict, language, timing, and
+        video ID so repeats are free. Full transcripts and the app password are not stored in the
+        cloud.
       </p>
 
-      <h2>YouTube thumbnails</h2>
+      <h2>Sharing</h2>
       <p>
-        The app may load the selected video's thumbnail from YouTube's image server. YouTube can
-        therefore receive your IP address and normal browser request information.
+        Cloudflare, TranscriptAPI, Google, and Chrome Sync process only the data needed to run the
+        app. Data is not sold or used for ads or credit decisions.
       </p>
 
-      <h2>How the backend uses data</h2>
+      <h2>Chrome Limited Use</h2>
       <p>
-        The backend extracts the YouTube video ID, asks TranscriptAPI for the requested captions,
-        and sends the video title, caption language, and caption text to Google Gemini to create the
-        summary. Gemini requests set storage off. Full transcripts and the app password are not
-        stored by No BS Summary.
-      </p>
-      <p>
-        The finished summary, verdict, timing, language, and video ID are cached in Cloudflare KV
-        without an automatic expiry so repeat requests are fast and do not create another paid API
-        call. Cloudflare, TranscriptAPI, Google, and Chrome Sync process data under their own
-        privacy and security terms.
+        Use and transfer of Chrome API data follows the Chrome Web Store User Data Policy, including
+        its Limited Use requirements. It is used only to provide and secure the feature you request.
       </p>
 
-      <h2>Sharing, selling, and advertising</h2>
+      <h2>Delete or contact</h2>
       <p>
-        Data is shared only with the processors named above to provide the requested summary. It is
-        never sold, used for ads, used for credit decisions, or given to humans to read except when
-        required for security, abuse investigation, or law.
+        Remove the app or extension to clear local data. Clear Chrome Sync through your Google
+        account. For cached-summary deletion or privacy questions, open an issue on
+        <a href="https://github.com/echoNad3/no_bullshit_summary">GitHub</a>.
       </p>
-
-      <h2>Limited Use</h2>
-      <p>
-        No BS Summary’s use and transfer of information received from Chrome APIs follows the Chrome
-        Web Store User Data Policy, including its Limited Use requirements. Data is used only to
-        provide and secure the summary feature the user requests.
-      </p>
-
-      <h2>Deletion and contact</h2>
-      <p>
-        Remove the extension to delete its local Chrome data. Chrome Sync data can also be cleared
-        through your Google account. To ask the owner to delete a cached summary or report a privacy
-        problem, open an issue on the
-        <a href="https://github.com/echoNad3/no_bullshit_summary">project’s GitHub repository</a>.
-      </p>
-
-      <p><a href="/">Back to No BS Summary</a></p>
+      <p><a href="/">Back</a></p>
     </main>
   </body>
 </html>

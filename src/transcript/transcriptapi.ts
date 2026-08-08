@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { fetchWithOneRetry } from '../http.js';
-import type { RunContext } from '../run-context.js';
+import type { RequestContext } from '../request-context.js';
 import { assertUsableTranscript, normalizeSegments } from './normalize.js';
 import { languageSchema, sameLanguageFamily, TranscriptError, videoIdSchema } from './provider.js';
 import type { TranscriptProvider, TranscriptResult } from './provider.js';
@@ -43,7 +43,7 @@ export class TranscriptApiProvider implements TranscriptProvider {
 
   async fetchTranscript(
     videoId: string,
-    ctx: RunContext,
+    ctx: RequestContext,
     requestedLanguage = 'en',
   ): Promise<TranscriptResult> {
     const url =

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { RunContext } from '../run-context.js';
+import type { RequestContext } from '../request-context.js';
 
 export const REASON_CHARACTER_LIMIT = 1200;
 export const SUMMARY_CHARACTER_LIMIT = 12000;
@@ -240,7 +240,7 @@ export class SummaryValidationError extends Error {
 
 export interface SummaryProvider {
   readonly name: string;
-  summarize(transcriptText: string, ctx: RunContext, source?: SummarySource): Promise<Summary>;
+  summarize(transcriptText: string, ctx: RequestContext, source?: SummarySource): Promise<Summary>;
 }
 
 export interface SummarySource {

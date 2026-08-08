@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithOneRetry } from '../src/http.js';
-import type { RunContext } from '../src/run-context.js';
+import type { RequestContext } from '../src/request-context.js';
 
-function ctx(remainingMs = 15000): RunContext {
+function ctx(remainingMs = 15000): RequestContext {
   return {
     signal: new AbortController().signal,
     deadlineAt: Date.now() + remainingMs,

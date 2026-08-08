@@ -305,6 +305,17 @@ describe('worker request handling', () => {
     );
     expect(invalid.status).toBe(400);
 
+    const tooLarge = await handleRequest(
+      new Request('https://app.example.workers.dev/api/summarize', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-app-password': 'correct horse' },
+        body: 'é'.repeat(9_000),
+      }),
+      env,
+      { service: okService() },
+    );
+    expect(tooLarge.status).toBe(413);
+
     const failing = await handleRequest(summarizeRequest(), env, {
       service: { summarize: vi.fn().mockRejectedValue(new Error('secret-key')) },
     });

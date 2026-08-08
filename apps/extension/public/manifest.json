@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "No BS Summary",
-  "description": "Summarize the current captioned YouTube video without the padding.",
-  "version": "0.3.0",
+  "description": "Blunt summaries of captioned YouTube videos.",
+  "version": "0.3.1",
   "minimum_chrome_version": "114",
   "permissions": ["sidePanel", "storage"],
   "host_permissions": [

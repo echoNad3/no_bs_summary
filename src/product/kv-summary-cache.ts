@@ -8,13 +8,6 @@ import {
 import type { SummaryCache, SummaryCacheIdentity } from './summary-store.js';
 import type { SummarizeResponse } from './schema.js';
 
-/**
- * Cloudflare Workers KV implementation of the summary storage contract.
- *
- * Uses a minimal structural KV type instead of the generated Workers types so
- * this module stays testable in Node (vitest) and the rest of the repo keeps
- * one TypeScript configuration. The shape matches the KVNamespace binding.
- */
 export interface KvNamespaceLike {
   get(key: string): Promise<string | null>;
   put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
@@ -31,7 +24,7 @@ export class KvSummaryCache implements SummaryCache {
         const cached = cachedSummaryEntrySchema.parse(JSON.parse(raw));
         if (currentEntryMatches(cached, identity)) return cached.response;
       } catch {
-        // Corrupt entry: continue to the read-only legacy key before treating it as a miss.
+        // Try the legacy key.
       }
     }
 
@@ -48,7 +41,7 @@ export class KvSummaryCache implements SummaryCache {
           return cached.response;
         }
       } catch {
-        // Corrupt legacy entry: treat it as a cache miss.
+        // Cache miss.
       }
     }
     return undefined;

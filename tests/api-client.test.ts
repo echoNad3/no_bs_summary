@@ -108,7 +108,7 @@ describe('browser API client', () => {
           },
           transcriptApiCredits: {
             availableViaApi: false,
-            dashboardUrl: 'https://transcriptapi.com/dashboard/billing',
+            dashboardUrl: 'https://transcriptapi.com/billing',
           },
         }),
         { status: 200, headers: { 'content-type': 'application/json' } },

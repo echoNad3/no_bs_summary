@@ -75,7 +75,7 @@ async function routeRequest(
       dailyGeneration: null,
       transcriptApiCredits: {
         availableViaApi: false,
-        dashboardUrl: 'https://transcriptapi.com/dashboard/billing',
+        dashboardUrl: 'https://transcriptapi.com/billing',
       },
     });
     return;
@@ -255,7 +255,7 @@ async function main(): Promise<void> {
     server.once('error', reject);
     server.listen(config.APP_PORT, config.APP_HOST, () => resolve());
   });
-  console.log(`Local MVP: http://${config.APP_HOST}:${config.APP_PORT}`);
+  console.log(`Local app: http://${config.APP_HOST}:${config.APP_PORT}`);
 }
 
 const isEntryPoint = process.argv[1]

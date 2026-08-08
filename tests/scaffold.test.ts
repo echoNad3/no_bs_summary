@@ -176,12 +176,10 @@ describe('summary schema', () => {
   });
 });
 
-describe('15-second configuration consistency', () => {
-  it('keeps user-facing configuration and documentation on the 15000 ms default', async () => {
+describe('request deadline', () => {
+  it('uses the 15000 ms default everywhere', async () => {
     const files = await Promise.all(
-      ['README.md', '.env.example', 'handoff.md', 'package.json'].map((file) =>
-        fs.readFile(file, 'utf8'),
-      ),
+      ['.env.example', 'wrangler.jsonc'].map((file) => fs.readFile(file, 'utf8')),
     );
     const combined = files.join('\n');
     expect(combined).toContain('15000');

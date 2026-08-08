@@ -1,6 +1,6 @@
 import { ApiError } from '@google/genai';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { RunContext } from '../src/run-context.js';
+import type { RequestContext } from '../src/request-context.js';
 import {
   GEMINI_PROMPT_VERSION,
   GeminiSummaryProvider,
@@ -14,7 +14,7 @@ const VALID_OUTPUT = JSON.stringify({
   summary: 'The creator claims X helps with Y but offers no evidence.',
 });
 
-function ctx(remainingMs = 15000): RunContext {
+function ctx(remainingMs = 15000): RequestContext {
   return {
     signal: new AbortController().signal,
     deadlineAt: Date.now() + remainingMs,
