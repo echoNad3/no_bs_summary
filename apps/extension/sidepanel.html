@@ -16,15 +16,32 @@
   <body>
     <main class="panel-shell">
       <header>
-        <p class="eyebrow">LOCAL · CAPTIONS ONLY</p>
+        <div class="hero-topline">
+          <p class="eyebrow">YOUTUBE · CAPTIONS ONLY</p>
+          <button
+            id="help-button"
+            class="icon-button"
+            type="button"
+            aria-label="How to use No BS Summary"
+            aria-haspopup="dialog"
+          >
+            i
+          </button>
+        </div>
         <h1>No BS Summary</h1>
         <p class="lede">Get the point without leaving YouTube.</p>
       </header>
 
       <form id="summary-form" novalidate>
         <div id="video-context" class="video-context" data-detected="false">
-          <span id="context-label" class="context-label">Current video</span>
-          <strong id="detected-title" class="detected-title">No YouTube video detected</strong>
+          <img id="video-thumbnail" class="video-thumbnail" alt="" width="120" height="68" hidden />
+          <div class="context-copy">
+            <span id="context-label" class="context-label">Current video</span>
+            <strong id="detected-title" class="detected-title">No YouTube video detected</strong>
+          </div>
+          <button id="lock-video" class="context-action" type="button" aria-pressed="false" hidden>
+            Lock
+          </button>
         </div>
         <input id="title" name="title" type="hidden" />
 
@@ -32,14 +49,23 @@
           <summary>Settings, another link, or caption language</summary>
           <div class="fallback-fields">
             <label for="password">App password</label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              autocomplete="current-password"
-              maxlength="200"
-            />
-            <p class="help">Ask the owner for the shared password. Saved in Chrome.</p>
+            <div class="password-control">
+              <input
+                id="password"
+                name="password"
+                type="password"
+                autocomplete="current-password"
+                aria-describedby="password-help"
+                maxlength="200"
+              />
+              <label class="visibility-toggle" for="show-password">
+                <input id="show-password" type="checkbox" />
+                Show
+              </label>
+            </div>
+            <p id="password-help" class="help">
+              Ask the owner for the shared password. Saved in Chrome.
+            </p>
 
             <label for="url">YouTube link</label>
             <input
@@ -48,6 +74,10 @@
               type="url"
               inputmode="url"
               autocomplete="url"
+              autocapitalize="none"
+              autocorrect="off"
+              enterkeyhint="go"
+              spellcheck="false"
               placeholder="Paste a YouTube link"
               required
             />
@@ -60,31 +90,79 @@
               value="en"
               maxlength="20"
               autocapitalize="none"
+              enterkeyhint="done"
               spellcheck="false"
               required
             />
             <p class="help">For example: en, de, es, or pt-BR.</p>
+            <label for="text-size">Text size</label>
+            <select id="text-size" name="text-size">
+              <option value="normal">Normal</option>
+              <option value="large">Large</option>
+              <option value="extra-large">Extra large</option>
+            </select>
+            <button id="test-connection" class="secondary-button option-button" type="button">
+              Test password and connection
+            </button>
+            <p id="connection-status" class="help" role="status" aria-live="polite"></p>
           </div>
         </details>
 
-        <button id="submit" type="submit">Cut the BS</button>
+        <div class="submit-actions">
+          <button id="submit" type="submit">Cut the BS</button>
+          <button id="cancel-request" class="secondary-button" type="button" hidden>Cancel</button>
+        </div>
         <p class="data-disclosure">
           Clicking sends this video link, its title, the caption language, and your app password to
           the summary backend.
         </p>
       </form>
-      <p id="status" class="status" role="status" aria-live="polite"></p>
+      <p id="status" class="status" role="status" aria-live="polite" aria-atomic="true"></p>
+      <div id="error-actions" class="error-actions" hidden>
+        <button id="retry-request" class="secondary-button" type="button">Retry</button>
+        <button id="copy-diagnostics" class="secondary-button" type="button">
+          Copy diagnostics
+        </button>
+      </div>
 
-      <section id="result" class="result" aria-live="polite" hidden>
+      <section id="result" class="result" aria-label="Summary result" tabindex="-1" hidden>
         <div class="verdict-row">
           <span id="verdict" class="verdict"></span>
-          <span id="meta" class="meta"></span>
+          <span class="result-meta"
+            ><span id="meta" class="meta"></span><span id="reading-stats" class="meta"></span
+          ></span>
         </div>
         <p id="reason" class="reason"></p>
         <div id="summary" class="summary"></div>
+        <div class="result-actions">
+          <button id="copy-summary" class="secondary-button" type="button">Copy summary</button>
+        </div>
       </section>
 
       <footer>The backend does the paid API work. No API keys are stored here.</footer>
+
+      <dialog id="help-dialog" aria-labelledby="help-title">
+        <div class="dialog-heading">
+          <h2 id="help-title">How this works</h2>
+          <button id="close-help" class="icon-button" type="button" aria-label="Close instructions">
+            ×
+          </button>
+        </div>
+        <ol>
+          <li>Open a YouTube video, then open this side panel.</li>
+          <li>Enter the shared password once and tap <strong>Cut the BS</strong>.</li>
+          <li>
+            Completed summaries are cached in the cloud. Repeating the same video and caption
+            language does not spend another TranscriptAPI or Gemini request.
+          </li>
+        </ol>
+        <p>Use <strong>Lock</strong> to keep this video selected while changing tabs.</p>
+        <p>
+          <a href="https://transcriptapi.com/dashboard/billing" target="_blank" rel="noreferrer"
+            >Check actual TranscriptAPI credits</a
+          >
+        </p>
+      </dialog>
     </main>
     <script type="module" src="/src/sidepanel.ts"></script>
   </body>

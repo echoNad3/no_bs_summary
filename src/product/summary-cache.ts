@@ -3,6 +3,8 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import {
   cachedSummaryEntrySchema,
+  legacyCachedSummaryEntrySchema,
+  legacySummaryCacheKey,
   summaryCacheIdentitySchema,
   summaryCacheKey,
 } from './summary-store.js';
@@ -24,27 +26,38 @@ export class FileSummaryCache implements SummaryCache {
 
   async read(rawIdentity: SummaryCacheIdentity): Promise<SummarizeResponse | undefined> {
     const identity = summaryCacheIdentitySchema.parse(rawIdentity);
-    let raw: string;
-    try {
-      raw = await fs.readFile(this.filePath(identity), 'utf8');
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
-      throw error;
-    }
-
-    try {
-      const cached = cachedSummaryEntrySchema.parse(JSON.parse(raw));
-      if (
-        cached.identity.videoId !== identity.videoId ||
-        cached.identity.model !== identity.model ||
-        cached.identity.promptVersion !== identity.promptVersion
-      ) {
-        return undefined;
+    for (const candidate of [
+      { path: this.filePath(identity), legacy: false },
+      { path: this.legacyFilePath(identity), legacy: true },
+    ]) {
+      let raw: string;
+      try {
+        raw = await fs.readFile(candidate.path, 'utf8');
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+        throw error;
       }
-      return cached.response;
-    } catch {
-      return undefined;
+
+      try {
+        if (candidate.legacy) {
+          const cached = legacyCachedSummaryEntrySchema.parse(JSON.parse(raw));
+          if (
+            cached.identity.videoId === identity.videoId &&
+            cached.identity.model === identity.model &&
+            cached.identity.promptVersion === identity.promptVersion &&
+            cached.response.language.toLowerCase() === identity.language.toLowerCase()
+          ) {
+            return cached.response;
+          }
+        } else {
+          const cached = cachedSummaryEntrySchema.parse(JSON.parse(raw));
+          if (currentEntryMatches(cached, identity)) return cached.response;
+        }
+      } catch {
+        // Corrupt entry: try the migration key or treat it as a miss.
+      }
     }
+    return undefined;
   }
 
   async write(rawIdentity: SummaryCacheIdentity, response: SummarizeResponse): Promise<void> {
@@ -63,6 +76,23 @@ export class FileSummaryCache implements SummaryCache {
   private filePath(identity: SummaryCacheIdentity): string {
     return path.join(this.dir, `${summaryCacheKey(identity)}.json`);
   }
+
+  private legacyFilePath(identity: SummaryCacheIdentity): string {
+    return path.join(this.dir, `${legacySummaryCacheKey(identity)}.json`);
+  }
+}
+
+function currentEntryMatches(
+  cached: ReturnType<typeof cachedSummaryEntrySchema.parse>,
+  identity: SummaryCacheIdentity,
+): boolean {
+  return (
+    cached.identity.videoId === identity.videoId &&
+    cached.identity.language.toLowerCase() === identity.language.toLowerCase() &&
+    cached.identity.model === identity.model &&
+    cached.identity.promptVersion === identity.promptVersion &&
+    cached.response.language.toLowerCase() === identity.language.toLowerCase()
+  );
 }
 
 async function replaceFile(source: string, target: string): Promise<void> {

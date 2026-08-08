@@ -8,11 +8,13 @@ import {
   type SummaryCacheIdentity,
 } from '../src/product/summary-cache.js';
 import type { SummarizeResponse } from '../src/product/schema.js';
+import { legacySummaryCacheKey } from '../src/product/summary-store.js';
 
 let dir: string;
 
 const identity: SummaryCacheIdentity = {
   videoId: 'EwMSGdE2bOQ',
+  language: 'en',
   model: 'gemini-3.1-flash-lite',
   promptVersion: 'summary-first-v29-2026-07-14',
 };
@@ -37,12 +39,26 @@ afterEach(async () => {
 });
 
 describe('FileSummaryCache', () => {
-  it('keys saved summaries by video, model, and prompt version', () => {
+  it('keys saved summaries by video, language, model, and prompt version', () => {
     const key = summaryCacheKey(identity);
 
     expect(key).not.toBe(summaryCacheKey({ ...identity, videoId: 'dQw4w9WgXcQ' }));
+    expect(key).not.toBe(summaryCacheKey({ ...identity, language: 'de' }));
     expect(key).not.toBe(summaryCacheKey({ ...identity, model: 'gemini-2.5-flash' }));
     expect(key).not.toBe(summaryCacheKey({ ...identity, promptVersion: 'summary-first-v30' }));
+  });
+
+  it('reads a matching pre-language cache entry without sharing it across languages', async () => {
+    const cache = new FileSummaryCache(dir);
+    const { language: _language, ...legacyIdentity } = identity;
+    await fs.writeFile(
+      path.join(dir, `${legacySummaryCacheKey(identity)}.json`),
+      JSON.stringify({ identity: legacyIdentity, response }),
+      'utf8',
+    );
+
+    await expect(cache.read(identity)).resolves.toEqual(response);
+    await expect(cache.read({ ...identity, language: 'de' })).resolves.toBeUndefined();
   });
 
   it('round-trips the complete response without changing timing or source', async () => {

@@ -1,9 +1,19 @@
-const CACHE = 'nbs-shell-v1';
-const SHELL = ['/', '/manifest.webmanifest', '/icons/icon-192.svg', '/icons/icon-512.svg'];
+const CACHE = 'nbs-shell-v3';
+const CORE = [
+  '/manifest.webmanifest',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
+  '/icons/icon-512-maskable.png',
+  '/icons/icon-192.svg',
+  '/icons/icon-512.svg',
+];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)));
-  self.skipWaiting();
+  event.waitUntil(precacheAppShell());
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
@@ -28,19 +38,44 @@ self.addEventListener('fetch', (event) => {
     return;
 
   if (request.mode === 'navigate') {
-    event.respondWith(fetch(request).catch(() => caches.match('/')));
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok && url.pathname === '/') {
+            const copy = response.clone();
+            event.waitUntil(caches.open(CACHE).then((cache) => cache.put('/', copy)));
+          }
+          return response;
+        })
+        .catch(async () => (await caches.match('/')) ?? Response.error()),
+    );
     return;
   }
 
   event.respondWith(
-    caches.match(request).then(
-      (cached) =>
-        cached ||
-        fetch(request).then((response) => {
-          const copy = response.clone();
-          void caches.open(CACHE).then((cache) => cache.put(request, copy));
-          return response;
-        }),
-    ),
+    caches.match(request).then(async (cached) => {
+      if (cached) return cached;
+      const response = await fetch(request);
+      if (response.ok && response.type === 'basic') {
+        const copy = response.clone();
+        event.waitUntil(caches.open(CACHE).then((cache) => cache.put(request, copy)));
+      }
+      return response;
+    }),
   );
 });
+
+async function precacheAppShell() {
+  const cache = await caches.open(CACHE);
+  const home = await fetch(new Request('/', { cache: 'reload' }));
+  if (!home.ok) throw new Error(`Could not cache the app shell (${home.status}).`);
+
+  const html = await home.clone().text();
+  const builtAssets = [...html.matchAll(/\b(?:src|href)="([^"]+)"/gu)]
+    .map((match) => new URL(match[1], self.location.origin))
+    .filter((url) => url.origin === self.location.origin && /\.(?:css|js)$/u.test(url.pathname))
+    .map((url) => url.pathname);
+
+  await cache.put('/', home);
+  await cache.addAll([...new Set([...CORE, ...builtAssets])]);
+}

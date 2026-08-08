@@ -32,6 +32,10 @@ How it works:
 The extension has no ads, analytics, accounts, or tracking. It is an unlisted friends-only tool
 and requires the shared app password from the owner.
 
+Quality-of-life features include restoring the latest result, larger text, video thumbnails,
+reading time, a backend/password check, request cancellation and retry, safe diagnostics, and an
+optional lock that keeps the panel on the current video while you change tabs.
+
 ## Single purpose
 
 Summarize the currently active captioned YouTube video in Chrome’s side panel.
@@ -39,14 +43,18 @@ Summarize the currently active captioned YouTube video in Chrome’s side panel.
 ## Permission justifications
 
 - sidePanel: Shows the summary beside the YouTube video without replacing or modifying the page.
-- storage: Saves the user-entered shared app password in Chrome Sync so it only needs to be entered
-  once.
+- storage: Saves the user-entered shared app password and text-size preference in Chrome Sync so
+  they only need to be entered once. Saves the most recent completed summary locally on that device
+  so reopening the panel does not lose what the user was reading.
 - YouTube host access: Reads only the active supported YouTube tab’s URL and title so the side panel
   can detect the current video and keep it updated while the panel stays open. It does not inject
   scripts or read page content.
 - no-bullshit-summary.echonad3.workers.dev host access: Sends the user-requested video URL, title,
   caption language, and app password to the production summary API over HTTPS and receives the
   result.
+
+The extension also loads the selected video's public thumbnail from YouTube's image server. This
+does not require another Chrome permission.
 
 ## Remote code
 

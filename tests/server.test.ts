@@ -43,6 +43,12 @@ describe('local API server', () => {
     const health = await fetch(`${base}/api/health`);
     expect(health.status).toBe(200);
     expect(await health.json()).toMatchObject({ status: 'ok', provider: 'transcriptapi' });
+    const status = await fetch(`${base}/api/status`);
+    expect(await status.json()).toMatchObject({
+      status: 'ok',
+      cache: 'local',
+      dailyGeneration: null,
+    });
     const page = await fetch(`${base}/share?url=https://youtu.be/dQw4w9WgXcQ`);
     expect(await page.text()).toContain('Local MVP');
   });
@@ -87,6 +93,7 @@ describe('local API server', () => {
       headers: { origin: extensionOrigin },
     });
     expect(preflight.status).toBe(204);
+    expect(preflight.headers.get('access-control-allow-headers')).toContain('X-App-Password');
     expect(
       (
         await fetch(`${base}/api/summarize`, {

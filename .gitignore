@@ -4,6 +4,8 @@
 
 # Wrangler local state
 .wrangler/
+build-check/
+*.cpuprofile
 
 # Dependencies
 node_modules/

@@ -16,7 +16,8 @@ describe('extension manifest permissions', () => {
       action: { default_title: string; default_icon: Record<string, string> };
     };
     expect(manifest.name).toBe('No BS Summary');
-    expect(manifest.version).toBe('0.1.1');
+    expect(manifest.version).toBe('0.3.0');
+    expect((manifest as { minimum_chrome_version?: string }).minimum_chrome_version).toBe('114');
     expect(manifest.host_permissions).toEqual(
       expect.arrayContaining([
         `${DEFAULT_BACKEND_URL}/*`,
@@ -56,7 +57,10 @@ describe('extension controls', () => {
     expect(html.slice(fallbackStart, fallbackEnd)).toContain('id="url"');
     expect(html.slice(fallbackStart, fallbackEnd)).toContain('id="language"');
     expect(html.slice(fallbackStart, fallbackEnd)).toContain('id="password"');
-    expect(html.match(/<button\b/gu)).toHaveLength(1);
+    expect(html).toContain('id="copy-summary"');
+    expect(html).toContain('id="show-password"');
+    expect(html).toContain('id="lock-video"');
+    expect(html).toContain('id="help-dialog"');
     expect(html).not.toContain('<details id="fallback-controls" open>');
     expect(html).toContain('Clicking sends this video link');
   });
@@ -76,6 +80,7 @@ describe('extension active-tab context', () => {
         title: 'Useful video - YouTube',
       }),
     ).toEqual({
+      videoId: 'dQw4w9WgXcQ',
       url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=40',
       title: 'Useful video',
     });
@@ -88,6 +93,7 @@ describe('extension active-tab context', () => {
 
   it('does not require a title', () => {
     expect(getYouTubeTabContext({ url: 'https://youtu.be/dQw4w9WgXcQ' })).toEqual({
+      videoId: 'dQw4w9WgXcQ',
       url: 'https://youtu.be/dQw4w9WgXcQ',
       title: undefined,
     });

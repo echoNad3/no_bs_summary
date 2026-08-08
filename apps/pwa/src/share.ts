@@ -16,10 +16,6 @@ export function readSharedValues(search: string): SharedValues {
   };
 }
 
-export function firstYouTubeUrl(text: string): string {
-  const match = text.match(
-    /https?:\/\/(?:www\.)?(?:youtu\.be\/|youtube\.com\/(?:watch|shorts\/|live\/))[^\s<]+/iu,
-  );
-  if (!match) return '';
-  return match[0].replace(/[),.;!?]+$/u, '');
-}
+import { firstYouTubeUrl } from '../../shared/youtube-input.js';
+
+export { firstYouTubeUrl } from '../../shared/youtube-input.js';

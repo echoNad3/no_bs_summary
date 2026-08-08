@@ -1,18 +1,25 @@
 import { describe, expect, it, vi } from 'vitest';
 import { KvSummaryCache } from '../src/product/kv-summary-cache.js';
 import type { KvNamespaceLike } from '../src/product/kv-summary-cache.js';
-import { summaryCacheKey, type SummaryCacheIdentity } from '../src/product/summary-store.js';
+import {
+  legacySummaryCacheKey,
+  summaryCacheKey,
+  type SummaryCacheIdentity,
+} from '../src/product/summary-store.js';
 import type { SummarizeResponse } from '../src/product/schema.js';
 import { MemoryTranscriptStore, cacheKey } from '../src/transcript/store.js';
 import {
+  consumeDailyBudget,
   handleRequest,
   passwordMatches,
+  readDailyBudget,
   SlidingWindowRateLimiter,
   type WorkerEnv,
 } from '../src/worker.js';
 
 const identity: SummaryCacheIdentity = {
   videoId: 'EwMSGdE2bOQ',
+  language: 'en',
   model: 'gemini-3.1-flash-lite',
   promptVersion: 'summary-first-v29-2026-07-14',
 };
@@ -81,6 +88,16 @@ describe('KvSummaryCache', () => {
     await expect(cache.read(identity)).resolves.toEqual(response);
     await expect(cache.read({ ...identity, videoId: 'dQw4w9WgXcQ' })).resolves.toBeUndefined();
 
+    const { language: _language, ...legacyIdentity } = identity;
+    kv.store.delete(summaryCacheKey(identity));
+    kv.store.set(
+      legacySummaryCacheKey(identity),
+      JSON.stringify({ identity: legacyIdentity, response }),
+    );
+    await expect(cache.read(identity)).resolves.toEqual(response);
+    await expect(cache.read({ ...identity, language: 'de' })).resolves.toBeUndefined();
+
+    kv.store.delete(legacySummaryCacheKey(identity));
     kv.store.set(summaryCacheKey(identity), 'not json');
     await expect(cache.read(identity)).resolves.toBeUndefined();
   });
@@ -140,7 +157,29 @@ describe('rate limiter', () => {
     }
     expect(limiter.allow('1.2.3.4', start + 20)).toBe(false);
     expect(limiter.allow('5.6.7.8', start + 20)).toBe(true);
+    expect(limiter.retryAfterSeconds('1.2.3.4', start + 20)).toBe(60);
     expect(limiter.allow('1.2.3.4', start + 61_000)).toBe(true);
+  });
+});
+
+describe('daily live-generation budget', () => {
+  it('counts only explicit generation attempts and exposes the UTC reset', async () => {
+    const env = makeEnv({ DAILY_SUMMARY_LIMIT: '2' });
+    const now = Date.parse('2026-08-08T12:00:00.000Z');
+
+    await expect(readDailyBudget(env, now)).resolves.toMatchObject({
+      used: 0,
+      limit: 2,
+      remaining: 2,
+      resetsAt: '2026-08-09T00:00:00.000Z',
+    });
+    await consumeDailyBudget(env, now);
+    await consumeDailyBudget(env, now);
+    await expect(consumeDailyBudget(env, now)).rejects.toMatchObject({
+      statusCode: 429,
+      code: 'DAILY_LIMIT_REACHED',
+      retryAfterSeconds: 43_200,
+    });
   });
 });
 
@@ -159,6 +198,26 @@ describe('worker request handling', () => {
       env,
     );
     expect(unknown.status).toBe(404);
+  });
+
+  it('tests the password and reports cloud-cache generation budget status', async () => {
+    const env = makeEnv({ DAILY_SUMMARY_LIMIT: '7' });
+    const statusRequest = (password: string) =>
+      new Request('https://app.example.workers.dev/api/status', {
+        headers: { 'x-app-password': password },
+      });
+
+    expect((await handleRequest(statusRequest('wrong'), env)).status).toBe(401);
+    const result = await handleRequest(statusRequest('correct horse'), env, {
+      now: () => Date.parse('2026-08-08T12:00:00.000Z'),
+    });
+    expect(result.status).toBe(200);
+    expect(await result.json()).toMatchObject({
+      status: 'ok',
+      cache: 'cloud',
+      dailyGeneration: { used: 0, limit: 7, remaining: 7 },
+      transcriptApiCredits: { availableViaApi: false },
+    });
   });
 
   it('requires the app password on summarize', async () => {
@@ -253,7 +312,7 @@ describe('worker request handling', () => {
     expect(await failing.text()).not.toContain('secret-key');
   });
 
-  it('enforces per-client and daily limits', async () => {
+  it('enforces per-client limits with an exact retry countdown', async () => {
     const env = makeEnv();
     const limiter = new SlidingWindowRateLimiter();
     let clock = 1_000_000;
@@ -262,18 +321,11 @@ describe('worker request handling', () => {
     for (let index = 0; index < 20; index += 1) {
       expect((await handleRequest(summarizeRequest(), env, deps)).status).toBe(200);
     }
-    expect((await handleRequest(summarizeRequest(), env, deps)).status).toBe(429);
-
-    const meteredEnv = makeEnv({ DAILY_SUMMARY_LIMIT: '2' });
-    clock += 120_000;
-    expect((await handleRequest(summarizeRequest(), meteredEnv, deps)).status).toBe(200);
-    clock += 60_000;
-    expect((await handleRequest(summarizeRequest(), meteredEnv, deps)).status).toBe(200);
-    clock += 60_000;
-    const capped = await handleRequest(summarizeRequest(), meteredEnv, deps);
+    const capped = await handleRequest(summarizeRequest(), env, deps);
     expect(capped.status).toBe(429);
     const body = (await capped.json()) as { error: { code: string } };
-    expect(body.error.code).toBe('DAILY_LIMIT_REACHED');
+    expect(body.error.code).toBe('RATE_LIMITED');
+    expect(capped.headers.get('retry-after')).toBe('60');
   });
 
   it('serves assets with security headers and a CSP on HTML', async () => {
@@ -283,6 +335,9 @@ describe('worker request handling', () => {
     expect(await page.text()).toContain('PWA');
     expect(page.headers.get('x-content-type-options')).toBe('nosniff');
     expect(page.headers.get('content-security-policy')).toContain("default-src 'self'");
+    expect(page.headers.get('permissions-policy')).toContain('camera=()');
+    expect(page.headers.get('cross-origin-opener-policy')).toBe('same-origin');
+    expect(page.headers.get('cache-control')).toBe('no-cache');
 
     const nonHtmlEnv = makeEnv({
       ASSETS: {
@@ -294,10 +349,11 @@ describe('worker request handling', () => {
       },
     });
     const css = await handleRequest(
-      new Request('https://app.example.workers.dev/styles.css'),
+      new Request('https://app.example.workers.dev/assets/index-AbCd1234.css'),
       nonHtmlEnv,
     );
     expect(css.headers.get('content-security-policy')).toBeNull();
     expect(css.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(css.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
   });
 });

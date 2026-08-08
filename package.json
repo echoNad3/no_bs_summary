@@ -20,9 +20,13 @@
     "build:pwa": "vite build --config vite.pwa.config.ts --configLoader runner",
     "build:extension": "vite build --config vite.extension.config.ts --configLoader runner",
     "assets:extension": "node scripts/generate-extension-icons.mjs",
+    "assets:pwa": "node scripts/generate-pwa-icons.mjs",
+    "assets": "npm run assets:pwa && npm run assets:extension",
     "store:assets": "node scripts/generate-store-assets.mjs",
     "build": "npm run build:server && npm run build:pwa && npm run build:extension",
     "smoke:extension": "node scripts/extension-smoke.mjs",
+    "smoke:a11y": "node scripts/accessibility-smoke.mjs",
+    "check:bundles": "node scripts/check-bundle-size.mjs",
     "start": "node dist/server/server.js",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.pwa.json && tsc -p tsconfig.extension.json",
     "test": "vitest run",
@@ -35,6 +39,7 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
     "@types/chrome": "^0.2.2",
     "@types/node": "^24.10.1",
     "playwright": "^1.61.1",

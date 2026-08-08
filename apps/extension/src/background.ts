@@ -1,5 +1,9 @@
 async function enableActionClick(): Promise<void> {
-  await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+  try {
+    await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+  } catch (error) {
+    console.error('Could not configure the side-panel toolbar action.', error);
+  }
 }
 
 chrome.runtime.onInstalled.addListener(() => {

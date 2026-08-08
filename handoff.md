@@ -1,242 +1,141 @@
-# handoff.md
+# No BS Summary handoff
 
-Current continuation guide. Replace stale text instead of appending.
+Current continuation guide. Keep it accurate after every meaningful change.
 
-**Keep this file current at every step.** Update it after every meaningful change — finished
-phase, new decision, new blocker, changed architecture — not just at the end of a session.
-Any AI must be able to take over from this file alone at any point.
+## Owner and fixed product decisions
 
-## How to talk to the owner
+The owner is a beginner and wants blunt, practical explanations with no corporate padding. Do not
+expose secrets.
 
-The owner is autistic, a complete beginner at programming and infrastructure, and wants zero
-bullshit. In every reply: talk like a blunt lifelong best friend. Short, direct, practical,
-simple. Swear naturally. No corporate tone, no polished assistant voice, no fluff, no
-unnecessary disclaimers, no fancy wording. Say the useful shit first. Explain things clearly
-and concretely; use steps only when they actually help. Saving their time matters more than
-sounding nice. Deep technical detail belongs in this file and in code, not in chat.
+No BS Summary turns existing YouTube captions into a detailed English summary plus a small
+WATCH / SKIM / SKIP verdict and one blunt reason.
 
-## What this product is
+- PWA: installable web app and Android Web Share Target.
+- Chrome extension: Manifest V3 side panel for the active YouTube video.
+- Backend: Cloudflare Worker; TranscriptAPI captions; `gemini-3.1-flash-lite` summary.
+- Users: owner plus trusted friends. One shared password; no accounts or public signup.
+- Prompt `summary-first-v31-2026-07-15`, model, verdict rules, summary behavior, validation, and
+  dark-only design are frozen without explicit owner approval.
+- Do not run paid benchmarks or model/provider comparisons without approval.
+- No analytics, ads, subscriptions, social features, admin panel, custom domain, or paid
+  infrastructure unless asked.
 
-**No BS Summary** is a YouTube summary tool. You give it a YouTube link, it reads the video's
-existing captions and
-returns a detailed English summary (the main product) plus a small WATCH / SKIM / SKIP verdict
-with one blunt reason. Two clients, one backend:
+Production app/API: https://no-bullshit-summary.echonad3.workers.dev
 
-- **PWA** — installable web app; on Android it appears as a Share target for YouTube links.
-- **Chrome extension** — Manifest V3 side panel that detects the active YouTube tab.
+The production site is still the earlier release. This audit build is local only. Do not deploy,
+push, or submit the Web Store draft without explicit approval.
 
-Backend pipeline: TranscriptAPI fetches captions → Gemini (`gemini-3.1-flash-lite`) summarizes
-→ result is validated, cached, and returned. 15,000 ms end-to-end deadline, one retry per
-stage. Clients never see API keys or transcripts.
+## Cloud storage and limits
 
-## Who it's for (decided 2026-07-16 with the owner)
+Completed summaries are already stored in Cloudflare KV without automatic expiry. The cache key is
+video ID + caption language + model + prompt version. It is shared by the PWA and extension across
+users and devices. Repeats return the same saved result without another TranscriptAPI or Gemini
+request. Full transcripts are never persisted in the cloud.
 
-- **Users:** the owner plus a few trusted friends. Nothing more.
-- **No public signups, no accounts, no per-user API keys.** The owner's own Gemini and
-  TranscriptAPI keys pay for all usage.
-- **Hosting:** Cloudflare free tier. Owner accepts the small per-video API cost.
-- **Repo:** public on GitHub as `echoNad3/no_bullshit_summary`, MIT license.
-- **Both clients matter equally** (phone share target and desktop side panel).
+This is a shared backend cache, not a user account or a synced visible history. Each client only
+restores its own latest result locally. The extension password and text-size preference use Chrome
+Sync; its result uses Chrome local storage. The PWA stores password, text size, and latest result
+in that browser.
 
-## Rejected direction (do not resurrect without the owner asking)
+TranscriptAPI does not document a credit-balance endpoint. Its API exposes per-minute rate
+headers; actual plan credits are in https://transcriptapi.com/dashboard/billing. Both clients link
+there. Do not claim the app can show exact paid-plan credits.
 
-An earlier ChatGPT-written plan called for Supabase email/password auth, strict RLS,
-per-user encrypted API key storage, account deletion flows, and a Monday/Thursday keepalive
-cron to stop the free Supabase project from pausing. That was over-engineered for a
-friends-only tool: nobody signs up for a service that demands their own API keys, and needing
-a cron job to keep the database awake means the tool choice was wrong. **Supabase is dropped
-entirely.** The owner created a Supabase project during earlier setup; it is unused and can be
-deleted from the Supabase dashboard (its values in `.env` can then be removed too).
+## Audit build completed locally on 2026-08-08
 
-Access control is instead one shared app password: a single secret the owner gives to friends,
-entered once in the PWA/extension and sent with each API request. Stored as a Cloudflare
-Worker secret, never in the repo or browser bundles.
+Implemented owner-approved QOL:
 
-## Frozen behavior (do not change without owner approval)
+- restore latest result in both clients;
+- PWA native result sharing while Copy stays plain text;
+- cancel, retry, elapsed timer, reading time, and word count;
+- three text sizes;
+- password/backend test and remaining app daily new-summary budget;
+- rate-limit countdown and `Retry-After` propagation;
+- safe diagnostics excluding password, URL, captions, and summary;
+- extension video lock/unlock;
+- YouTube thumbnail preview;
+- information dialogs for setup, cache, credits, and Android/ReVanced sharing;
+- explicit PWA update prompt;
+- automated Axe checks and gzip bundle budgets in CI.
 
-- Prompt `summary-first-v31-2026-07-15`, model `gemini-3.1-flash-lite`, verdict logic,
-  detailed-summary behavior, validation/cleanup rules, and the dark-only UI.
-- TranscriptAPI is the only active transcript provider; the Supadata adapter stays disabled.
-- No model or provider comparisons without a new owner-approved run.
-- No analytics, subscriptions, admin panels, social features, custom domains, or paid
-  resources.
+Rejected/deferred: pins, clear-data button, history library, shortcuts, reading/compact modes,
+themes, editable/translated output, custom prompts, search, exports, accounts, notifications,
+background work, provider fallback, admin UI, analytics, public status, and synced history.
 
-## Current state (2026-07-16)
+## Backend corrections
 
-**All phases (A–F) are done. The product is live in production:**
+- Persistent summary cache is checked before `beforeGenerate`, so cached results remain usable when
+  the live-generation budget is exhausted.
+- Authenticated `GET /api/status` reports cache type and the app's daily generation budget.
+- The KV daily counter increments only on a cache miss entering the paid pipeline. Previously the
+  route counted cached requests too.
+- Product errors can carry `retryAfterSeconds`; Worker/local server return `Retry-After`.
+- Per-client limit: 20 requests/minute. Default live-generation cap: 300/day, reset UTC midnight.
+- Summary cache v2 includes caption language; compatible v1 entries are read only if language
+  matches.
+- CSP permits thumbnails only from `https://i.ytimg.com`.
 
-- App + API: `https://no-bullshit-summary.echonad3.workers.dev`
-- Repo: `https://github.com/echoNad3/no_bullshit_summary` (public, `main`, CI green)
-- Worker secrets set (never in the repo): `GEMINI_API_KEY`, `TRANSCRIPTAPI_API_KEY`,
-  `APP_PASSWORD`. The app password was generated fresh at deploy time and given to the owner
-  in chat; it exists only as a Worker secret. To rotate it:
-  `npx wrangler secret put APP_PASSWORD`, then everyone re-enters it in their clients.
-- Production smoke (2026-07-16): health 200; PWA served with CSP + security headers; wrong
-  password → 401; disallowed web origin → 403; chrome-extension CORS preflight → 204 with the
-  right allow headers; one live summarize of `dQw4w9WgXcQ` (WATCH, 1.8 s, source LIVE — the
-  only paid TranscriptAPI call, budget was ≤ 2); immediate repeat returned a byte-identical
-  KV-cached response; `/share` SPA fallback 200.
-- Chrome Web Store package: `dist/no-bs-summary-extension.zip` (version `0.1.1`,
-  manifest at ZIP root). The listing is not submitted yet; package, copy, privacy
-  disclosures, and images are ready.
+## Android/ReVanced share target
 
-Everything works **locally**: `npm run build && npm start` serves the PWA and API at
-`http://127.0.0.1:8787`. The extension loads unpacked from `dist/extension`. 176 tests across
-21 files pass; format, typecheck, all builds, the Worker dry-run bundle, and the isolated
-Playwright extension smoke test pass.
+Manifest target `/share` is standards-correct and inside PWA scope. It accepts shared `text`,
+`url`, and `title`; 192, 512, and maskable 512 PNG icons are present.
 
-Done so far:
+Android registers the share target only for a real Chrome-installed PWA/WebAPK, not a normal
+home-screen shortcut. After deployment:
 
-- **Phase A — GitHub.** MIT LICENSE. Secret scan of full git history + pushable tree against
-  every real `.env` value and generic key patterns: clean. Public repo created and pushed.
-- **Phase B — Worker backend.** `src/worker.ts` is the production backend (mirrors
-  `src/server.ts` routes). Storage contracts were split runtime-neutral:
-  `src/transcript/store.ts` (`TranscriptStore` + `MemoryTranscriptStore`, per-isolate only —
-  full transcripts never persist in the cloud) and `src/product/summary-store.ts`
-  (`SummaryCache` contract) with `src/product/kv-summary-cache.ts` (Workers KV impl) and
-  `FileSummaryCache` staying the local implementation. Hardening: `X-App-Password` gate with
-  constant-time compare (fails closed if the secret is unset), CORS allowlist (own origin +
-  chrome-extension + localhost), per-IP sliding-window rate limit (20/min), KV daily meter
-  (`DAILY_SUMMARY_LIMIT`, default 300/day) bounding API spend, safe error bodies, security
-  headers + CSP on assets. `wrangler.jsonc`: nodejs_compat, KV binding `SUMMARIES`
-  (id 5787832cee5f4475bc64d748b574b4f0), PWA assets with SPA fallback + run_worker_first,
-  observability on. Worker env uses structural types on purpose (one tsconfig, Node-testable).
-- **Phase C — clients.** Shared api-client sends optional `X-App-Password`. PWA: password
-  field under "Options and app password", saved in localStorage, auto-opens on 401.
-  Extension: production backend fixed in `apps/extension/src/settings.ts`; password in the
-  fallback `<details>`, saved via `chrome.storage.sync` (`storage` permission). Self-hosted
-  builds replace `DEFAULT_BACKEND_URL` before build.
-- **Phase D — CI.** `.github/workflows/ci.yml`: format check, typecheck, tests, builds,
-  Worker dry-run bundle on push/PR. Deploys stay manual (`npm run deploy`).
+1. Uninstall the existing No BS Summary app/shortcut.
+2. Open production in Chrome and choose **Install app**.
+3. In ReVanced choose **Share**, then **More** for the full Android system share sheet.
+4. Disable ReVanced's custom **Change share sheet** patch/setting if present.
 
-Owner's logins: Cloudflare (wrangler, kzaumanis@gmail.com — email now verified), GitHub CLI
-(`echoNad3`). Local `.env` holds the real TranscriptAPI and Gemini keys plus leftover
-Supabase values (unused; the Supabase project can be deleted). Never print, expose, or
-commit secrets. `.dev.vars.example` documents Worker dev secrets.
+Automation proves the `/share` intake flow. Only the owner's Android/ReVanced build can prove the
+native OS listing.
 
-Key architecture facts:
+## Current local release
 
-- `src/product/service.ts` — `SummaryService`: request validation, backend summary cache
-  lookup, in-flight collapse, pipeline call, exact response persistence. Has an internal
-  `{ regenerate: true }` seam, not exposed to clients.
-- `src/server.ts` — local Node dev server; `src/worker.ts` — production. Same API shape.
-- Benchmark/quality history lives in `MODEL_COMPARISON_REPORT.md`,
-  `QUALITY_BENCHMARK_REPORT.md`, `BENCHMARK_REPORT.md`, `PROMPT_QUALITY_COMPARISON.md`, and
-  `results/`. Historical evidence only; don't rerun without being asked. Any future model
-  comparison must reuse the same cached transcript hashes and current prompt.
+- Extension version: `0.3.0`.
+- PWA service-worker cache: `nbs-shell-v3`.
+- Production dependency audit: zero known vulnerabilities.
+- `.claude/` is pre-existing user-owned untracked data; do not touch it.
+- Format check and all three TypeScript configurations pass.
+- 193 tests in 23 files pass.
+- Final server, PWA, and extension builds pass.
+- Bundle gates pass: PWA JS 6.49 KiB gzip / 12 KiB; PWA CSS 2.47 / 8; extension JS
+  5.65 / 16; extension CSS 2.40 / 8.
+- Axe reports no violations in the tested PWA, dialog, and 320 px extension surfaces.
+- Isolated Chromium cross-client smoke passes all 30 checks with zero TranscriptAPI calls.
+- In-app browser visual review of the desktop PWA and information dialog is clean.
+- Wrangler dry-run passes: 13 assets; 1448.41 KiB upload / 205.82 KiB gzip; expected KV,
+  assets, model, timeout, and daily-limit bindings present.
+- Refreshed store screenshot/promo generated and visually checked.
+- Extension ZIP has 9 entries, forward-slash paths, and root `manifest.json`. SHA-256:
+  `14C0C9C0ACBC4EEEBB9F5ED960390A2F8441E209FD822796B9B3B24AE05B6063`.
+- Frontend build/ZIP secret scan: clean.
 
-## Completed phases E and F (2026-07-16)
+Run: `npm run format:check`, `npm run typecheck`, `npm test`, `npm run build`,
+`npm run check:bundles`, `npm run smoke:a11y`, `npm run smoke:extension` with the local server,
+and `npx wrangler deploy --dry-run --outdir build-check`.
 
-- **Phase E — deploy.** Deployed via `npm run deploy` under the owner's wrangler login.
-  Extension `DEFAULT_BACKEND_URL` (`apps/extension/src/settings.ts`) points at production.
-  `preview_urls` disabled in wrangler.jsonc — one stable URL. The extension smoke script
-  keeps the shipped production URL and intercepts it with the already-proven local cached
-  payload, so smoke needs no release-only localhost permission and makes no paid call. All
-  production checks above passed.
-- **Phase F — docs.** README rewritten for the deployed reality (live URL, friend setup,
-  extension install, local dev, self-hosting, costs, limits).
+Key files: `src/worker.ts`, `src/server.ts`, `src/product/service.ts`,
+`src/product/kv-summary-cache.ts`, `apps/shared/api-client.ts`,
+`apps/shared/client-state.ts`, `apps/pwa/src/main.ts`, `apps/pwa/public/sw.js`,
+`apps/extension/src/sidepanel.ts`, and the three scripts under `scripts/` for cross-client smoke,
+accessibility, and bundle budgets.
 
-Deploy blockers hit (each was a one-time owner dashboard action, both done 2026-07-16):
-Cloudflare email verification; workers.dev subdomain registration (`echonad3`).
+Manual checks automation cannot replace: click the toolbar icon in normal Chrome once; install the
+deployed PWA on the owner's Android phone and test ReVanced's system share sheet.
 
-Incident note: the generated app password briefly landed in a local commit
-(`.app-password.tmp` swept up by `git add -A`); it was amended out before any push and the
-file is now gitignored. Nothing secret has ever been pushed. Lesson: stage explicitly when a
-secret-bearing temp file exists.
+## Release work requiring owner approval
 
-## Standard verification after any change
+1. Deploy audited Worker/PWA with `npm run deploy`.
+2. Reinstall/test the Android PWA.
+3. Upload extension `0.3.0` ZIP/assets to Web Store draft
+   `kijehbnmlengaokipdbenipccfidlecc`.
+4. Owner uploads files and verifies publisher contact email.
+5. Ask for action-time confirmation immediately before **Submit for review**.
 
-```text
-npm run format:check
-npm run typecheck
-npm test
-npm run build
-npm run smoke:extension
-git diff --check
-```
-
-## Commands
-
-```text
-npm start                  # build output server + PWA at http://127.0.0.1:8787
-npm run dev:api            # dev API server via tsx
-npm run dev:worker         # wrangler dev (needs .dev.vars, see .dev.vars.example)
-npm run deploy             # build PWA + wrangler deploy to Cloudflare
-npm run bench              # benchmark (may reuse cached transcripts)
-npm run bench:cache-only   # Gemini only; fails on transcript cache miss
-npm run bench:no-cache     # live transcripts; costs money
-npm run cache:clear        # wipe local transcript + summary caches
-npm run smoke:extension    # needs `npm start` running in another terminal
-```
-
-## Next task: finish the Chrome Web Store dashboard submission (unlisted)
-
-Decided with the owner 2026-07-16. Chrome forbids installing extensions from arbitrary
-websites — the Web Store is the only one-click install path. Goal: an **unlisted** store
-listing (only people with the link find it) so friends install with one click and updates
-push automatically. The owner paid the $5 developer fee and signed into the dashboard. Google did
-not flag the old name specifically; its validation dialog lists unfinished listing, privacy, and
-contact requirements. The owner still chose the safer public brand **No BS Summary**. The updated
-package and signed-in dashboard flow are in progress.
-
-**Finished 2026-07-16:**
-
-- Manifest version `0.1.1`; public name `No BS Summary`; primary button `Cut the BS`; PNG icons at
-  16, 32, 48, and 128 px; toolbar icons set. The 128 px store icon has the required transparent
-  padding.
-- Removed `activeTab` and the localhost host permission. Exact host permissions remain for
-  supported YouTube hosts (persistent URL/title detection while the panel stays open) and
-  the production Worker (cross-origin API fetch). Removed the now-invalid custom backend URL
-  field from the shipped UI; self-hosted builds replace `DEFAULT_BACKEND_URL` before build.
-- Added an in-product pre-submit disclosure for the video URL/title, caption language, and
-  app password sent to the backend.
-- Hosted privacy policy is live at
-  `https://no-bullshit-summary.echonad3.workers.dev/privacy` (deploy version
-  `4a78af83-bd85-4b7a-96dd-a8009d05909b`). It discloses Chrome Sync, Cloudflare,
-  TranscriptAPI, Gemini, summary-cache retention, and Chrome Web Store Limited Use.
-- Listing copy/permission justifications/data disclosures: `store/listing.md`.
-- Required images: `store/screenshot-1280x800.png` and
-  `store/small-promo-440x280.png`. Generators live in
-  `scripts/generate-extension-icons.mjs` and `scripts/generate-store-assets.mjs`.
-- Release ZIP: `dist/no-bs-summary-extension.zip`; 11 ZIP entries, forward-slash
-  paths, `manifest.json` at root, four icons, no wrapper directory. SHA-256:
-  `DF1385206AD3EB77B178AD57701340D52B17B50C2B827F13927111C6E3D06532`. Frontend secret scan:
-  clean; old public-brand scan clean.
-- Verification: format check, typecheck, 176 tests/21 files, full build, Worker dry-run,
-  live `/privacy` + homepage + web manifest checks, and isolated extension smoke all pass. The live
-  pages say `No BS Summary` and contain no old public name. Smoke used the saved local summary plus
-  a mocked production URL, made zero TranscriptAPI calls, and covered detection,
-  loading/success/error states, cross-client output, and network errors.
-- Web Store fields saved in draft `kijehbnmlengaokipdbenipccfidlecc`: detailed description,
-  category `Tools` (the current dashboard puts this under Productivity), language `English`,
-  homepage/support URLs, all permission justifications, remote code `No`, Authentication
-  information + Web history + Website content disclosures, all three Limited Use certifications,
-  privacy URL, visibility `Unlisted`, and all regions.
-- Google's validation list is down from 13 blockers to four: store icon, one screenshot, publisher
-  contact email, and contact-email verification. The Codex in-app browser does not support file
-  uploads, so the owner must select the package and image files through the visible dashboard.
-
-**Exact continuation:**
-
-1. Use Web Store draft `kijehbnmlengaokipdbenipccfidlecc`, which is the item the owner opened.
-   Leave duplicate draft `mmmblkdkmfhpjegmcklmcbcbocomikdm` untouched unless the owner explicitly
-   asks to delete it.
-2. Owner selects `dist/no-bs-summary-extension.zip` in Build -> Package -> Upload new package.
-3. Owner uploads `apps/extension/public/icons/icon-128.png` as the store icon,
-   `store/screenshot-1280x800.png` as the required screenshot, and optionally
-   `store/small-promo-440x280.png` as the small promo tile. These cannot be uploaded by the in-app
-   browser automation.
-4. Owner adds the public publisher contact email on Settings and completes Google's email
-   verification. Do not enter the shared app password there. If Google later asks for test
-   credentials, the owner must enter the app password without posting it in chat or committing it.
-5. AI shows the owner the final dashboard state and asks for action-time confirmation before
-   the irreversible "Submit for review" click.
-6. After approval: replace README's zip/Load-unpacked friend instructions with the store
-   link, update this file, and verify one-click install + side panel against production.
-
-## Other known follow-ups (only if asked)
-
-- Optional manual check: click the extension's toolbar button in regular Chrome once to
-  confirm native side-panel placement (Playwright can't click browser chrome).
-- Raise `DAILY_SUMMARY_LIMIT` in wrangler.jsonc if friends hit the cap.
-- Rotate `APP_PASSWORD` via `npx wrangler secret put APP_PASSWORD` if it leaks.
+Leave duplicate draft `mmmblkdkmfhpjegmcklmcbcbocomikdm` untouched. Intended visibility is
+unlisted. Package inputs are `dist/no-bs-summary-extension.zip`, the 128 px extension icon,
+`store/screenshot-1280x800.png`, `store/small-promo-440x280.png`, `store/listing.md`, and the
+hosted policy source. Never put the shared password in source, listing, ZIP, chat, or reviewer
+notes.

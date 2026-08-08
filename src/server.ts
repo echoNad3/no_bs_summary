@@ -27,6 +27,9 @@ export function createApiServer(options: ApiServerOptions) {
       await routeRequest(request, response, options);
     } catch (error) {
       const failure = error instanceof ProductError ? error : undefined;
+      if (failure?.retryAfterSeconds !== undefined) {
+        response.setHeader('Retry-After', String(failure.retryAfterSeconds));
+      }
       writeJson(response, failure?.statusCode ?? 500, {
         error: {
           code: failure?.code ?? 'INTERNAL_ERROR',
@@ -65,6 +68,19 @@ async function routeRequest(
     return;
   }
 
+  if (method === 'GET' && url.pathname === '/api/status') {
+    writeJson(response, 200, {
+      status: 'ok',
+      cache: 'local',
+      dailyGeneration: null,
+      transcriptApiCredits: {
+        availableViaApi: false,
+        dashboardUrl: 'https://transcriptapi.com/dashboard/billing',
+      },
+    });
+    return;
+  }
+
   if (method === 'POST' && url.pathname === '/api/summarize') {
     const input = await readJsonBody(request);
     writeJson(response, 200, await options.service.summarize(input));
@@ -95,7 +111,7 @@ function applyCors(request: IncomingMessage, response: ServerResponse): boolean 
   if (!allowed) return false;
   response.setHeader('Access-Control-Allow-Origin', origin);
   response.setHeader('Vary', 'Origin');
-  response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  response.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-App-Password');
   response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   return true;
 }
@@ -161,12 +177,29 @@ async function servePwa(
 
   response.statusCode = 200;
   response.setHeader('Content-Type', mimeType(servedPath));
-  response.setHeader(
-    'Cache-Control',
-    pathname === '/sw.js' || pathname.endsWith('.webmanifest')
-      ? 'no-cache'
-      : 'public, max-age=3600',
-  );
+  response.setHeader('X-Content-Type-Options', 'nosniff');
+  response.setHeader('Referrer-Policy', 'no-referrer');
+  response.setHeader('X-Frame-Options', 'DENY');
+  response.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  response.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+  response.setHeader('Permissions-Policy', 'camera=(), geolocation=(), microphone=()');
+  if (mimeType(servedPath).startsWith('text/html')) {
+    response.setHeader('Cache-Control', 'no-cache');
+    response.setHeader(
+      'Content-Security-Policy',
+      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
+        "img-src 'self' data: https://i.ytimg.com; connect-src 'self'; manifest-src 'self'; " +
+        "worker-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+    );
+  } else if (pathname === '/sw.js' || pathname.endsWith('.webmanifest')) {
+    response.setHeader('Cache-Control', 'no-cache');
+  } else if (/^\/assets\/.+-[A-Za-z0-9_-]+\.(?:css|js)$/u.test(pathname)) {
+    response.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  } else if (pathname.startsWith('/icons/')) {
+    response.setHeader('Cache-Control', 'public, max-age=604800');
+  } else {
+    response.setHeader('Cache-Control', 'public, max-age=3600');
+  }
   if (method === 'HEAD') response.end();
   else response.end(content);
 }
@@ -181,6 +214,8 @@ function mimeType(filePath: string): string {
       return 'text/css; charset=utf-8';
     case '.svg':
       return 'image/svg+xml';
+    case '.png':
+      return 'image/png';
     case '.webmanifest':
       return 'application/manifest+json';
     default:

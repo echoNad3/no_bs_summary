@@ -6,6 +6,7 @@ export interface TabContext {
 }
 
 export interface YouTubeTabContext {
+  videoId: string;
   url: string;
   title?: string;
 }
@@ -14,11 +15,10 @@ export function getYouTubeTabContext(tab: TabContext | undefined): YouTubeTabCon
   if (!tab?.url) return undefined;
 
   try {
-    extractVideoId(tab.url);
+    const videoId = extractVideoId(tab.url);
+    const title = tab.title?.replace(/\s+-\s+YouTube$/iu, '').trim();
+    return { videoId, url: tab.url, title: title || undefined };
   } catch {
     return undefined;
   }
-
-  const title = tab.title?.replace(/\s+-\s+YouTube$/iu, '').trim();
-  return { url: tab.url, title: title || undefined };
 }

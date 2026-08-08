@@ -68,6 +68,12 @@ export class SlidingWindowRateLimiter {
     }
     return true;
   }
+
+  retryAfterSeconds(client: string, now: number): number {
+    const oldest = (this.log.get(client) ?? []).filter((at) => at > now - RATE_LIMIT_WINDOW_MS)[0];
+    if (oldest === undefined) return 0;
+    return Math.max(1, Math.ceil((oldest + RATE_LIMIT_WINDOW_MS - now) / 1000));
+  }
 }
 
 // Deliberate cross-request isolate state: request pacing and in-flight collapse
@@ -91,7 +97,16 @@ export async function handleRequest(
     return await routeRequest(request, env, deps, now);
   } catch (error) {
     if (error instanceof ProductError) {
-      return json(error.statusCode, { error: { code: error.code, message: error.message } });
+      const corsHeaders = corsHeadersFor(request, new URL(request.url)) ?? {};
+      const retryHeaders: Record<string, string> =
+        error.retryAfterSeconds === undefined
+          ? {}
+          : { 'Retry-After': String(error.retryAfterSeconds) };
+      return json(
+        error.statusCode,
+        { error: { code: error.code, message: error.message } },
+        { ...corsHeaders, ...retryHeaders },
+      );
     }
     console.error(
       JSON.stringify({
@@ -125,6 +140,29 @@ async function routeRequest(
     return json(
       200,
       { status: 'ok', provider: 'transcriptapi', promptVersion: GEMINI_PROMPT_VERSION },
+      corsHeaders,
+    );
+  }
+
+  if (request.method === 'GET' && url.pathname === '/api/status') {
+    if (!(await passwordMatches(request.headers.get('x-app-password'), env.APP_PASSWORD))) {
+      return json(
+        401,
+        { error: { code: 'UNAUTHORIZED', message: 'Missing or wrong app password.' } },
+        corsHeaders,
+      );
+    }
+    return json(
+      200,
+      {
+        status: 'ok',
+        cache: 'cloud',
+        dailyGeneration: await readDailyBudget(env, now()),
+        transcriptApiCredits: {
+          availableViaApi: false,
+          dashboardUrl: 'https://transcriptapi.com/dashboard/billing',
+        },
+      },
       corsHeaders,
     );
   }
@@ -164,19 +202,19 @@ async function summarize(
   }
 
   const client = request.headers.get('cf-connecting-ip') ?? 'unknown';
-  if (!(deps.rateLimiter ?? defaultRateLimiter).allow(client, now())) {
+  const rateLimiter = deps.rateLimiter ?? defaultRateLimiter;
+  const requestTime = now();
+  if (!rateLimiter.allow(client, requestTime)) {
+    const retryAfterSeconds = rateLimiter.retryAfterSeconds(client, requestTime);
     return json(
       429,
-      { error: { code: 'RATE_LIMITED', message: 'Too many requests. Slow down.' } },
-      corsHeaders,
-    );
-  }
-
-  if (!(await underDailyLimit(env, now()))) {
-    return json(
-      429,
-      { error: { code: 'DAILY_LIMIT_REACHED', message: 'Daily request limit reached.' } },
-      corsHeaders,
+      {
+        error: {
+          code: 'RATE_LIMITED',
+          message: `Too many requests. Try again in ${retryAfterSeconds} seconds.`,
+        },
+      },
+      { ...corsHeaders, 'Retry-After': String(retryAfterSeconds) },
     );
   }
 
@@ -242,13 +280,47 @@ export async function passwordMatches(
  * Global daily meter in KV. Approximate by design (KV counters are not
  * atomic); it exists to bound worst-case API spend, not for precision.
  */
-async function underDailyLimit(env: WorkerEnv, now: number): Promise<boolean> {
+export interface DailyGenerationBudget {
+  used: number;
+  limit: number;
+  remaining: number;
+  resetsAt: string;
+}
+
+export async function readDailyBudget(
+  env: Pick<WorkerEnv, 'SUMMARIES' | 'DAILY_SUMMARY_LIMIT'>,
+  now: number,
+): Promise<DailyGenerationBudget> {
   const limit = positiveInteger(env.DAILY_SUMMARY_LIMIT) ?? DEFAULT_DAILY_SUMMARY_LIMIT;
   const key = `meter-${new Date(now).toISOString().slice(0, 10)}`;
-  const count = Number((await env.SUMMARIES.get(key)) ?? '0');
-  if (!Number.isFinite(count) || count >= limit) return false;
-  await env.SUMMARIES.put(key, String(count + 1), { expirationTtl: 2 * 24 * 60 * 60 });
-  return true;
+  const stored = Number((await env.SUMMARIES.get(key)) ?? '0');
+  const used = Number.isFinite(stored) && stored > 0 ? Math.floor(stored) : 0;
+  const reset = new Date(now);
+  reset.setUTCHours(24, 0, 0, 0);
+  return {
+    used,
+    limit,
+    remaining: Math.max(0, limit - used),
+    resetsAt: reset.toISOString(),
+  };
+}
+
+export async function consumeDailyBudget(
+  env: Pick<WorkerEnv, 'SUMMARIES' | 'DAILY_SUMMARY_LIMIT'>,
+  now: number,
+): Promise<void> {
+  const budget = await readDailyBudget(env, now);
+  if (budget.remaining <= 0) {
+    const retryAfterSeconds = Math.max(1, Math.ceil((Date.parse(budget.resetsAt) - now) / 1000));
+    throw new ProductError(
+      429,
+      'DAILY_LIMIT_REACHED',
+      'Daily new-summary limit reached. Already cached videos still work.',
+      retryAfterSeconds,
+    );
+  }
+  const key = `meter-${new Date(now).toISOString().slice(0, 10)}`;
+  await env.SUMMARIES.put(key, String(budget.used + 1), { expirationTtl: 2 * 24 * 60 * 60 });
 }
 
 async function readJsonBody(request: Request): Promise<unknown> {
@@ -270,16 +342,27 @@ async function readJsonBody(request: Request): Promise<unknown> {
 async function serveAsset(request: Request, env: WorkerEnv): Promise<Response> {
   const assetResponse = await env.ASSETS.fetch(request);
   const response = new Response(assetResponse.body, assetResponse);
+  const pathname = new URL(request.url).pathname;
   response.headers.set('X-Content-Type-Options', 'nosniff');
   response.headers.set('Referrer-Policy', 'no-referrer');
   response.headers.set('X-Frame-Options', 'DENY');
+  response.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
+  response.headers.set('Cross-Origin-Resource-Policy', 'same-origin');
+  response.headers.set('Permissions-Policy', 'camera=(), geolocation=(), microphone=()');
   if ((response.headers.get('content-type') ?? '').includes('text/html')) {
+    response.headers.set('Cache-Control', 'no-cache');
     response.headers.set(
       'Content-Security-Policy',
       "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
-        "img-src 'self' data:; connect-src 'self'; manifest-src 'self'; " +
-        "base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+        "img-src 'self' data: https://i.ytimg.com; connect-src 'self'; manifest-src 'self'; " +
+        "worker-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
     );
+  } else if (pathname === '/sw.js' || pathname.endsWith('.webmanifest')) {
+    response.headers.set('Cache-Control', 'no-cache');
+  } else if (/^\/assets\/.+-[A-Za-z0-9_-]+\.(?:css|js)$/u.test(pathname)) {
+    response.headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+  } else if (pathname.startsWith('/icons/')) {
+    response.headers.set('Cache-Control', 'public, max-age=604800');
   }
   return response;
 }
@@ -296,7 +379,13 @@ function getService(env: WorkerEnv): SummaryService {
   }
   const model = env.GEMINI_MODEL?.trim() || 'gemini-3.1-flash-lite';
   const timeoutMs = positiveInteger(env.END_TO_END_TIMEOUT_MS) ?? DEFAULT_TIMEOUT_MS;
-  const fingerprint = [model, timeoutMs, geminiKey, transcriptKey].join(' ');
+  const fingerprint = JSON.stringify([
+    model,
+    timeoutMs,
+    env.DAILY_SUMMARY_LIMIT,
+    geminiKey,
+    transcriptKey,
+  ]);
   if (cachedService?.fingerprint !== fingerprint) {
     cachedService = {
       fingerprint,
@@ -308,6 +397,7 @@ function getService(env: WorkerEnv): SummaryService {
         summaryModel: model,
         summaryPromptVersion: GEMINI_PROMPT_VERSION,
         timeoutMs,
+        beforeGenerate: () => consumeDailyBudget(env, Date.now()),
       }),
     };
   }
@@ -331,6 +421,8 @@ function json(
       'Content-Type': 'application/json; charset=utf-8',
       'Cache-Control': 'no-store',
       'X-Content-Type-Options': 'nosniff',
+      'Referrer-Policy': 'no-referrer',
+      'Permissions-Policy': 'camera=(), geolocation=(), microphone=()',
       ...extraHeaders,
     },
   });

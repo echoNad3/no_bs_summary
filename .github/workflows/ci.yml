@@ -26,6 +26,12 @@ jobs:
 
       - run: npm run build
 
+      - run: npm run check:bundles
+
+      - run: npx playwright install --with-deps chromium
+
+      - run: npm run smoke:a11y
+
       # Validates that the Worker still bundles for the Cloudflare runtime.
       # Deploys stay manual (npm run deploy) with the owner's wrangler login.
       - run: npx wrangler deploy --dry-run --outdir build-check

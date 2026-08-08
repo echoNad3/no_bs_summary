@@ -1,4 +1,10 @@
-/** Turns a supported YouTube link into its 11-character video ID. */
+export function firstYouTubeUrl(text: string): string {
+  const match = text.match(
+    /https?:\/\/(?:youtu\.be\/|(?:www\.|m\.|music\.)?youtube\.com\/(?:watch|shorts\/|live\/))[^\s<]+/iu,
+  );
+  if (!match) return '';
+  return match[0].replace(/[),.;!?]+$/u, '');
+}
 
 const VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
 const YOUTUBE_HOSTS = new Set(['youtube.com', 'm.youtube.com', 'music.youtube.com']);
@@ -42,4 +48,12 @@ export function extractVideoId(rawUrl: string): string {
   }
 
   return candidate;
+}
+
+export function youtubeThumbnailUrl(rawUrl: string): string | undefined {
+  try {
+    return `https://i.ytimg.com/vi/${extractVideoId(rawUrl)}/hqdefault.jpg`;
+  } catch {
+    return undefined;
+  }
 }

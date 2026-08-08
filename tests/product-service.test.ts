@@ -18,7 +18,13 @@ afterEach(async () => {
   await fs.rm(dir, { recursive: true, force: true });
 });
 
-function service(overrides: { transcript?: TranscriptProvider; summary?: SummaryProvider } = {}) {
+function service(
+  overrides: {
+    transcript?: TranscriptProvider;
+    summary?: SummaryProvider;
+    beforeGenerate?: () => Promise<void>;
+  } = {},
+) {
   const transcript: TranscriptProvider =
     overrides.transcript ??
     ({
@@ -50,6 +56,7 @@ function service(overrides: { transcript?: TranscriptProvider; summary?: Summary
       summaryModel: 'gemini-3.1-flash-lite',
       summaryPromptVersion: 'summary-first-test-v1',
       timeoutMs: 15000,
+      beforeGenerate: overrides.beforeGenerate,
     }),
     transcript,
     summary,
@@ -91,6 +98,44 @@ describe('SummaryService', () => {
     expect(pwaResult.source).toBe('LIVE');
     expect(transcript.fetchTranscript).toHaveBeenCalledTimes(1);
     expect(summary.summarize).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs the live-generation guard only on a persistent summary-cache miss', async () => {
+    const beforeGenerate = vi.fn().mockResolvedValue(undefined);
+    const { instance } = service({ beforeGenerate });
+    const input = { url: 'https://youtu.be/dQw4w9WgXcQ', language: 'en' };
+
+    await instance.summarize(input);
+    await instance.summarize(input);
+
+    expect(beforeGenerate).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps different caption languages in separate summary-cache entries', async () => {
+    const transcript = {
+      name: 'transcriptapi',
+      fetchTranscript: vi.fn().mockImplementation(async (_videoId, _ctx, language = 'en') => ({
+        provider: 'transcriptapi',
+        videoId: 'dQw4w9WgXcQ',
+        language,
+        text: `Useful ${language} caption text.`,
+      })),
+    } satisfies TranscriptProvider;
+    const { instance, summary } = service({ transcript });
+
+    const english = await instance.summarize({
+      url: 'https://youtu.be/dQw4w9WgXcQ',
+      language: 'en',
+    });
+    const german = await instance.summarize({
+      url: 'https://youtu.be/dQw4w9WgXcQ',
+      language: 'de',
+    });
+
+    expect(english.language).toBe('en');
+    expect(german.language).toBe('de');
+    expect(transcript.fetchTranscript).toHaveBeenCalledTimes(2);
+    expect(summary.summarize).toHaveBeenCalledTimes(2);
   });
 
   it('deduplicates simultaneous requests for one backend cache key', async () => {

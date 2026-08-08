@@ -20,6 +20,8 @@ export interface SummaryServiceOptions {
   summaryModel: string;
   summaryPromptVersion: string;
   timeoutMs: number;
+  /** Called only after the persistent summary cache misses, immediately before paid work starts. */
+  beforeGenerate?: () => Promise<void>;
 }
 
 export interface SummaryExecutionOptions {
@@ -32,6 +34,7 @@ export class ProductError extends Error {
     readonly statusCode: number,
     readonly code: string,
     message: string,
+    readonly retryAfterSeconds?: number,
   ) {
     super(message);
     this.name = 'ProductError';
@@ -66,6 +69,7 @@ export class SummaryService {
 
     const identity: SummaryCacheIdentity = {
       videoId,
+      language: parsed.data.language,
       model: this.options.summaryModel,
       promptVersion: this.options.summaryPromptVersion,
     };
@@ -103,6 +107,8 @@ export class SummaryService {
     videoId: string,
     identity: SummaryCacheIdentity,
   ): Promise<SummarizeResponse> {
+    await this.options.beforeGenerate?.();
+
     const [record] = await runBenchmark({
       videos: [
         {

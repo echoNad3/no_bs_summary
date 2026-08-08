@@ -27,9 +27,18 @@
   --color-on-accent: #1a0d08;
   --color-accent-glow: rgb(255 122 80 / 16%);
   --color-focus-ring: rgb(255 138 97 / 28%);
+  --color-error: #ff9b8e;
   --color-watch: #17613f;
   --color-skim: #74500c;
   --color-skip: #87342d;
   --color-on-verdict: #ffffff;
   --shadow-panel: 0 1rem 3rem rgb(0 0 0 / 28%);
+}
+
+html[data-text-size='large'] {
+  font-size: 112.5%;
+}
+
+html[data-text-size='extra-large'] {
+  font-size: 125%;
 }

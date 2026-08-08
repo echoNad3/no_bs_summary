@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#0d0f12" />
     <meta
@@ -38,7 +38,7 @@
       main {
         width: min(100% - 2rem, 48rem);
         margin: 0 auto;
-        padding: 3rem 0 4rem;
+        padding: max(3rem, env(safe-area-inset-top)) 0 max(4rem, env(safe-area-inset-bottom));
       }
 
       .eyebrow {
@@ -80,6 +80,12 @@
         color: #ff8a61;
       }
 
+      a:focus-visible {
+        border-radius: 0.2rem;
+        outline: 3px solid #ff8a61;
+        outline-offset: 3px;
+      }
+
       .updated {
         color: #949eac;
         font-size: 0.82rem;
@@ -90,11 +96,22 @@
     <main>
       <p class="eyebrow">PLAIN-ENGLISH PRIVACY</p>
       <h1>No BS Summary</h1>
-      <p class="updated">Last updated: July 16, 2026</p>
+      <p class="updated">Last updated: August 8, 2026</p>
 
       <p>
         No BS Summary turns the captions from a YouTube video into a detailed summary. It has no
         ads, analytics, tracking, accounts, or data sales.
+      </p>
+
+      <h2>What the web app handles</h2>
+      <p>
+        The web app handles the YouTube URL, optional title, caption language, and shared app
+        password you enter. The password is saved only in that browser's local storage so you do not
+        have to enter it every time. The selected text size and most recent completed summary are
+        also saved on that device so reopening the app does not lose what you were reading.
+        Installing the app stores its small interface files for offline launch; new summaries still
+        require a connection. Copying a result writes the generated summary to your system
+        clipboard. Sharing a result sends it to another app only after you choose that action.
       </p>
 
       <h2>What the Chrome extension handles</h2>
@@ -106,8 +123,16 @@
       <p>
         The extension reads the active tab only on supported YouTube hosts. It sends the items above
         to the No BS Summary backend only when you click “Cut the BS.” The app password is saved in
-        Chrome Sync so you do not have to enter it every time. The extension does not read page
-        contents, browsing history outside those YouTube hosts, cookies, or personal files.
+        Chrome Sync so you do not have to enter it every time. The text-size preference is also
+        synced. The most recent completed summary is stored locally on that device for restoration.
+        The extension does not read page contents, browsing history outside those YouTube hosts,
+        cookies, or personal files.
+      </p>
+
+      <h2>YouTube thumbnails</h2>
+      <p>
+        The app may load the selected video's thumbnail from YouTube's image server. YouTube can
+        therefore receive your IP address and normal browser request information.
       </p>
 
       <h2>How the backend uses data</h2>
