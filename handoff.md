@@ -22,8 +22,10 @@ WATCH / SKIM / SKIP verdict and one blunt reason.
 
 Production app/API: https://no-bullshit-summary.echonad3.workers.dev
 
-The production site is still the earlier release. This audit build is local only. Do not deploy,
-push, or submit the Web Store draft without explicit approval.
+The audited Worker/PWA release is live. Production deploy version:
+`86425f2b-0b1a-44cd-9fd4-b51e0d8cfb30`. Release commit `28d4f80` is pushed to GitHub `main`, and
+GitHub Actions run `31256675095` passed. The Chrome extension package is ready but still requires
+the owner's Web Store upload/review steps below.
 
 ## Cloud storage and limits
 
@@ -91,7 +93,7 @@ home-screen shortcut. After deployment:
 Automation proves the `/share` intake flow. Only the owner's Android/ReVanced build can prove the
 native OS listing.
 
-## Current local release
+## Current production release
 
 - Extension version: `0.3.0`.
 - PWA service-worker cache: `nbs-shell-v3`.
@@ -111,6 +113,11 @@ native OS listing.
 - Extension ZIP has 9 entries, forward-slash paths, and root `manifest.json`. SHA-256:
   `14C0C9C0ACBC4EEEBB9F5ED960390A2F8441E209FD822796B9B3B24AE05B6063`.
 - Frontend build/ZIP secret scan: clean.
+- Live verification after deploy: homepage 200 with new information/update UI; manifest 200 with
+  `/share`, three PNG icons and maskable purpose; `/share` 200; service worker `nbs-shell-v3`;
+  privacy 200 with latest-result disclosure; all install icons 200; unauthenticated `/api/status`
+  correctly returns 401; Chrome-extension CORS preflight returns 204 with `X-App-Password` allowed.
+- GitHub CI for full commit `28d4f80cd3eb0d1df9b3454b418e69b95ca01760`: success.
 
 Run: `npm run format:check`, `npm run typecheck`, `npm test`, `npm run build`,
 `npm run check:bundles`, `npm run smoke:a11y`, `npm run smoke:extension` with the local server,
@@ -125,14 +132,13 @@ accessibility, and bundle budgets.
 Manual checks automation cannot replace: click the toolbar icon in normal Chrome once; install the
 deployed PWA on the owner's Android phone and test ReVanced's system share sheet.
 
-## Release work requiring owner approval
+## Remaining owner release steps
 
-1. Deploy audited Worker/PWA with `npm run deploy`.
-2. Reinstall/test the Android PWA.
-3. Upload extension `0.3.0` ZIP/assets to Web Store draft
+1. Reinstall/test the Android PWA.
+2. Upload extension `0.3.0` ZIP/assets to Web Store draft
    `kijehbnmlengaokipdbenipccfidlecc`.
-4. Owner uploads files and verifies publisher contact email.
-5. Ask for action-time confirmation immediately before **Submit for review**.
+3. Owner uploads files and verifies publisher contact email.
+4. Ask for action-time confirmation immediately before **Submit for review**.
 
 Leave duplicate draft `mmmblkdkmfhpjegmcklmcbcbocomikdm` untouched. Intended visibility is
 unlisted. Package inputs are `dist/no-bs-summary-extension.zip`, the 128 px extension icon,
