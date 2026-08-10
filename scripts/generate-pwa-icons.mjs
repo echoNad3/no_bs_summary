@@ -55,7 +55,7 @@ async function renderIcon(size, artworkSize, targetPath) {
         display: grid;
         place-items: center;
         overflow: hidden;
-        background: #0d0f12;
+        background: #161616;
       }
       img { width: ${artworkSize}px; height: ${artworkSize}px; display: block; }
     </style>

@@ -11,10 +11,10 @@
         android:translateY="82">
         <path
             android:name="splash_vector_anchor"
-            android:fillColor="#F5F7FA"
+            android:fillColor="#F1EEE7"
             android:pathData="M112,126 H184 L296,294 V126 H400 V386 H328 L216,218 V386 H112 Z" />
         <path
-            android:fillColor="#FF8A61"
+            android:fillColor="#E86437"
             android:pathData="M389,78 A48,48 0,1 1,389,174 A48,48 0,1 1,389,78 Z" />
     </group>
 </vector>

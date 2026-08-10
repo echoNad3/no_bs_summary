@@ -1,7 +1,7 @@
 :root {
   color-scheme: dark;
-  color: #f5f7fa;
-  background: #0d0f12;
+  color: #f1eee7;
+  background: #161616;
   font-family:
     system-ui,
     -apple-system,
@@ -13,22 +13,22 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
-  --color-bg: #0d0f12;
-  --color-surface: #16191e;
-  --color-surface-raised: #1d2128;
-  --color-surface-hover: #242a33;
-  --color-input: #101318;
-  --color-text: #f5f7fa;
-  --color-text-muted: #b4bcc8;
-  --color-text-subtle: #949eac;
-  --color-border: #2d333d;
-  --color-border-strong: #46505f;
-  --color-accent: #ff8a61;
-  --color-accent-strong: #ff7448;
-  --color-on-accent: #1a0d08;
-  --color-accent-soft: rgb(255 138 97 / 13%);
-  --color-accent-glow: rgb(255 122 80 / 16%);
-  --color-focus-ring: rgb(255 138 97 / 28%);
+  --color-bg: #161616;
+  --color-surface: #1d1d1d;
+  --color-surface-raised: #242424;
+  --color-surface-hover: #2b2b2b;
+  --color-input: #121212;
+  --color-text: #f1eee7;
+  --color-text-muted: #bdb6aa;
+  --color-text-subtle: #948d82;
+  --color-border: #343230;
+  --color-border-strong: #514c47;
+  --color-accent: #e86437;
+  --color-accent-strong: #d4542c;
+  --color-on-accent: #161616;
+  --color-accent-soft: rgb(232 100 55 / 15%);
+  --color-accent-glow: rgb(232 100 55 / 18%);
+  --color-focus-ring: rgb(232 100 55 / 32%);
   --color-error: #ff9b8e;
   --color-watch: #17613f;
   --color-skim: #74500c;

@@ -16,8 +16,8 @@ describe('local MVP manifests', () => {
       start_url: '/',
       scope: '/',
       display: 'standalone',
-      background_color: '#0d0f12',
-      theme_color: '#0d0f12',
+      background_color: '#161616',
+      theme_color: '#161616',
       prefer_related_applications: false,
       share_target: {
         action: '/share',
@@ -48,11 +48,12 @@ describe('local MVP manifests', () => {
     );
 
     expect(theme).toContain('color-scheme: dark');
-    expect(theme).toContain('--color-bg: #0d0f12');
-    expect(theme).toContain('--color-text: #f5f7fa');
-    expect(theme).toContain('--color-border: #2d333d');
-    expect(theme).toContain('--color-border-strong: #46505f');
-    expect(theme).toContain('--color-accent-glow: rgb(255 122 80 / 16%)');
+    expect(theme).toContain('--color-bg: #161616');
+    expect(theme).toContain('--color-text: #f1eee7');
+    expect(theme).toContain('--color-border: #343230');
+    expect(theme).toContain('--color-border-strong: #514c47');
+    expect(theme).toContain('--color-accent: #e86437');
+    expect(theme).toContain('--color-accent-glow: rgb(232 100 55 / 18%)');
     expect(theme).toContain('--space-6: 24px');
     expect(theme).toContain('--tap: 48px');
     expect(sharedCss).toContain('width: min(100%, 460px)');
@@ -60,11 +61,11 @@ describe('local MVP manifests', () => {
     expect(pwaCss).toContain("@import '../../shared/theme.css'");
     expect(pwaCss).toContain('width: min(100%, 736px)');
     expect(extensionCss).toContain("@import '../../shared/theme.css'");
-    expect(`${pwaCss}\n${extensionCss}`).not.toMatch(/#(?:fffdf8|f1eee7|161616)\b/iu);
+    expect(`${theme}\n${pwaCss}\n${extensionCss}`).not.toMatch(/#(?:ff8a61|ff7448)\b/iu);
 
     for (const html of [pwaHtml, extensionHtml]) {
       expect(html).toContain('<meta name="color-scheme" content="dark" />');
-      expect(html).toContain('background: #0d0f12');
+      expect(html).toContain('background: #161616');
       expect(html).not.toMatch(/theme[- ]toggle|light mode/iu);
     }
   });
@@ -76,7 +77,7 @@ describe('local MVP manifests', () => {
     expect(manifest).toMatchObject({
       manifest_version: 3,
       name: 'No BS Summary',
-      version: '0.6.0',
+      version: '0.6.1',
       minimum_chrome_version: '114',
       permissions: ['sidePanel', 'storage'],
       background: { service_worker: 'background.js', type: 'module' },
@@ -144,7 +145,7 @@ describe('local MVP manifests', () => {
 
   it('precaches the built JS and CSS needed for a first offline launch', async () => {
     const worker = await fs.readFile('apps/pwa/public/sw.js', 'utf8');
-    expect(worker).toContain("const CACHE = 'nbs-shell-v9'");
+    expect(worker).toContain("const CACHE = 'nbs-shell-v10'");
     expect(worker).toContain("event.data?.type === 'SKIP_WAITING'");
     expect(worker).toContain('/\\.(?:css|js)$/u');
     expect(worker).toContain("'/icons/icon-192.svg'");
@@ -202,12 +203,12 @@ describe('local MVP manifests', () => {
       fs.readFile('apps/android/app/src/main/res/drawable/splash_logo_vector.xml', 'utf8'),
     ]);
     for (const asset of [source, icon192, icon512]) {
-      expect(asset).toContain('#f5f7fa');
-      expect(asset).toContain('#ff8a61');
-      expect(asset).not.toContain('#e86437');
-      expect(asset).not.toContain('#f1eee7');
+      expect(asset).toContain('#f1eee7');
+      expect(asset).toContain('#e86437');
+      expect(asset).not.toContain('#ff8a61');
+      expect(asset).not.toContain('#f5f7fa');
     }
-    expect(splash).toContain('#F5F7FA');
-    expect(splash).toContain('#FF8A61');
+    expect(splash).toContain('#F1EEE7');
+    expect(splash).toContain('#E86437');
   });
 });

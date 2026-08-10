@@ -86,7 +86,7 @@ try {
   await composer.setContent(`
     <!doctype html>
     <style>
-      html, body { width: 1280px; height: 800px; margin: 0; overflow: hidden; background: #0d0f12; }
+      html, body { width: 1280px; height: 800px; margin: 0; overflow: hidden; background: #161616; }
       img { position: absolute; top: 0; height: 800px; display: block; }
       .video { left: 0; width: 890px; }
       .panel { right: 0; width: 390px; box-shadow: -10px 0 30px rgb(0 0 0 / 35%); }
@@ -111,8 +111,8 @@ try {
         place-items: center;
         background:
           radial-gradient(circle at 76% 18%, rgb(232 100 55 / 45%), transparent 34%),
-          radial-gradient(circle at 14% 92%, rgb(255 138 97 / 22%), transparent 42%),
-          #0d0f12;
+          radial-gradient(circle at 14% 92%, rgb(232 100 55 / 22%), transparent 42%),
+          #161616;
       }
       .halo {
         width: 190px;
