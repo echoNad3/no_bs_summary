@@ -3,7 +3,7 @@ import path from 'node:path';
 import { chromium } from 'playwright';
 
 const projectDir = process.cwd();
-const sourcePath = path.join(projectDir, 'apps', 'pwa', 'public', 'icons', 'icon-512.svg');
+const sourcePath = path.join(projectDir, 'brand', 'no-bs-summary-logo.svg');
 const outputDir = path.join(projectDir, 'apps', 'extension', 'public', 'icons');
 const source = await fs.readFile(sourcePath, 'utf8');
 const sourceUrl = `data:image/svg+xml;base64,${Buffer.from(source).toString('base64')}`;

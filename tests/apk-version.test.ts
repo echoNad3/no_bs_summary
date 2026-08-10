@@ -22,11 +22,15 @@ describe('Android update versioning', () => {
   });
 
   it('installs only the current downloaded build and never a downgrade', () => {
-    expect(isDownloadedBuildInstallable('ready', 12, 12, 11)).toBe(true);
-    expect(isDownloadedBuildInstallable('permission-required', 12, 12, 11)).toBe(true);
-    expect(isDownloadedBuildInstallable('ready', 11, 12, 11)).toBe(false);
-    expect(isDownloadedBuildInstallable('ready', 13, null, 12)).toBe(true);
-    expect(isDownloadedBuildInstallable('ready', 11, null, 12)).toBe(false);
+    expect(isDownloadedBuildInstallable({ status: 'ready', build: 12 }, 12, 11)).toBe(true);
+    expect(isDownloadedBuildInstallable({ status: 'permission-required', build: 12 }, 12, 11)).toBe(
+      true,
+    );
+    expect(isDownloadedBuildInstallable({ status: 'ready', build: 11 }, 12, 11)).toBe(false);
+    expect(isDownloadedBuildInstallable({ status: 'ready', build: 13 }, null, 12)).toBe(true);
+    expect(isDownloadedBuildInstallable({ status: 'ready', build: 11 }, null, 12)).toBe(false);
+    expect(isDownloadedBuildInstallable({ status: 'ready', build: 11 }, 10, 11)).toBe(true);
+    expect(isDownloadedBuildInstallable({ status: 'downloading', build: 12 }, 12, 11)).toBe(false);
   });
 
   it('smooths download progress without exceeding the reported value', () => {

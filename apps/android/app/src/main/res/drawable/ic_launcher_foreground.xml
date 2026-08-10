@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="288dp"
-    android:height="288dp"
+    android:width="108dp"
+    android:height="108dp"
     android:viewportWidth="512"
     android:viewportHeight="512">
     <group
@@ -10,7 +10,6 @@
         android:translateX="50"
         android:translateY="82">
         <path
-            android:name="splash_vector_anchor"
             android:fillColor="#F5F7FA"
             android:pathData="M112,126 H184 L296,294 V126 H400 V386 H328 L216,218 V386 H112 Z" />
         <path

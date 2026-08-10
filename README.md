@@ -1,68 +1,46 @@
 # No BS Summary
 
-Paste or share a YouTube link. Get a blunt `WATCH`, `SKIM`, or `SKIP` verdict and the useful points.
+A phone-first YouTube summarizer with blunt `WATCH`, `SKIM`, or `SKIP` verdicts.
 
 [Open the app](https://no-bullshit-summary.echonad3.workers.dev) ·
-[Chrome Web Store](https://chromewebstore.google.com/detail/no-bs-summary/fnphiadakmbpimdclfohfpbbliejhnmc) ·
-[Android APK](https://github.com/echoNad3/no_bullshit_summary/releases/latest/download/app-debug.apk)
+[Chrome extension](https://chromewebstore.google.com/detail/no-bs-summary/fnphiadakmbpimdclfohfpbbliejhnmc) ·
+[Download the Android APK](https://github.com/echoNad3/no_bullshit_summary/releases/latest/download/app-debug.apk)
 
-Completed summaries are cached in Cloudflare KV, so repeating the same video does not spend another transcript or Gemini request. No captions means no summary, and transcripts are not stored.
+- Accepts pasted links and Android shares from YouTube or ReVanced.
+- Uses existing captions; videos without captions are rejected.
+- Reopens completed summaries from the shared Cloudflare cache.
+- Keeps provider keys and the shared password on the Worker.
+- Updates the Android app from Settings and verifies every APK before installation.
 
-## Use it
+## Android
 
-Android:
+Install the latest APK, open Settings, and enter the shared app password. The native app registers
+directly with Android, so it appears under **Share → More → No BS Summary**.
 
-1. Install `app-debug.apk` from the latest GitHub release.
-2. If Android asks, allow installs from your browser or file manager.
-3. Open **Settings** and enter the shared app password.
-4. In YouTube or ReVanced, use **Share → More → No BS Summary**.
-
-The Chrome-installed PWA is not reliable as an Android share target because some installations are only shortcuts. The native app in `apps/android` registers `ACTION_SEND` directly and therefore appears in the system share sheet.
-
-Chrome:
-
-1. Install or load the extension.
-2. Open a YouTube video and the No BS Summary side panel.
-3. Enter the shared password in **Settings**.
-4. Select **Cut the BS**.
-
-## Change the shared password
-
-The accepted password is the Cloudflare Worker secret. In Windows PowerShell, run:
-
-```text
-npx.cmd wrangler secret put APP_PASSWORD
-```
-
-On other shells, use `npx wrangler secret put APP_PASSWORD`. Enter the same password in the app or extension Settings afterward.
+The website installed through Chrome is a PWA, not the native share target.
 
 ## Development
 
-Requires Node.js 24+.
+Requires Node.js 24.
 
-```text
+```sh
 npm install
-copy .env.example .env
-npm run build
+copy .dev.vars.example .dev.vars
+npm run dev
 npm test
+npm run typecheck
+npm run build
 ```
 
-Useful checks:
+Useful maintenance commands:
 
-```text
-npm run format:check
-npm run typecheck
-npm run check:bundles
+```sh
+npm run assets
 npm run smoke:a11y
 npm run android:sync
 ```
 
-`npm run smoke:extension` needs a local Worker on port 8787. Provider keys stay on the server. TranscriptAPI account usage is available at [TranscriptAPI billing](https://transcriptapi.com/billing).
+Change the server password with `npx.cmd wrangler secret put APP_PASSWORD` on Windows or
+`npx wrangler secret put APP_PASSWORD` on other shells. Enter the same password in app Settings.
 
-## Deployment
-
-The web app and API run on a Cloudflare Worker configured by `wrangler.jsonc`. `npm run deploy` builds and deploys them. The Chrome extension is built into `dist/extension`.
-
-`apps/android` is a Capacitor app around the production site. GitHub Actions assigns each build an increasing Android `versionCode`, signs it with the committed stable update key, validates the project, and publishes `app-debug.apk` as the latest GitHub release. See [apps/android/README.md](apps/android/README.md).
-
-MIT licensed.
+The web app and API deploy with `npm run deploy`. The extension builds to `dist/extension`.

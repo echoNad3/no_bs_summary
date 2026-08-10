@@ -19,6 +19,9 @@
       "id": "5787832cee5f4475bc64d748b574b4f0",
     },
   ],
+  "secrets": {
+    "required": ["APP_PASSWORD", "GEMINI_API_KEY", "TRANSCRIPTAPI_API_KEY"],
+  },
   "vars": {
     "GEMINI_MODEL": "gemini-3.1-flash-lite",
     "END_TO_END_TIMEOUT_MS": "15000",
@@ -26,6 +29,7 @@
   },
   "observability": {
     "enabled": true,
-    "head_sampling_rate": 1,
+    "logs": { "enabled": true, "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 0.01 },
   },
 }

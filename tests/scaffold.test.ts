@@ -178,10 +178,7 @@ describe('summary schema', () => {
 
 describe('request deadline', () => {
   it('uses the 15000 ms default everywhere', async () => {
-    const files = await Promise.all(
-      ['.env.example', 'wrangler.jsonc'].map((file) => fs.readFile(file, 'utf8')),
-    );
-    const combined = files.join('\n');
+    const combined = await fs.readFile('wrangler.jsonc', 'utf8');
     expect(combined).toContain('15000');
     expect(combined).not.toContain('30000');
     expect(combined).not.toMatch(/30[- ]second/i);

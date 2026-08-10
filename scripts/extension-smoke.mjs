@@ -570,7 +570,7 @@ async function assertLoadingRecorded(page) {
         state.busy === 'true' &&
         state.disabled === true &&
         state.submitText === 'Working…' &&
-        /^Reading captions.+ \d+s$/u.test(state.statusText),
+        state.statusText === 'Working…',
     ),
     `Loading state was not observed: ${JSON.stringify(states)}`,
   );

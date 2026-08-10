@@ -31,9 +31,10 @@
           aria-label="Open settings"
           aria-haspopup="dialog"
         >
-          <svg class="control-icon filled-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <svg class="control-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="3" />
             <path
-              d="M19.43 12.98c.04-.32.07-.65.07-.98s-.02-.66-.07-.98l2.11-1.65a.5.5 0 0 0 .12-.64l-2-3.46a.5.5 0 0 0-.6-.22l-2.49 1a7.4 7.4 0 0 0-1.69-.98l-.38-2.65A.5.5 0 0 0 14 2h-4a.5.5 0 0 0-.49.42l-.38 2.65a7.7 7.7 0 0 0-1.69.98l-2.49-1a.5.5 0 0 0-.6.22l-2 3.46a.5.5 0 0 0 .12.64l2.11 1.65a7.3 7.3 0 0 0 0 1.96l-2.11 1.65a.5.5 0 0 0-.12.64l2 3.46a.5.5 0 0 0 .6.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65A.5.5 0 0 0 10 22h4a.5.5 0 0 0 .49-.42l.38-2.65a7.7 7.7 0 0 0 1.69-.98l2.49 1a.5.5 0 0 0 .6-.22l2-3.46a.5.5 0 0 0-.12-.64zM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5z"
+              d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21h-4v-.08A1.7 1.7 0 0 0 9 19.37a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.63 15 1.7 1.7 0 0 0 3.08 14H3v-4h.08A1.7 1.7 0 0 0 4.63 9a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.63 1.7 1.7 0 0 0 10 3.08V3h4v.08A1.7 1.7 0 0 0 15 4.63a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.37 9 1.7 1.7 0 0 0 20.92 10H21v4h-.08A1.7 1.7 0 0 0 19.4 15Z"
             />
           </svg>
         </button>
@@ -148,10 +149,18 @@
                 autocomplete="current-password"
                 maxlength="200"
               />
-              <label class="visibility-toggle" for="show-password">
-                <input id="show-password" type="checkbox" />
-                Show
-              </label>
+              <button
+                id="toggle-password"
+                class="password-toggle"
+                type="button"
+                aria-label="Show password"
+                aria-pressed="false"
+              >
+                <svg class="control-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              </button>
             </div>
           </div>
 
@@ -181,6 +190,7 @@
               Checking…
             </p>
             <div id="app-update-progress" class="update-progress" hidden>
+              <span>Downloading <strong id="app-update-progress-value">0%</strong></span>
               <div
                 class="update-progress-track"
                 role="progressbar"
@@ -198,27 +208,42 @@
           </div>
 
           <div class="resource-actions">
+            <button id="install-pwa" class="resource-link" type="button" hidden>
+              Install web app
+              <svg class="resource-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 3v12M7 10l5 5 5-5M5 21h14" />
+              </svg>
+            </button>
             <a
               class="resource-link"
               href="https://transcriptapi.com/billing"
               target="_blank"
               rel="noreferrer"
-              >TranscriptAPI billing</a
-            >
+              >TranscriptAPI billing
+              <svg class="resource-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M14 5h5v5M19 5l-8 8" />
+                <path d="M18 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" /></svg
+            ></a>
             <a
               class="resource-link"
               href="https://chromewebstore.google.com/detail/no-bs-summary/fnphiadakmbpimdclfohfpbbliejhnmc"
               target="_blank"
               rel="noreferrer"
-              >Chrome extension</a
-            >
+              >Chrome extension
+              <svg class="resource-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M14 5h5v5M19 5l-8 8" />
+                <path d="M18 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" /></svg
+            ></a>
             <a
               class="resource-link"
               href="https://github.com/echoNad3/no_bullshit_summary"
               target="_blank"
               rel="noreferrer"
-              >GitHub</a
-            >
+              >GitHub
+              <svg class="resource-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M14 5h5v5M19 5l-8 8" />
+                <path d="M18 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" /></svg
+            ></a>
           </div>
 
           <button id="save-settings" class="primary-button full-width" type="button">Done</button>

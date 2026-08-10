@@ -16,6 +16,8 @@ export interface AssetsFetcherLike {
   fetch(request: Request): Promise<Response>;
 }
 
+type RuntimeEnv = WorkerBindings;
+
 export interface WorkerEnv {
   ASSETS: AssetsFetcherLike;
   SUMMARIES: KvNamespaceLike;
@@ -64,10 +66,10 @@ const defaultRateLimiter = new SlidingWindowRateLimiter();
 let cachedService: { fingerprint: string; service: SummaryService } | undefined;
 
 export default {
-  async fetch(request: Request, env: WorkerEnv): Promise<Response> {
+  async fetch(request: Request, env: RuntimeEnv): Promise<Response> {
     return handleRequest(request, env);
   },
-};
+} satisfies ExportedHandler<RuntimeEnv>;
 
 export async function handleRequest(
   request: Request,
@@ -244,13 +246,16 @@ export async function passwordMatches(
     crypto.subtle.digest('SHA-256', encoder.encode(supplied)),
     crypto.subtle.digest('SHA-256', encoder.encode(expected)),
   ]);
+  if (typeof crypto.subtle.timingSafeEqual === 'function') {
+    return crypto.subtle.timingSafeEqual(a, b);
+  }
   const left = new Uint8Array(a);
   const right = new Uint8Array(b);
-  let diff = 0;
+  let difference = 0;
   for (let index = 0; index < left.length; index += 1) {
-    diff |= left[index]! ^ right[index]!;
+    difference |= left[index]! ^ right[index]!;
   }
-  return diff === 0;
+  return difference === 0;
 }
 
 export interface DailyGenerationBudget {

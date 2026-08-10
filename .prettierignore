@@ -7,3 +7,4 @@ apps/android/app/src/main/assets/capacitor.config.json
 apps/android/app/src/main/assets/capacitor.plugins.json
 apps/android/app/src/main/assets/public/
 apps/android/capacitor-cordova-android-plugins/
+worker-configuration.d.ts

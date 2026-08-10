@@ -42,7 +42,7 @@ export interface TranscriptResult {
  * A transcript source. Implementations must:
  * - use only official, documented APIs
  * - never fall back to another provider
- * - never trigger AI-generated or asynchronous transcription jobs
+ * - never trigger automatic or asynchronous transcription jobs
  * - respect the run context so requests stop at the end-to-end deadline
  */
 export interface TranscriptProvider {

@@ -1,14 +1,21 @@
+type DownloadedUpdate = {
+  status: string;
+  build?: number;
+};
+
 export function isDownloadedBuildInstallable(
-  status: string,
-  downloadedBuild: number | undefined,
+  update: DownloadedUpdate,
   latestBuild: number | null,
   installedBuild: number | null,
 ): boolean {
-  if (!['ready', 'permission-required'].includes(status) || downloadedBuild === undefined) {
-    return false;
-  }
-  if (latestBuild !== null) return downloadedBuild === latestBuild;
-  return installedBuild !== null && downloadedBuild >= installedBuild;
+  if (update.status !== 'ready' && update.status !== 'permission-required') return false;
+
+  const downloadedBuild = update.build ?? null;
+  if (downloadedBuild === null) return false;
+  if (latestBuild !== null && downloadedBuild === latestBuild) return true;
+  if (installedBuild === null) return false;
+  if (latestBuild === null) return downloadedBuild >= installedBuild;
+  return latestBuild <= installedBuild && downloadedBuild === installedBuild;
 }
 
 export function nextDisplayedDownloadProgress(current: number, reported: number): number {

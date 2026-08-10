@@ -4,9 +4,18 @@ interface LaunchScreenPlugin {
   hide(): Promise<void>;
 }
 
+interface LegacySplashScreenPlugin {
+  hide(options?: { fadeOutDuration?: number }): Promise<void>;
+}
+
 const launchScreen = registerPlugin<LaunchScreenPlugin>('LaunchScreen');
+const legacySplashScreen = registerPlugin<LegacySplashScreenPlugin>('SplashScreen');
 
 export async function hideLaunchScreen(): Promise<void> {
   if (!Capacitor.isNativePlatform()) return;
-  await launchScreen.hide().catch(() => undefined);
+  try {
+    await launchScreen.hide();
+  } catch {
+    await legacySplashScreen.hide({ fadeOutDuration: 0 }).catch(() => undefined);
+  }
 }

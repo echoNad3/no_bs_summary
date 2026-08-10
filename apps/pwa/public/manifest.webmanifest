@@ -2,7 +2,7 @@
   "id": "/",
   "name": "No BS Summary",
   "short_name": "No BS",
-  "description": "Get the point of a captioned YouTube video without the padding.",
+  "description": "Blunt summaries of captioned YouTube videos.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

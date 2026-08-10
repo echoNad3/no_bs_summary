@@ -12,7 +12,7 @@ import {
 import { renderDetailedSummary } from '../../shared/render-summary.js';
 import { summaryClipboardText } from '../../shared/summary-actions.js';
 import { firstYouTubeUrl, youtubeThumbnailUrl } from '../../shared/youtube-input.js';
-import { isDownloadedBuildInstallable } from './app-update-logic.js';
+import { isDownloadedBuildInstallable, nextDisplayedDownloadProgress } from './app-update-logic.js';
 import { AppUpdater, type AppUpdateState } from './app-updater.js';
 import { fetchLatestApk, readCachedLatestApk, type LatestApk } from './apk-version.js';
 import { hideLaunchScreen } from './launch-screen.js';
@@ -24,6 +24,8 @@ const LAST_SUMMARY_STORAGE_KEY = 'nbs-last-summary';
 const TEXT_SIZE_STORAGE_KEY = 'nbs-text-size';
 const APK_DOWNLOAD_URL =
   'https://github.com/echoNad3/no_bullshit_summary/releases/latest/download/app-debug.apk';
+const UPDATE_CHECK_INTERVAL_MS = 5 * 60 * 1_000;
+const MIN_UPDATE_CHECK_GAP_MS = 30 * 1_000;
 
 interface RenderedSummary {
   response: SummaryResult;
@@ -31,11 +33,20 @@ interface RenderedSummary {
   url: string;
 }
 
+type AppUpdateUiState =
+  | AppUpdateState
+  | { status: 'checking' | 'unsupported'; progress: number; detail?: string; build?: number };
+
+interface InstallPromptEvent extends Event {
+  prompt(): Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
+
 const form = requiredElement<HTMLFormElement>('summary-form');
 const urlInput = requiredElement<HTMLInputElement>('url');
 const titleInput = requiredElement<HTMLInputElement>('title');
 const passwordInput = requiredElement<HTMLInputElement>('password');
-const showPasswordInput = requiredElement<HTMLInputElement>('show-password');
+const togglePasswordButton = requiredElement<HTMLButtonElement>('toggle-password');
 const settingsDialog = requiredElement<HTMLDialogElement>('settings-dialog');
 const settingsButton = requiredElement<HTMLButtonElement>('settings-button');
 const closeSettingsButton = requiredElement<HTMLButtonElement>('close-settings');
@@ -64,17 +75,26 @@ const appUpdateDetail = requiredElement<HTMLParagraphElement>('app-update-detail
 const appUpdateProgress = requiredElement<HTMLElement>('app-update-progress');
 const appUpdateProgressTrack = appUpdateProgress.querySelector<HTMLElement>('[role="progressbar"]');
 const appUpdateProgressFill = requiredElement<HTMLElement>('app-update-progress-fill');
+const appUpdateProgressValue = requiredElement<HTMLElement>('app-update-progress-value');
+const installPwaButton = requiredElement<HTMLButtonElement>('install-pwa');
 
 let activeRequest: AbortController | undefined;
 let renderedSummary: RenderedSummary | undefined;
 let copyResetTimer: number | undefined;
-let elapsedTimer: number | undefined;
-let requestStartedAt = 0;
 let lastFailure: Error | undefined;
 let latestApk: LatestApk | null = readCachedLatestApk();
 let installedBuild: number | null = null;
-let appUpdateState: AppUpdateState = { status: 'idle', progress: 0 };
+let appUpdateState: AppUpdateUiState = { status: 'checking', progress: 0 };
+let displayedDownloadProgress = 0;
 let updaterPollTimer: number | undefined;
+let progressAnimationTimer: number | undefined;
+let downloadReadyTimer: number | undefined;
+let downloadStarted = false;
+let updaterUnsupported = false;
+let lastVersionCheckAt = 0;
+let installPrompt: InstallPromptEvent | undefined;
+let serviceWorkerRegistration: ServiceWorkerRegistration | undefined;
+let lastServiceWorkerCheckAt = 0;
 
 const savedPassword = loadSavedPassword();
 passwordInput.value = savedPassword;
@@ -105,9 +125,7 @@ for (const input of [urlInput, titleInput]) {
 }
 
 urlInput.addEventListener('paste', (event) => useYouTubeUrlFromPaste(event, urlInput));
-showPasswordInput.addEventListener('change', () => {
-  passwordInput.type = showPasswordInput.checked ? 'text' : 'password';
-});
+togglePasswordButton.addEventListener('click', togglePasswordVisibility);
 copyButton.addEventListener('click', () => void copySummary());
 shareButton.addEventListener('click', () => void shareSummary());
 cancelButton.addEventListener('click', cancelFromButton);
@@ -115,6 +133,7 @@ retryButton.addEventListener('click', () => void submitSummary());
 diagnosticsButton.addEventListener('click', () => void copyDiagnostics());
 testConnectionButton.addEventListener('click', () => void testConnection());
 appUpdateAction.addEventListener('click', () => void handleAppUpdateAction());
+installPwaButton.addEventListener('click', () => void installPwa());
 
 textSizeInput.addEventListener('change', () => {
   const size = parseTextSize(textSizeInput.value);
@@ -136,6 +155,15 @@ videoThumbnail.addEventListener('error', () => {
 
 window.addEventListener('online', updateConnectivity);
 window.addEventListener('offline', updateConnectivity);
+window.addEventListener('beforeinstallprompt', (event) => {
+  event.preventDefault();
+  installPrompt = event as InstallPromptEvent;
+  installPwaButton.hidden = Capacitor.isNativePlatform();
+});
+window.addEventListener('appinstalled', () => {
+  installPrompt = undefined;
+  installPwaButton.hidden = true;
+});
 window.addEventListener('focus', () => {
   if (settingsDialog.open) void refreshAndroidUpdateInfo();
 });
@@ -167,7 +195,7 @@ async function submitSummary(): Promise<void> {
   diagnosticsButton.textContent = 'Copy diagnostics';
   clearResult();
   setBusy(true);
-  startElapsedTimer();
+  setStatus('Working…');
   savePassword(password);
 
   try {
@@ -193,7 +221,6 @@ async function submitSummary(): Promise<void> {
   } finally {
     if (activeRequest === controller) {
       activeRequest = undefined;
-      stopElapsedTimer();
       setBusy(false);
     }
   }
@@ -211,7 +238,6 @@ function cancelActiveRequest(): void {
   if (!activeRequest) return;
   activeRequest.abort();
   activeRequest = undefined;
-  stopElapsedTimer();
   setBusy(false);
 }
 
@@ -236,6 +262,22 @@ function savePassword(password: string): void {
   } catch {
     // The password remains active for this session when storage is unavailable.
   }
+}
+
+function togglePasswordVisibility(): void {
+  const visible = passwordInput.type === 'text';
+  passwordInput.type = visible ? 'password' : 'text';
+  togglePasswordButton.setAttribute('aria-pressed', String(!visible));
+  togglePasswordButton.setAttribute('aria-label', visible ? 'Show password' : 'Hide password');
+}
+
+async function installPwa(): Promise<void> {
+  if (!installPrompt) return;
+  const prompt = installPrompt;
+  installPrompt = undefined;
+  installPwaButton.hidden = true;
+  await prompt.prompt();
+  await prompt.userChoice;
 }
 
 function renderResult(
@@ -338,22 +380,6 @@ async function copyDiagnostics(): Promise<void> {
   }
 }
 
-function startElapsedTimer(): void {
-  requestStartedAt = Date.now();
-  updateElapsedStatus();
-  elapsedTimer = window.setInterval(updateElapsedStatus, 1_000);
-}
-
-function updateElapsedStatus(): void {
-  const seconds = Math.floor((Date.now() - requestStartedAt) / 1_000);
-  setStatus(`Reading captions… ${seconds}s`);
-}
-
-function stopElapsedTimer(): void {
-  if (elapsedTimer !== undefined) window.clearInterval(elapsedTimer);
-  elapsedTimer = undefined;
-}
-
 function saveLastSummary(summary: RenderedSummary | undefined): void {
   if (!summary) return;
   const saved: SavedSummary = { ...summary, savedAt: new Date().toISOString() };
@@ -414,11 +440,17 @@ function updateVideoPreview(): void {
   videoPreview.hidden = false;
 }
 
-async function refreshAndroidUpdateInfo(): Promise<void> {
+async function refreshAndroidUpdateInfo(force = false): Promise<void> {
+  const now = Date.now();
+  if (!force && now - lastVersionCheckAt < 30_000) return;
+  lastVersionCheckAt = now;
+
   const tasks: Promise<void>[] = [
-    fetchLatestApk().then((latest) => {
-      if (latest) latestApk = latest;
-    }),
+    fetchLatestApk()
+      .then((latest) => {
+        if (latest) latestApk = latest;
+      })
+      .catch(() => undefined),
   ];
   if (Capacitor.isNativePlatform()) {
     tasks.push(
@@ -435,11 +467,12 @@ async function refreshAndroidUpdateInfo(): Promise<void> {
 }
 
 async function pollNativeUpdater(): Promise<void> {
-  if (!Capacitor.isNativePlatform() || !settingsDialog.open) return;
+  if (!Capacitor.isNativePlatform() || !settingsDialog.open || updaterUnsupported) return;
   try {
-    appUpdateState = await AppUpdater.getStatus();
+    applyAppUpdateState(await AppUpdater.getStatus());
   } catch {
-    appUpdateState = { status: 'failed', progress: 0, detail: 'Updater unavailable.' };
+    updaterUnsupported = true;
+    appUpdateState = { status: 'unsupported', progress: 0 };
   }
   updateAndroidUpdateUi();
 }
@@ -447,8 +480,9 @@ async function pollNativeUpdater(): Promise<void> {
 function startUpdaterPolling(): void {
   stopUpdaterPolling();
   if (!Capacitor.isNativePlatform()) return;
+  updaterUnsupported = false;
   void pollNativeUpdater();
-  updaterPollTimer = window.setInterval(() => void pollNativeUpdater(), 250);
+  updaterPollTimer = window.setInterval(() => void pollNativeUpdater(), 150);
 }
 
 function stopUpdaterPolling(): void {
@@ -456,42 +490,109 @@ function stopUpdaterPolling(): void {
   updaterPollTimer = undefined;
 }
 
+function applyAppUpdateState(state: AppUpdateUiState): void {
+  if (state.status !== 'ready' || !downloadStarted) {
+    appUpdateState = state;
+    animateDownloadProgress(state);
+    return;
+  }
+
+  if (downloadReadyTimer !== undefined) return;
+  appUpdateState = { status: 'downloading', progress: 100, build: state.build };
+  animateDownloadProgress(appUpdateState);
+  downloadReadyTimer = window.setTimeout(() => {
+    downloadReadyTimer = undefined;
+    downloadStarted = false;
+    appUpdateState = state;
+    displayedDownloadProgress = 100;
+    updateAndroidUpdateUi();
+  }, 1_200);
+}
+
+function animateDownloadProgress(state: AppUpdateUiState): void {
+  if (progressAnimationTimer !== undefined) window.clearInterval(progressAnimationTimer);
+  progressAnimationTimer = undefined;
+  if (state.status === 'ready') {
+    displayedDownloadProgress = 100;
+    return;
+  }
+  if (state.status !== 'downloading') return;
+
+  const target = Math.min(100, Math.max(0, state.progress));
+  progressAnimationTimer = window.setInterval(() => {
+    if (displayedDownloadProgress >= target) {
+      if (progressAnimationTimer !== undefined) window.clearInterval(progressAnimationTimer);
+      progressAnimationTimer = undefined;
+      return;
+    }
+    displayedDownloadProgress = nextDisplayedDownloadProgress(displayedDownloadProgress, target);
+    updateAndroidUpdateUi();
+  }, 40);
+}
+
 async function handleAppUpdateAction(): Promise<void> {
-  if (!Capacitor.isNativePlatform()) {
-    if (latestApk) window.open(APK_DOWNLOAD_URL, '_blank', 'noopener,noreferrer');
+  const nativeUpdater = Capacitor.isNativePlatform() && appUpdateState.status !== 'unsupported';
+  if (!nativeUpdater) {
+    window.open(APK_DOWNLOAD_URL, '_blank', 'noopener,noreferrer');
     return;
   }
 
   appUpdateAction.disabled = true;
+  const installable = isDownloadedBuildInstallable(
+    appUpdateState,
+    latestApk?.build ?? null,
+    installedBuild,
+  );
+  if (installable) {
+    await installAppUpdate();
+    return;
+  }
+  await startAppUpdate();
+}
+
+async function startAppUpdate(): Promise<void> {
+  if (downloadReadyTimer !== undefined) window.clearTimeout(downloadReadyTimer);
+  downloadReadyTimer = undefined;
+  downloadStarted = true;
+  displayedDownloadProgress = 0;
+  appUpdateState = { status: 'downloading', progress: 0 };
+  updateAndroidUpdateUi();
   try {
-    const installable = isDownloadedBuildInstallable(
-      appUpdateState.status,
-      appUpdateState.build,
-      latestApk?.build ?? null,
-      installedBuild,
-    );
-    appUpdateState = installable
-      ? await AppUpdater.install()
-      : await AppUpdater.download({ url: APK_DOWNLOAD_URL });
+    applyAppUpdateState(await AppUpdater.download({ url: APK_DOWNLOAD_URL }));
   } catch {
-    appUpdateState = { status: 'failed', progress: 0, detail: 'Update failed.' };
+    appUpdateState = { status: 'failed', progress: 0, detail: 'Could not start the download.' };
+  }
+  updateAndroidUpdateUi();
+}
+
+async function installAppUpdate(): Promise<void> {
+  try {
+    appUpdateState = await AppUpdater.install();
+  } catch {
+    appUpdateState = {
+      status: 'failed',
+      progress: 100,
+      detail: 'Could not open the installer.',
+    };
   }
   updateAndroidUpdateUi();
 }
 
 function updateAndroidUpdateUi(): void {
   const native = Capacitor.isNativePlatform();
+  const nativeUpdater = native && appUpdateState.status !== 'unsupported';
   const latestBuild = latestApk?.build ?? null;
   const updateAvailable =
     native && latestBuild !== null && installedBuild !== null && latestBuild > installedBuild;
   const upToDate =
     native && latestBuild !== null && installedBuild !== null && latestBuild <= installedBuild;
-  const installable = isDownloadedBuildInstallable(
-    appUpdateState.status,
-    appUpdateState.build,
-    latestBuild,
-    installedBuild,
-  );
+  const installable = isDownloadedBuildInstallable(appUpdateState, latestBuild, installedBuild);
+  const downloadedBuild = appUpdateState.build ?? null;
+  const reinstallReady =
+    installable &&
+    downloadedBuild !== null &&
+    installedBuild !== null &&
+    downloadedBuild === installedBuild;
 
   androidBuilds.textContent = native
     ? [installedBuild && `Installed ${installedBuild}`, latestBuild && `Latest ${latestBuild}`]
@@ -501,14 +602,30 @@ function updateAndroidUpdateUi(): void {
       ? `Build ${latestBuild}`
       : '';
 
-  appUpdateProgress.hidden = appUpdateState.status !== 'downloading';
-  const progress = Math.min(100, Math.max(0, Math.round(appUpdateState.progress)));
+  appUpdateProgress.hidden = !nativeUpdater || appUpdateState.status !== 'downloading';
+  const progress = Math.min(100, Math.max(0, Math.round(displayedDownloadProgress)));
   appUpdateProgressFill.style.width = `${progress}%`;
+  appUpdateProgressValue.textContent = `${progress}%`;
   appUpdateProgressTrack?.setAttribute('aria-valuenow', String(progress));
-  appUpdateDetail.textContent = appUpdateState.detail ?? '';
+
+  if (appUpdateState.detail) {
+    appUpdateDetail.textContent = appUpdateState.detail;
+    appUpdateDetail.dataset.state = appUpdateState.status === 'failed' ? 'error' : '';
+  } else if (appUpdateState.status === 'ready' && installable) {
+    appUpdateDetail.textContent = reinstallReady
+      ? `Build ${downloadedBuild} is already installed.`
+      : `Build ${downloadedBuild} is ready to install.`;
+    appUpdateDetail.dataset.state = '';
+  } else if (appUpdateState.status === 'ready') {
+    appUpdateDetail.textContent = 'The saved download is outdated.';
+    appUpdateDetail.dataset.state = '';
+  } else {
+    appUpdateDetail.textContent = '';
+    appUpdateDetail.dataset.state = '';
+  }
 
   if (appUpdateState.status === 'downloading') {
-    androidUpdateStatus.textContent = `Downloading… ${progress}%`;
+    androidUpdateStatus.textContent = 'Downloading…';
     appUpdateAction.textContent = 'Downloading…';
     appUpdateAction.disabled = true;
   } else if (appUpdateState.status === 'installing') {
@@ -517,24 +634,26 @@ function updateAndroidUpdateUi(): void {
     appUpdateAction.disabled = true;
   } else if (installable) {
     androidUpdateStatus.textContent = updateAvailable ? 'Update ready.' : 'Ready to install.';
-    appUpdateAction.textContent = updateAvailable ? 'Install update' : 'Reinstall';
+    appUpdateAction.textContent = reinstallReady
+      ? `Reinstall build ${downloadedBuild}`
+      : `Install build ${downloadedBuild}`;
     appUpdateAction.disabled = false;
-  } else if (!native) {
+  } else if (!nativeUpdater) {
     androidUpdateStatus.textContent = latestBuild ? 'APK available.' : 'No APK published yet.';
-    appUpdateAction.textContent = 'Download Android app';
-    appUpdateAction.disabled = latestBuild === null;
+    appUpdateAction.textContent = native ? 'Download in browser' : 'Download Android app';
+    appUpdateAction.disabled = false;
   } else if (updateAvailable) {
     androidUpdateStatus.textContent = 'Update available.';
-    appUpdateAction.textContent = 'Download update';
+    appUpdateAction.textContent = `Download build ${latestBuild}`;
     appUpdateAction.disabled = false;
   } else if (upToDate) {
     androidUpdateStatus.textContent = 'Up to date.';
-    appUpdateAction.textContent = 'Reinstall';
+    appUpdateAction.textContent = `Download build ${latestBuild} again`;
     appUpdateAction.disabled = false;
   } else {
     androidUpdateStatus.textContent = 'Installed.';
     appUpdateAction.textContent = 'Download latest build';
-    appUpdateAction.disabled = latestBuild === null;
+    appUpdateAction.disabled = false;
   }
 }
 
@@ -588,6 +707,7 @@ if ('serviceWorker' in navigator) {
 async function registerServiceWorker(): Promise<void> {
   try {
     const registration = await navigator.serviceWorker.register('/sw.js');
+    serviceWorkerRegistration = registration;
     registration.waiting?.postMessage({ type: 'SKIP_WAITING' });
     registration.addEventListener('updatefound', () => {
       const installing = registration.installing;
@@ -597,9 +717,26 @@ async function registerServiceWorker(): Promise<void> {
         }
       });
     });
+    checkForWebUpdate(true);
+
+    const checkWhenVisible = () => {
+      if (document.visibilityState === 'visible') checkForWebUpdate();
+    };
+    window.addEventListener('focus', checkWhenVisible);
+    window.addEventListener('online', () => checkForWebUpdate(true));
+    document.addEventListener('visibilitychange', checkWhenVisible);
+    window.setInterval(checkWhenVisible, UPDATE_CHECK_INTERVAL_MS);
   } catch {
     // The online app still works when service worker registration is blocked.
   }
+}
+
+function checkForWebUpdate(force = false): void {
+  if (!serviceWorkerRegistration || !navigator.onLine) return;
+  const now = Date.now();
+  if (!force && now - lastServiceWorkerCheckAt < MIN_UPDATE_CHECK_GAP_MS) return;
+  lastServiceWorkerCheckAt = now;
+  void serviceWorkerRegistration.update().catch(() => undefined);
 }
 
 function openSettings(): void {

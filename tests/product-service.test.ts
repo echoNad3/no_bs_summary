@@ -1,22 +1,22 @@
-import { promises as fs } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { TranscriptCache } from '../src/cache.js';
+import { describe, expect, it, vi } from 'vitest';
 import { ProductError, SummaryService } from '../src/product/service.js';
-import { FileSummaryCache } from '../src/product/summary-cache.js';
+import type { SummarizeResponse } from '../src/product/schema.js';
+import type { SummaryCache, SummaryCacheIdentity } from '../src/product/summary-store.js';
 import type { SummaryProvider } from '../src/summary/provider.js';
 import type { TranscriptProvider } from '../src/transcript/provider.js';
+import { MemoryTranscriptStore } from '../src/transcript/store.js';
 
-let dir: string;
+class MemorySummaryCache implements SummaryCache {
+  private readonly entries = new Map<string, SummarizeResponse>();
 
-beforeEach(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), 'nbs-product-test-'));
-});
+  async read(identity: SummaryCacheIdentity): Promise<SummarizeResponse | undefined> {
+    return this.entries.get(JSON.stringify(identity));
+  }
 
-afterEach(async () => {
-  await fs.rm(dir, { recursive: true, force: true });
-});
+  async write(identity: SummaryCacheIdentity, response: SummarizeResponse): Promise<void> {
+    this.entries.set(JSON.stringify(identity), response);
+  }
+}
 
 function service(
   overrides: {
@@ -51,8 +51,8 @@ function service(
     instance: new SummaryService({
       transcriptProvider: transcript,
       summaryProvider: summary,
-      cache: new TranscriptCache(dir),
-      summaryCache: new FileSummaryCache(path.join(dir, 'summaries')),
+      cache: new MemoryTranscriptStore(),
+      summaryCache: new MemorySummaryCache(),
       summaryModel: 'gemini-3.1-flash-lite',
       summaryPromptVersion: 'summary-first-test-v1',
       timeoutMs: 15000,

@@ -28,7 +28,7 @@ const form = requiredElement<HTMLFormElement>('summary-form');
 const urlInput = requiredElement<HTMLInputElement>('url');
 const titleInput = requiredElement<HTMLInputElement>('title');
 const passwordInput = requiredElement<HTMLInputElement>('password');
-const showPasswordInput = requiredElement<HTMLInputElement>('show-password');
+const togglePasswordButton = requiredElement<HTMLButtonElement>('toggle-password');
 const submitButton = requiredElement<HTMLButtonElement>('submit');
 const copyButton = requiredElement<HTMLButtonElement>('copy-summary');
 const copyButtonLabel = copyButton.querySelector<HTMLElement>('.action-label');
@@ -58,8 +58,6 @@ let renderedSummary: RenderedSummary | undefined;
 let copyResetTimer: number | undefined;
 let refreshVersion = 0;
 let manualOverride = false;
-let elapsedTimer: number | undefined;
-let requestStartedAt = 0;
 let lastFailure: Error | undefined;
 let savedSummary: SavedSummary | undefined;
 
@@ -86,9 +84,7 @@ urlInput.addEventListener('paste', (event) => {
   useYouTubeUrlFromPaste(event, urlInput);
 });
 
-showPasswordInput.addEventListener('change', () => {
-  passwordInput.type = showPasswordInput.checked ? 'text' : 'password';
-});
+togglePasswordButton.addEventListener('click', togglePasswordVisibility);
 
 copyButton.addEventListener('click', () => {
   void copySummary();
@@ -192,7 +188,7 @@ async function submitSummary(): Promise<void> {
   diagnosticsButton.textContent = 'Copy diagnostics';
   clearResult();
   setBusy(true);
-  startElapsedTimer();
+  setStatus('Working…');
   await saveSettings({ password, textSize: parseTextSize(textSizeInput.value) });
 
   try {
@@ -226,7 +222,6 @@ async function submitSummary(): Promise<void> {
   } finally {
     if (activeRequest === controller) {
       activeRequest = undefined;
-      stopElapsedTimer();
       setBusy(false);
     }
   }
@@ -291,7 +286,6 @@ function cancelActiveRequest(): void {
   if (!activeRequest) return;
   activeRequest.abort();
   activeRequest = undefined;
-  stopElapsedTimer();
   setBusy(false);
 }
 
@@ -364,22 +358,6 @@ async function copyDiagnostics(): Promise<void> {
   }
 }
 
-function startElapsedTimer(): void {
-  requestStartedAt = Date.now();
-  updateElapsedStatus();
-  elapsedTimer = window.setInterval(updateElapsedStatus, 1_000);
-}
-
-function updateElapsedStatus(): void {
-  const seconds = Math.floor((Date.now() - requestStartedAt) / 1_000);
-  setStatus(`Reading captions… ${seconds}s`);
-}
-
-function stopElapsedTimer(): void {
-  if (elapsedTimer !== undefined) window.clearInterval(elapsedTimer);
-  elapsedTimer = undefined;
-}
-
 function restoreSummary(saved: SavedSummary): void {
   const url = detectedUrl ?? saved.url;
   const title = titleInput.value.trim() || saved.title;
@@ -406,6 +384,13 @@ function applyTextSize(size: ReturnType<typeof parseTextSize>): void {
 function setStatus(message: string, state: 'info' | 'success' | 'error' = 'info'): void {
   status.textContent = message;
   status.dataset.state = message ? state : '';
+}
+
+function togglePasswordVisibility(): void {
+  const visible = passwordInput.type === 'text';
+  passwordInput.type = visible ? 'password' : 'text';
+  togglePasswordButton.setAttribute('aria-pressed', String(!visible));
+  togglePasswordButton.setAttribute('aria-label', visible ? 'Show password' : 'Hide password');
 }
 
 function useYouTubeUrlFromPaste(event: ClipboardEvent, input: HTMLInputElement): void {

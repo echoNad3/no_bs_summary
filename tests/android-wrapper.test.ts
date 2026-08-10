@@ -73,6 +73,10 @@ describe('native Android app', () => {
       activity.indexOf('super.onCreate(savedInstanceState)'),
     );
     expect(vector).toContain('android:name="splash_vector_anchor"');
+    expect(vector).toContain('android:viewportWidth="512"');
+    expect(vector).toContain('android:scaleX="0.75"');
+    expect(vector).toContain('android:translateX="50"');
+    expect(vector).toContain('android:translateY="82"');
     expect(animated).toContain('<animated-vector');
     expect(animated).toContain('@animator/splash_logo_hold');
     expect(animator).toContain('android:duration="1"');
