@@ -31,12 +31,13 @@ describe('native Android app', () => {
   });
 
   it('validates downloaded updates before opening Android installer', async () => {
-    const [updater, build, config, key] = await Promise.all([
+    const [updater, build, wrapper, config, key] = await Promise.all([
       fs.readFile(
         'apps/android/app/src/main/java/dev/echonad3/nobssummary/AppUpdaterPlugin.java',
         'utf8',
       ),
       fs.readFile('apps/android/app/build.gradle', 'utf8'),
+      fs.readFile('apps/android/gradle/wrapper/gradle-wrapper.properties', 'utf8'),
       fs.readFile('capacitor.config.ts', 'utf8'),
       fs.stat('apps/android/app/debug-signing.p12'),
     ]);
@@ -49,6 +50,7 @@ describe('native Android app', () => {
     expect(updater).toContain('signaturesMatch(installed, archive)');
     expect(build).toContain("project.hasProperty('appBuildNumber')");
     expect(build).toContain("storeFile file('debug-signing.p12')");
+    expect(wrapper).toContain('gradle-8.14.3-all.zip');
     expect(config).toContain("path: 'apps/android'");
     expect(config).toContain('no-bullshit-summary.echonad3.workers.dev');
     expect(key.size).toBeGreaterThan(1_000);
