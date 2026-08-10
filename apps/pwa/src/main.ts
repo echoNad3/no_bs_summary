@@ -23,7 +23,7 @@ const PASSWORD_STORAGE_KEY = 'nbs-app-password';
 const LAST_SUMMARY_STORAGE_KEY = 'nbs-last-summary';
 const TEXT_SIZE_STORAGE_KEY = 'nbs-text-size';
 const APK_DOWNLOAD_URL =
-  'https://github.com/echoNad3/no_bullshit_summary/releases/latest/download/app-debug.apk';
+  'https://github.com/echoNad3/no_bs_summary/releases/latest/download/app-debug.apk';
 const UPDATE_CHECK_INTERVAL_MS = 5 * 60 * 1_000;
 const MIN_UPDATE_CHECK_GAP_MS = 30 * 1_000;
 

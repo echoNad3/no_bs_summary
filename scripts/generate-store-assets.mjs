@@ -8,7 +8,7 @@ const projectDir = process.cwd();
 const extensionDir = path.join(projectDir, 'dist', 'extension');
 const storeDir = path.join(projectDir, 'store');
 const iconPath = path.join(projectDir, 'apps', 'pwa', 'public', 'icons', 'icon-512.svg');
-const productionApiUrl = 'https://no-bullshit-summary.echonad3.workers.dev/api/summarize';
+const productionApiUrl = 'https://no-bs-summary.echonad3.workers.dev/api/summarize';
 const youtubeUrl = 'https://www.youtube.com/watch?v=storePrev01';
 const videoTitle = 'The honest guide to building useful small software';
 const userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'nbs-store-assets-'));

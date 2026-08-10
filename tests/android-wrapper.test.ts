@@ -25,7 +25,7 @@ describe('native Android app', () => {
     expect(activity).toContain('Intent.ACTION_SEND');
     expect(activity).toContain('Intent.EXTRA_TEXT');
     expect(activity).toContain('Intent.EXTRA_SUBJECT');
-    expect(activity).toContain('no-bullshit-summary.echonad3.workers.dev/share');
+    expect(activity).toContain('no-bs-summary.echonad3.workers.dev/share');
     expect(activity).toContain('appendQueryParameter("text"');
     expect(activity).toContain('getWebView().loadUrl(targetUrl)');
   });
@@ -43,7 +43,7 @@ describe('native Android app', () => {
     ]);
 
     expect(updater).toContain(
-      'github.com/echoNad3/no_bullshit_summary/releases/latest/download/app-debug.apk',
+      'github.com/echoNad3/no_bs_summary/releases/latest/download/app-debug.apk',
     );
     expect(updater).toContain('context.getPackageName().equals(archive.packageName)');
     expect(updater).toContain('downloadedBuild >= installedBuild');
@@ -52,7 +52,7 @@ describe('native Android app', () => {
     expect(build).toContain("storeFile file('debug-signing.p12')");
     expect(wrapper).toContain('gradle-8.14.3-all.zip');
     expect(config).toContain("path: 'apps/android'");
-    expect(config).toContain('no-bullshit-summary.echonad3.workers.dev');
+    expect(config).toContain('no-bs-summary.echonad3.workers.dev');
     expect(key.size).toBeGreaterThan(1_000);
   });
 

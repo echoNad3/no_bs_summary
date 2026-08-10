@@ -26,7 +26,7 @@ try {
   browser = await chromium.launch({ headless: true });
   pwaContext = await browser.newContext({ viewport: { width: 412, height: 915 } });
   await pwaContext.route(
-    'https://api.github.com/repos/echoNad3/no_bullshit_summary/releases/latest',
+    'https://api.github.com/repos/echoNad3/no_bs_summary/releases/latest',
     async (route) => {
       await route.fulfill({
         contentType: 'application/json',

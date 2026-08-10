@@ -16,7 +16,7 @@ describe('extension manifest permissions', () => {
       action: { default_title: string; default_icon: Record<string, string> };
     };
     expect(manifest.name).toBe('No BS Summary');
-    expect(manifest.version).toBe('0.5.0');
+    expect(manifest.version).toBe('0.6.0');
     expect((manifest as { minimum_chrome_version?: string }).minimum_chrome_version).toBe('114');
     expect(manifest.host_permissions).toEqual(
       expect.arrayContaining([
@@ -72,7 +72,7 @@ describe('extension controls', () => {
 
 describe('extension settings', () => {
   it('ships against the production HTTPS backend', () => {
-    expect(DEFAULT_BACKEND_URL).toBe('https://no-bullshit-summary.echonad3.workers.dev');
+    expect(DEFAULT_BACKEND_URL).toBe('https://no-bs-summary.echonad3.workers.dev');
   });
 });
 

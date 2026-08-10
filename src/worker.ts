@@ -331,9 +331,12 @@ async function readJsonBody(request: Request): Promise<unknown> {
 }
 
 async function serveAsset(request: Request, env: WorkerEnv): Promise<Response> {
-  const assetResponse = await env.ASSETS.fetch(request);
+  const requestUrl = new URL(request.url);
+  const assetUrl = new URL(requestUrl.pathname + requestUrl.search, 'https://assets.local');
+  const assetRequest = new Request(assetUrl, request);
+  const assetResponse = await env.ASSETS.fetch(assetRequest);
   const response = new Response(assetResponse.body, assetResponse);
-  const pathname = new URL(request.url).pathname;
+  const pathname = requestUrl.pathname;
   response.headers.set('X-Content-Type-Options', 'nosniff');
   response.headers.set('Referrer-Policy', 'no-referrer');
   response.headers.set('X-Frame-Options', 'DENY');

@@ -2,9 +2,9 @@
 
 A phone-first YouTube summarizer with blunt `WATCH`, `SKIM`, or `SKIP` verdicts.
 
-[Open the app](https://no-bullshit-summary.echonad3.workers.dev) ·
+[Open the app](https://no-bs-summary.echonad3.workers.dev) ·
 [Chrome extension](https://chromewebstore.google.com/detail/no-bs-summary/fnphiadakmbpimdclfohfpbbliejhnmc) ·
-[Download the Android APK](https://github.com/echoNad3/no_bullshit_summary/releases/latest/download/app-debug.apk)
+[Download the Android APK](https://github.com/echoNad3/no_bs_summary/releases/latest/download/app-debug.apk)
 
 - Accepts pasted links and Android shares from YouTube or ReVanced.
 - Uses existing captions; videos without captions are rejected.

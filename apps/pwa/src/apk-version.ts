@@ -1,5 +1,4 @@
-const LATEST_RELEASE_API =
-  'https://api.github.com/repos/echoNad3/no_bullshit_summary/releases/latest';
+const LATEST_RELEASE_API = 'https://api.github.com/repos/echoNad3/no_bs_summary/releases/latest';
 const LATEST_RELEASE_CACHE_KEY = 'nbs-latest-apk';
 
 export interface LatestApk {

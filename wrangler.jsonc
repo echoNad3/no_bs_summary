@@ -1,7 +1,7 @@
 // Set secrets with `wrangler secret put <NAME>`.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "no-bullshit-summary",
+  "name": "no-bs-summary",
   "main": "src/worker.ts",
   "preview_urls": false,
   "compatibility_date": "2026-08-08",

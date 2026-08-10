@@ -5,7 +5,7 @@
  */
 
 // The deployed backend. Self-hosted builds replace this value before building.
-export const DEFAULT_BACKEND_URL = 'https://no-bullshit-summary.echonad3.workers.dev';
+export const DEFAULT_BACKEND_URL = 'https://no-bs-summary.echonad3.workers.dev';
 
 const STORAGE_KEY = 'nbs-settings';
 const LAST_SUMMARY_KEY = 'nbs-last-summary';

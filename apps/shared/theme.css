@@ -21,21 +21,21 @@
   --color-text: #f5f7fa;
   --color-text-muted: #b4bcc8;
   --color-text-subtle: #949eac;
-  --color-border: rgb(255 255 255 / 7%);
-  --color-border-strong: rgb(255 255 255 / 14%);
+  --color-border: #2d333d;
+  --color-border-strong: #46505f;
   --color-accent: #ff8a61;
   --color-accent-strong: #ff7448;
   --color-on-accent: #1a0d08;
   --color-accent-soft: rgb(255 138 97 / 13%);
-  --color-accent-glow: rgb(255 122 80 / 8%);
-  --color-focus-ring: rgb(245 247 250 / 90%);
+  --color-accent-glow: rgb(255 122 80 / 16%);
+  --color-focus-ring: rgb(255 138 97 / 28%);
   --color-error: #ff9b8e;
   --color-watch: #17613f;
   --color-skim: #74500c;
   --color-skip: #87342d;
   --color-on-verdict: #ffffff;
-  --shadow-panel: 0 8px 20px rgb(0 0 0 / 18%);
-  --shadow-dialog: 0 16px 32px rgb(0 0 0 / 42%);
+  --shadow-panel: 0 16px 48px rgb(0 0 0 / 24%);
+  --shadow-dialog: 0 24px 64px rgb(0 0 0 / 48%);
 
   --radius: 16px;
   --radius-card: 14px;

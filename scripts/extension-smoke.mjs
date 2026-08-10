@@ -9,8 +9,8 @@ const extensionDir = path.resolve(projectDir, 'dist/extension');
 const resultsDir = path.resolve(projectDir, 'results');
 const youtubeUrl = 'https://www.youtube.com/watch?v=EwMSGdE2bOQ';
 const secondYoutubeUrl = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
-const productionApiUrl = 'https://no-bullshit-summary.echonad3.workers.dev/api/summarize';
-const productionStatusUrl = 'https://no-bullshit-summary.echonad3.workers.dev/api/status';
+const productionApiUrl = 'https://no-bs-summary.echonad3.workers.dev/api/summarize';
+const productionStatusUrl = 'https://no-bs-summary.echonad3.workers.dev/api/status';
 const localApiUrl = 'http://127.0.0.1:8787/api/summarize';
 const summaryFixture = {
   verdict: 'SKIM',
@@ -101,7 +101,7 @@ try {
   });
 
   await context.route(
-    'https://api.github.com/repos/echoNad3/no_bullshit_summary/releases/latest',
+    'https://api.github.com/repos/echoNad3/no_bs_summary/releases/latest',
     async (route) => {
       await route.fulfill({
         contentType: 'application/json',
@@ -460,6 +460,10 @@ try {
   await desktopPage.goto('http://127.0.0.1:8787/');
   await desktopPage.locator('h1').waitFor({ state: 'visible' });
   await assertNoHorizontalOverflow(desktopPage);
+  const desktopShellWidth = await desktopPage
+    .locator('.app-shell')
+    .evaluate((element) => element.getBoundingClientRect().width);
+  assert.ok(desktopShellWidth >= 700 && desktopShellWidth <= 740, `${desktopShellWidth}`);
   report.checks.desktopPwaViewport = true;
 
   await pwaPage.evaluate(() => navigator.serviceWorker.ready);

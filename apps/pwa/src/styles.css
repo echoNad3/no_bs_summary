@@ -2,6 +2,7 @@
 @import '../../shared/app.css';
 
 .app-shell {
+  width: min(100%, 736px);
   padding: calc(22px + env(safe-area-inset-top)) 14px calc(20px + env(safe-area-inset-bottom));
 }
 

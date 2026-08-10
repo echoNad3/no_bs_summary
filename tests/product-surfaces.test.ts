@@ -50,12 +50,15 @@ describe('local MVP manifests', () => {
     expect(theme).toContain('color-scheme: dark');
     expect(theme).toContain('--color-bg: #0d0f12');
     expect(theme).toContain('--color-text: #f5f7fa');
-    expect(theme).toContain('--color-border:');
+    expect(theme).toContain('--color-border: #2d333d');
+    expect(theme).toContain('--color-border-strong: #46505f');
+    expect(theme).toContain('--color-accent-glow: rgb(255 122 80 / 16%)');
     expect(theme).toContain('--space-6: 24px');
     expect(theme).toContain('--tap: 48px');
     expect(sharedCss).toContain('width: min(100%, 460px)');
     expect(sharedCss).toContain('border-radius: var(--radius-card)');
     expect(pwaCss).toContain("@import '../../shared/theme.css'");
+    expect(pwaCss).toContain('width: min(100%, 736px)');
     expect(extensionCss).toContain("@import '../../shared/theme.css'");
     expect(`${pwaCss}\n${extensionCss}`).not.toMatch(/#(?:fffdf8|f1eee7|161616)\b/iu);
 
@@ -73,7 +76,7 @@ describe('local MVP manifests', () => {
     expect(manifest).toMatchObject({
       manifest_version: 3,
       name: 'No BS Summary',
-      version: '0.5.0',
+      version: '0.6.0',
       minimum_chrome_version: '114',
       permissions: ['sidePanel', 'storage'],
       background: { service_worker: 'background.js', type: 'module' },
@@ -81,7 +84,7 @@ describe('local MVP manifests', () => {
     });
     expect(manifest.host_permissions).toEqual(
       expect.arrayContaining([
-        'https://no-bullshit-summary.echonad3.workers.dev/*',
+        'https://no-bs-summary.echonad3.workers.dev/*',
         'https://youtube.com/*',
         'https://www.youtube.com/*',
         'https://m.youtube.com/*',
@@ -141,7 +144,7 @@ describe('local MVP manifests', () => {
 
   it('precaches the built JS and CSS needed for a first offline launch', async () => {
     const worker = await fs.readFile('apps/pwa/public/sw.js', 'utf8');
-    expect(worker).toContain("const CACHE = 'nbs-shell-v8'");
+    expect(worker).toContain("const CACHE = 'nbs-shell-v9'");
     expect(worker).toContain("event.data?.type === 'SKIP_WAITING'");
     expect(worker).toContain('/\\.(?:css|js)$/u');
     expect(worker).toContain("'/icons/icon-192.svg'");
@@ -164,6 +167,7 @@ describe('local MVP manifests', () => {
       expect(html).toContain('id="video-thumbnail"');
       expect(html).toContain('class="control-icon"');
       expect(html).toContain('id="settings-button"');
+      expect(html).toContain('>GitHub repo');
       expect(html).not.toContain('id="help-button"');
       expect(html).not.toContain('id="language"');
       expect(html).not.toContain('id="reading-stats"');
@@ -181,7 +185,7 @@ describe('local MVP manifests', () => {
     expect(pwa).toContain(
       'https://chromewebstore.google.com/detail/no-bs-summary/fnphiadakmbpimdclfohfpbbliejhnmc',
     );
-    expect(pwa).toContain('https://github.com/echoNad3/no_bullshit_summary');
+    expect(pwa).toContain('https://github.com/echoNad3/no_bs_summary');
     expect(pwa).toContain('https://transcriptapi.com/billing');
     expect(extension).not.toContain('id="lock-video"');
     expect(extension).toContain('class="manual-link-field"');

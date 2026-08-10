@@ -340,10 +340,25 @@ describe('worker request handling', () => {
   });
 
   it('serves assets with security headers and a CSP on HTML', async () => {
-    const env = makeEnv();
-    const page = await handleRequest(new Request('https://app.example.workers.dev/'), env);
+    let assetRequestUrl = '';
+    const env = makeEnv({
+      ASSETS: {
+        fetch: async (request) => {
+          assetRequestUrl = request.url;
+          return new Response('<html>PWA</html>', {
+            status: 200,
+            headers: { 'content-type': 'text/html' },
+          });
+        },
+      },
+    });
+    const page = await handleRequest(
+      new Request('https://app.example.workers.dev/?source=share'),
+      env,
+    );
     expect(page.status).toBe(200);
     expect(await page.text()).toContain('PWA');
+    expect(assetRequestUrl).toBe('https://assets.local/?source=share');
     expect(page.headers.get('x-content-type-options')).toBe('nosniff');
     expect(page.headers.get('content-security-policy')).toContain("default-src 'self'");
     expect(page.headers.get('content-security-policy')).toContain(

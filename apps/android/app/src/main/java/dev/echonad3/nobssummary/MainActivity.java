@@ -12,7 +12,7 @@ import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
     private static final String SHARE_URL =
-            "https://no-bullshit-summary.echonad3.workers.dev/share";
+            "https://no-bs-summary.echonad3.workers.dev/share";
     private volatile boolean keepLaunchSplash = true;
 
     @Override

@@ -10,7 +10,7 @@ const config: CapacitorConfig = {
     backgroundColor: '#0d0f12',
   },
   server: {
-    url: 'https://no-bullshit-summary.echonad3.workers.dev/',
+    url: 'https://no-bs-summary.echonad3.workers.dev/',
     cleartext: false,
   },
 };

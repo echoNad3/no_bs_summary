@@ -31,7 +31,7 @@ public class AppUpdaterPlugin extends Plugin {
     private static final String FILE_NAME = "no-bs-summary-update.apk";
     private static final String APK_MIME = "application/vnd.android.package-archive";
     private static final String UPDATE_URL =
-            "https://github.com/echoNad3/no_bullshit_summary/releases/latest/download/app-debug.apk";
+            "https://github.com/echoNad3/no_bs_summary/releases/latest/download/app-debug.apk";
 
     @PluginMethod
     public void download(PluginCall call) {
