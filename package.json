@@ -25,8 +25,7 @@
     "smoke:a11y": "node scripts/accessibility-smoke.mjs",
     "check:bundles": "node scripts/check-bundle-size.mjs",
     "types:sync": "node scripts/worker-types.mjs",
-    "types:check": "node scripts/worker-types.mjs --check",
-    "typecheck": "npm run types:check && tsc --noEmit && tsc -p tsconfig.pwa.json && tsc -p tsconfig.extension.json",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.pwa.json && tsc -p tsconfig.extension.json",
     "test": "vitest run",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

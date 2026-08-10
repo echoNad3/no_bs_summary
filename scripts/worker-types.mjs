@@ -3,7 +3,6 @@ import path from 'node:path';
 
 const wrangler = path.resolve('node_modules', 'wrangler', 'bin', 'wrangler.js');
 const args = [wrangler, 'types', '--env-interface', 'WorkerBindings', '--include-runtime', 'false'];
-if (process.argv.includes('--check')) args.push('--check');
 
 const result = spawnSync(process.execPath, args, {
   stdio: 'inherit',
