@@ -36,7 +36,7 @@
             aria-label="How to use No BS Summary"
             aria-haspopup="dialog"
           >
-            i
+            <span class="info-glyph" aria-hidden="true">&#x24d8;</span>
           </button>
         </div>
       </header>
@@ -104,7 +104,9 @@
                   Show
                 </label>
               </div>
-              <p id="password-help" class="field-help">Saved only on this device.</p>
+              <p id="password-help" class="field-help">
+                Enter the server's shared password. Saved only on this device.
+              </p>
               <div class="settings-row">
                 <div>
                   <label for="language">Caption language</label>
@@ -148,9 +150,6 @@
       <section id="result" class="result" aria-label="Summary result" tabindex="-1" hidden>
         <div class="verdict-row">
           <span id="verdict" class="verdict"></span>
-          <span class="result-meta"
-            ><span id="meta" class="meta"></span><span id="reading-stats" class="meta"></span
-          ></span>
         </div>
         <p id="reason" class="reason"></p>
         <div id="summary" class="summary"></div>
@@ -164,9 +163,6 @@
       </section>
 
       <footer>
-        <p id="install-prompt" class="footer-prompt" hidden>
-          <button id="install-app" class="footer-action" type="button">Install app</button>
-        </p>
         <p id="update-prompt" class="footer-prompt" hidden>
           <button id="update-app" class="footer-action" type="button">Update app</button>
         </p>
@@ -186,12 +182,36 @@
           <li>Tap <strong>Cut the BS</strong>.</li>
         </ol>
         <p>Cached repeats use no new API request.</p>
+        <h3>Get the app</h3>
+        <div class="resource-actions">
+          <p id="install-prompt" class="resource-install" hidden>
+            <button id="install-app" class="footer-action" type="button">Install web app</button>
+          </p>
+          <a
+            class="secondary-link"
+            href="https://chromewebstore.google.com/detail/no-bs-summary/fnphiadakmbpimdclfohfpbbliejhnmc"
+            target="_blank"
+            rel="noreferrer"
+            >Chrome extension</a
+          >
+          <a
+            class="secondary-link"
+            href="https://github.com/echoNad3/no_bullshit_summary"
+            target="_blank"
+            rel="noreferrer"
+            >GitHub repository</a
+          >
+        </div>
         <h3>Missing from the Android share menu?</h3>
         <p>
-          Install from Chrome. A home-screen shortcut will not register in the share menu. Reinstall
-          after an update if Android still has the old settings.
+          <strong>Share &rarr; More</strong> is already the correct system share sheet. If No BS
+          Summary is absent there, Android did not register the web app as a share target.
         </p>
-        <p>In ReVanced, use <strong>Share → More</strong> to open Android's system share sheet.</p>
+        <p>
+          Use <strong>Install web app</strong> above from Chrome. A plain home-screen shortcut
+          cannot receive shares. If reinstalling still creates only a shortcut, use the native
+          Android build; it registers directly with the system share sheet.
+        </p>
         <p>
           <a href="https://transcriptapi.com/billing" rel="noreferrer">TranscriptAPI billing</a>
         </p>

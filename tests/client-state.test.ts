@@ -3,7 +3,6 @@ import {
   parseSavedSummary,
   parseTextSize,
   safeDiagnosticsText,
-  summaryReadingStats,
 } from '../apps/shared/client-state.js';
 import { ApiClientError } from '../apps/shared/api-client.js';
 import { firstYouTubeUrl, youtubeThumbnailUrl } from '../apps/shared/youtube-input.js';
@@ -33,11 +32,9 @@ describe('client quality-of-life state', () => {
     ).toBeUndefined();
   });
 
-  it('normalizes text-size preferences and calculates honest reading stats', () => {
+  it('normalizes text-size preferences', () => {
     expect(parseTextSize('large')).toBe('large');
     expect(parseTextSize('anything')).toBe('normal');
-    const stats = summaryReadingStats(Array.from({ length: 221 }, () => 'word').join(' '));
-    expect(stats).toEqual({ words: 221, minutes: 2 });
   });
 
   it('creates diagnostics without URL, password, captions, or summary content', () => {

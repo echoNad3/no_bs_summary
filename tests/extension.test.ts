@@ -16,7 +16,7 @@ describe('extension manifest permissions', () => {
       action: { default_title: string; default_icon: Record<string, string> };
     };
     expect(manifest.name).toBe('No BS Summary');
-    expect(manifest.version).toBe('0.3.1');
+    expect(manifest.version).toBe('0.3.2');
     expect((manifest as { minimum_chrome_version?: string }).minimum_chrome_version).toBe('114');
     expect(manifest.host_permissions).toEqual(
       expect.arrayContaining([
@@ -59,7 +59,7 @@ describe('extension controls', () => {
     expect(html.slice(settingsStart, settingsEnd)).toContain('id="password"');
     expect(html).toContain('id="copy-summary"');
     expect(html).toContain('id="show-password"');
-    expect(html).toContain('id="lock-video"');
+    expect(html).not.toContain('id="lock-video"');
     expect(html).toContain('id="help-dialog"');
     expect(html).toContain('id="settings-button"');
     expect(html).toContain('Sends the link, title, language, and password');

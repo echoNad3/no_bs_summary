@@ -33,11 +33,6 @@ export function parseTextSize(value: unknown): TextSize {
   return value === 'large' || value === 'extra-large' ? value : 'normal';
 }
 
-export function summaryReadingStats(summary: string): { words: number; minutes: number } {
-  const words = summary.match(/[\p{L}\p{N}]+(?:['’\-][\p{L}\p{N}]+)*/gu)?.length ?? 0;
-  return { words, minutes: Math.max(1, Math.ceil(words / 220)) };
-}
-
 export function safeDiagnosticsText(
   surface: 'PWA' | 'Chrome extension',
   error: Error & Partial<Pick<ApiClientError, 'code' | 'status' | 'retryAfterSeconds'>>,

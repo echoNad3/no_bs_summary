@@ -26,7 +26,7 @@
             aria-label="How to use No BS Summary"
             aria-haspopup="dialog"
           >
-            i
+            <span class="info-glyph" aria-hidden="true">&#x24d8;</span>
           </button>
         </div>
       </header>
@@ -38,9 +38,6 @@
             <span id="context-label" class="context-label">Current video</span>
             <strong id="detected-title" class="detected-title">No YouTube video detected</strong>
           </div>
-          <button id="lock-video" class="context-action" type="button" aria-pressed="false" hidden>
-            Lock
-          </button>
         </div>
         <input id="title" name="title" type="hidden" />
 
@@ -72,7 +69,9 @@
                 Show
               </label>
             </div>
-            <p id="password-help" class="help">Saved in Chrome.</p>
+            <p id="password-help" class="help">
+              Enter the server's shared password. Saved in Chrome.
+            </p>
 
             <label for="url">YouTube link</label>
             <input
@@ -137,9 +136,6 @@
       <section id="result" class="result" aria-label="Summary result" tabindex="-1" hidden>
         <div class="verdict-row">
           <span id="verdict" class="verdict"></span>
-          <span class="result-meta"
-            ><span id="meta" class="meta"></span><span id="reading-stats" class="meta"></span
-          ></span>
         </div>
         <p id="reason" class="reason"></p>
         <div id="summary" class="summary"></div>
@@ -161,7 +157,23 @@
           <li>Tap <strong>Cut the BS</strong>.</li>
         </ol>
         <p>Cached repeats use no new API request.</p>
-        <p><strong>Lock</strong> keeps this video selected when you change tabs.</p>
+        <h3>Links</h3>
+        <div class="resource-actions">
+          <a
+            class="resource-link"
+            href="https://chromewebstore.google.com/detail/no-bs-summary/fnphiadakmbpimdclfohfpbbliejhnmc"
+            target="_blank"
+            rel="noreferrer"
+            >Chrome Web Store</a
+          >
+          <a
+            class="resource-link"
+            href="https://github.com/echoNad3/no_bullshit_summary"
+            target="_blank"
+            rel="noreferrer"
+            >GitHub repository</a
+          >
+        </div>
         <p>
           <a href="https://transcriptapi.com/billing" target="_blank" rel="noreferrer"
             >TranscriptAPI billing</a

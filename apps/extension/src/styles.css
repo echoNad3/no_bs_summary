@@ -91,6 +91,11 @@ h2 {
   font-size: 0.85rem;
 }
 
+.info-glyph {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
 form {
   padding: 0;
 }
@@ -145,18 +150,6 @@ form {
   font-weight: 650;
 }
 
-.context-action {
-  min-height: 2.35rem;
-  border: 1px solid var(--color-border-strong);
-  border-radius: 0.55rem;
-  padding: 0.35rem 0.55rem;
-  color: var(--color-text);
-  background: var(--color-surface-raised);
-  font-size: 0.7rem;
-  font-weight: 750;
-  cursor: pointer;
-}
-
 .submit-actions {
   display: flex;
   gap: 0.5rem;
@@ -180,7 +173,8 @@ form {
   opacity: 0.65;
 }
 
-button:focus-visible {
+button:focus-visible,
+.resource-link:focus-visible {
   outline: 3px solid var(--color-accent);
   outline-offset: 3px;
 }
@@ -193,8 +187,7 @@ button:focus-visible {
 
 .data-disclosure,
 .status,
-.help,
-.meta {
+.help {
   color: var(--color-text-subtle);
   font-size: 0.7rem;
   line-height: 1.4;
@@ -268,16 +261,8 @@ button:focus-visible {
 .verdict-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 0.5rem;
   margin-bottom: 0.7rem;
-}
-
-.result-meta {
-  display: grid;
-  justify-items: end;
-  gap: 0.1rem;
-  text-align: right;
 }
 
 .verdict {
@@ -468,6 +453,32 @@ dialog p {
 
 dialog a {
   color: var(--color-accent);
+}
+
+dialog h3 {
+  margin: 1rem 0 0.5rem;
+  font-size: 0.9rem;
+}
+
+.resource-actions {
+  display: grid;
+  gap: 0.45rem;
+  margin-bottom: 0.75rem;
+}
+
+.resource-link {
+  min-height: 2.4rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 0.6rem;
+  padding: 0.5rem 0.7rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text);
+  background: var(--color-surface-raised);
+  font-size: 0.75rem;
+  font-weight: 750;
+  text-decoration: none;
 }
 
 body.has-result .panel-shell {

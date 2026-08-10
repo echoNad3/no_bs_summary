@@ -119,6 +119,14 @@ try {
   await pwaPage.locator('#close-settings').click();
   await pwaPage.locator('#help-button').click();
   assert.equal(await pwaPage.locator('#help-dialog').isVisible(), true);
+  assert.equal(
+    await pwaPage.locator('#help-dialog a[href*="github.com/echoNad3"]').isVisible(),
+    true,
+  );
+  assert.equal(
+    await pwaPage.locator('#help-dialog a[href*="chromewebstore.google.com"]').isVisible(),
+    true,
+  );
   await pwaPage.locator('#close-help').click();
   await assertNoHorizontalOverflow(pwaPage);
   await pwaPage.locator('#url').fill(youtubeUrl);
@@ -137,7 +145,8 @@ try {
   assert.match(await pwaPage.evaluate(() => navigator.clipboard.readText()), /SKIM:/u);
   assert.equal(await pwaPage.locator('#copy-summary').innerText(), 'Copied');
   assert.equal(await pwaPage.locator('#open-video').getAttribute('href'), youtubeUrl);
-  assert.match(await pwaPage.locator('#reading-stats').innerText(), /^\d+ min read · \d+ words$/u);
+  assert.equal(await pwaPage.locator('#reading-stats').count(), 0);
+  assert.equal(await pwaPage.locator('#meta').count(), 0);
   await pwaPage.locator('#share-summary').click();
   assert.match(await pwaPage.evaluate(() => globalThis.__nbsSharedPayload?.text ?? ''), /SKIM:/u);
   await pwaPage.reload();
@@ -259,6 +268,14 @@ try {
   await sidePanelPage.locator('#close-settings').click();
   await sidePanelPage.locator('#help-button').click();
   assert.equal(await sidePanelPage.locator('#help-dialog').isVisible(), true);
+  assert.equal(
+    await sidePanelPage.locator('#help-dialog a[href*="github.com/echoNad3"]').isVisible(),
+    true,
+  );
+  assert.equal(
+    await sidePanelPage.locator('#help-dialog a[href*="chromewebstore.google.com"]').isVisible(),
+    true,
+  );
   await sidePanelPage.locator('#close-help').click();
   report.checks.currentYouTubeUrlDetected = true;
   report.checks.detectedTitleReplacesUrl = true;
@@ -302,7 +319,7 @@ try {
   report.checks.loadingState = true;
   report.checks.summarySubmission = true;
   report.checks.cachedPyroLiveResult = true;
-  report.checks.verdictReasonSummaryAndTiming = true;
+  report.checks.verdictReasonAndSummary = true;
   report.checks.crossClientSavedResult = true;
   report.checks.compactButtonAndCollapsedSuccessControls = true;
   report.checks.narrowSidePanel = true;
@@ -326,13 +343,10 @@ try {
   );
   report.checks.sameVideoNavigationKeepsResult = true;
 
-  await sidePanelPage.locator('#lock-video').click();
-  assert.equal(await sidePanelPage.locator('#lock-video').getAttribute('aria-pressed'), 'true');
-  await youtubePage.goto(secondYoutubeUrl);
-  assert.equal(await youtubePage.title(), 'Rick Astley Smoke - YouTube');
-  assert.equal(await urlInput.inputValue(), sameVideoUrl);
-  assert.equal(await result.isVisible(), true);
-  await sidePanelPage.locator('#lock-video').click();
+  const secondYoutubePage = await context.newPage();
+  await secondYoutubePage.goto(secondYoutubeUrl);
+  await secondYoutubePage.bringToFront();
+  assert.equal(await secondYoutubePage.title(), 'Rick Astley Smoke - YouTube');
   await waitForValue(urlInput, secondYoutubeUrl);
   await waitForText(detectedTitle, 'Rick Astley Smoke');
   assert.equal(await result.isHidden(), true);
@@ -343,8 +357,18 @@ try {
     false,
   );
   assert.equal(await settingsDialog.isHidden(), true);
+  await youtubePage.bringToFront();
+  await waitForValue(urlInput, sameVideoUrl);
+  assert.equal(await result.isVisible(), true);
+  assert.equal(
+    await sidePanelPage
+      .locator('body')
+      .evaluate((element) => element.classList.contains('has-result')),
+    true,
+  );
+  await secondYoutubePage.close();
   report.checks.activeYouTubeTabRefresh = true;
-  report.checks.lockedVideoPreserved = true;
+  report.checks.savedSummaryRestoredOnTabReturn = true;
 
   await sidePanelPage.locator('#settings-button').click();
   assert.equal(await settingsDialog.isVisible(), true);
@@ -519,7 +543,6 @@ async function readRenderedOutput(page) {
     verdict: (await page.locator('#verdict').innerText()).trim(),
     reason: (await page.locator('#reason').innerText()).trim(),
     summary: (await page.locator('#summary').innerText()).trim(),
-    meta: (await page.locator('#meta').innerText()).trim(),
   };
 }
 
@@ -534,7 +557,7 @@ async function assertNoHorizontalOverflow(page) {
   );
 }
 
-function assertSummaryOutput({ verdict, reason, summary, meta }) {
+function assertSummaryOutput({ verdict, reason, summary }) {
   assert.ok(['WATCH', 'SKIM', 'SKIP'].includes(verdict));
   assert.ok(reason.length >= 20);
   assert.ok((reason.match(/[\p{L}\p{N}'’-]+/gu) ?? []).length < 25);
@@ -545,7 +568,6 @@ function assertSummaryOutput({ verdict, reason, summary, meta }) {
     /^(?:the creator|the host|the speaker|the video)\s+(?:is|offers|provides|presents)\b|cohesive narrative|variety of topics|cultural commentary|varies in quality|offers? a perspective|presents? an exploration|holds? (?:the )?(?:viewer'?s )?attention|is essentially|feels like|scattered (?:collection|series)|loosely connected (?:topics|reactions|stories)/iu,
   );
   assert.doesNotMatch(summary, /\*\*/u);
-  assert.match(meta, /^cached captions · \d+\.\d+s$/u);
 }
 
 async function assertDetailedTopics(page) {

@@ -3,7 +3,6 @@ import type { SummarizeInput, SummaryResult } from '../../shared/api-client.js';
 import {
   parseTextSize,
   safeDiagnosticsText,
-  summaryReadingStats,
   type SavedSummary,
 } from '../../shared/client-state.js';
 import { renderDetailedSummary } from '../../shared/render-summary.js';
@@ -49,7 +48,6 @@ const testConnectionButton = requiredElement<HTMLButtonElement>('test-connection
 const connectionStatus = requiredElement<HTMLParagraphElement>('connection-status');
 const textSizeInput = requiredElement<HTMLSelectElement>('text-size');
 const videoThumbnail = requiredElement<HTMLImageElement>('video-thumbnail');
-const lockButton = requiredElement<HTMLButtonElement>('lock-video');
 const helpButton = requiredElement<HTMLButtonElement>('help-button');
 const helpDialog = requiredElement<HTMLDialogElement>('help-dialog');
 const closeHelpButton = requiredElement<HTMLButtonElement>('close-help');
@@ -62,10 +60,10 @@ let renderedSummary: RenderedSummary | undefined;
 let copyResetTimer: number | undefined;
 let refreshVersion = 0;
 let manualOverride = false;
-let videoLocked = false;
 let elapsedTimer: number | undefined;
 let requestStartedAt = 0;
 let lastFailure: Error | undefined;
+let savedSummary: SavedSummary | undefined;
 
 form.addEventListener('submit', (event) => {
   event.preventDefault();
@@ -74,7 +72,6 @@ form.addEventListener('submit', (event) => {
 
 urlInput.addEventListener('input', () => {
   manualOverride = true;
-  videoLocked = false;
   detectedUrl = undefined;
   detectedVideoId = undefined;
   titleInput.value = '';
@@ -83,9 +80,6 @@ urlInput.addEventListener('input', () => {
     ? 'Using pasted YouTube link'
     : 'Paste a link below';
   videoContext.dataset.detected = 'false';
-  lockButton.hidden = true;
-  lockButton.setAttribute('aria-pressed', 'false');
-  lockButton.textContent = 'Lock';
   updateThumbnail(urlInput.value);
   showControlsForNewVideo();
 });
@@ -115,14 +109,6 @@ textSizeInput.addEventListener('change', () => {
   void saveSettings({ password: passwordInput.value.trim(), textSize });
 });
 
-lockButton.addEventListener('click', () => {
-  videoLocked = !videoLocked;
-  lockButton.setAttribute('aria-pressed', String(videoLocked));
-  lockButton.textContent = videoLocked ? 'Unlock' : 'Lock';
-  contextLabel.textContent = videoLocked ? 'Locked video' : 'Current video';
-  if (!videoLocked) void fillFromActiveTab(true);
-});
-
 helpButton.addEventListener('click', () => helpDialog.showModal());
 closeHelpButton.addEventListener('click', () => helpDialog.close());
 settingsButton.addEventListener('click', openSettings);
@@ -138,13 +124,11 @@ videoThumbnail.addEventListener('error', () => {
 });
 
 chrome.tabs.onActivated.addListener(() => {
-  if (videoLocked) return;
   manualOverride = false;
   void fillFromActiveTab();
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-  if (videoLocked) return;
   if (tabId !== activeTabId || (!changeInfo.url && !changeInfo.title)) return;
   if (changeInfo.url) manualOverride = false;
   if (!manualOverride) void fillFromActiveTab();
@@ -153,19 +137,16 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 void initialize();
 
 async function initialize(): Promise<void> {
-  const [settings, savedSummary] = await Promise.all([loadSettings(), loadLastSummary()]);
+  const [settings, storedSummary] = await Promise.all([loadSettings(), loadLastSummary()]);
+  savedSummary = storedSummary;
   passwordInput.value = settings.password;
   textSizeInput.value = settings.textSize;
   applyTextSize(settings.textSize);
-  await fillFromActiveTab(true);
-  if (savedSummary && savedSummary.response.videoId === detectedVideoId) {
-    restoreSummary(savedSummary);
-  }
+  await fillFromActiveTab();
   if (!settings.password) openSettings();
 }
 
-async function fillFromActiveTab(force = false): Promise<void> {
-  if (videoLocked && !force) return;
+async function fillFromActiveTab(): Promise<void> {
   const version = ++refreshVersion;
   let tab: chrome.tabs.Tab | undefined;
   try {
@@ -191,9 +172,10 @@ async function fillFromActiveTab(force = false): Promise<void> {
   contextLabel.textContent = 'Current video';
   detectedTitle.textContent = context.title ?? 'YouTube video';
   videoContext.dataset.detected = 'true';
-  lockButton.hidden = false;
   updateThumbnail(context.url);
-  if (!changedVideo && renderedSummary) {
+  if (changedVideo && savedSummary?.response.videoId === context.videoId) {
+    restoreSummary(savedSummary);
+  } else if (!changedVideo && renderedSummary) {
     renderedSummary.url = context.url;
     renderedSummary.title = context.title;
   }
@@ -226,7 +208,8 @@ async function submitSummary(): Promise<void> {
     if (activeRequest !== controller) return;
     renderResult(response, input);
     if (renderedSummary) {
-      await saveLastSummary({ ...renderedSummary, savedAt: new Date().toISOString() });
+      savedSummary = { ...renderedSummary, savedAt: new Date().toISOString() };
+      await saveLastSummary(savedSummary);
     }
     setStatus('Summary ready.', 'success');
     if (settingsDialog.open) settingsDialog.close();
@@ -263,23 +246,13 @@ function renderResult(
   const verdict = requiredElement<HTMLSpanElement>('verdict');
   verdict.textContent = response.verdict;
   verdict.dataset.verdict = response.verdict;
-  requiredElement<HTMLSpanElement>('meta').textContent =
-    `${response.source.toLowerCase()} captions \u00b7 ${displayTime(response)}`;
   requiredElement<HTMLParagraphElement>('reason').textContent = response.reason;
   renderDetailedSummary(requiredElement<HTMLElement>('summary'), response.summary);
-  const stats = summaryReadingStats(response.summary);
-  requiredElement<HTMLElement>('reading-stats').textContent =
-    `${stats.minutes} min read · ${stats.words} words`;
   result.hidden = false;
   if (behavior.focus !== false) {
     result.focus({ preventScroll: true });
     result.scrollIntoView({ block: 'nearest' });
   }
-}
-
-function displayTime(response: SummaryResult): string {
-  const ms = response.timing.totalMs ?? response.timing.summaryMs;
-  return `${(ms / 1000).toFixed(1)}s`;
 }
 
 function setBusy(busy: boolean): void {
@@ -294,10 +267,6 @@ function clearDetectedVideo(): void {
   detectedUrl = undefined;
   detectedVideoId = undefined;
   titleInput.value = '';
-  videoLocked = false;
-  lockButton.hidden = true;
-  lockButton.setAttribute('aria-pressed', 'false');
-  lockButton.textContent = 'Lock';
   videoThumbnail.hidden = true;
   videoThumbnail.removeAttribute('src');
 
@@ -311,7 +280,6 @@ function clearDetectedVideo(): void {
   }
 
   videoContext.dataset.detected = 'false';
-  openSettings();
   showControlsForNewVideo();
 }
 

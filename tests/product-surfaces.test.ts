@@ -68,7 +68,7 @@ describe('local MVP manifests', () => {
     expect(manifest).toMatchObject({
       manifest_version: 3,
       name: 'No BS Summary',
-      version: '0.3.1',
+      version: '0.3.2',
       minimum_chrome_version: '114',
       permissions: ['sidePanel', 'storage'],
       background: { service_worker: 'background.js', type: 'module' },
@@ -136,7 +136,7 @@ describe('local MVP manifests', () => {
 
   it('precaches the built JS and CSS needed for a first offline launch', async () => {
     const worker = await fs.readFile('apps/pwa/public/sw.js', 'utf8');
-    expect(worker).toContain("const CACHE = 'nbs-shell-v4'");
+    expect(worker).toContain("const CACHE = 'nbs-shell-v5'");
     expect(worker).toContain("event.data?.type === 'SKIP_WAITING'");
     expect(worker).toContain('/\\.(?:css|js)$/u');
     expect(worker).toContain("'/icons/icon-192.svg'");
@@ -157,9 +157,22 @@ describe('local MVP manifests', () => {
       expect(html).toContain('id="test-connection"');
       expect(html).toContain('id="text-size"');
       expect(html).toContain('id="video-thumbnail"');
-      expect(html).toContain('id="reading-stats"');
+      expect(html).not.toContain('id="reading-stats"');
+      expect(html).not.toContain('id="meta"');
     }
     expect(pwa).toContain('id="share-summary"');
-    expect(extension).toContain('id="lock-video"');
+    expect(pwa).toContain('id="install-app"');
+    expect(pwa.indexOf('id="install-app"')).toBeGreaterThan(pwa.indexOf('id="help-dialog"'));
+    expect(pwa).toContain(
+      'https://chromewebstore.google.com/detail/no-bs-summary/fnphiadakmbpimdclfohfpbbliejhnmc',
+    );
+    expect(pwa).toContain('https://github.com/echoNad3/no_bullshit_summary');
+    expect(pwa).toContain('&#x24d8;');
+    expect(pwa).toContain('Share &rarr; More');
+    expect(extension).not.toContain('id="lock-video"');
+    expect(extension).toContain('&#x24d8;');
+    expect(extension).toContain(
+      'https://chromewebstore.google.com/detail/no-bs-summary/fnphiadakmbpimdclfohfpbbliejhnmc',
+    );
   });
 });

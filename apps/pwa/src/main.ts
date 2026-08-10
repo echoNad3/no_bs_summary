@@ -4,7 +4,6 @@ import {
   parseSavedSummary,
   parseTextSize,
   safeDiagnosticsText,
-  summaryReadingStats,
   type SavedSummary,
   type TextSize,
 } from '../../shared/client-state.js';
@@ -270,13 +269,8 @@ function renderResult(
   const verdict = requiredElement<HTMLSpanElement>('verdict');
   verdict.textContent = response.verdict;
   verdict.dataset.verdict = response.verdict;
-  requiredElement<HTMLSpanElement>('meta').textContent =
-    `${response.source.toLowerCase()} captions \u00b7 ${displayTime(response)}`;
   requiredElement<HTMLParagraphElement>('reason').textContent = response.reason;
   renderDetailedSummary(requiredElement<HTMLElement>('summary'), response.summary);
-  const stats = summaryReadingStats(response.summary);
-  requiredElement<HTMLElement>('reading-stats').textContent =
-    `${stats.minutes} min read · ${stats.words} words`;
   openVideoLink.href = input.url;
   openVideoLink.target = '_blank';
   result.hidden = false;
@@ -459,11 +453,6 @@ function updateConnectivity(): void {
   } else if (status.dataset.code === 'offline') {
     setStatus('Back online.');
   }
-}
-
-function displayTime(response: SummaryResult): string {
-  const ms = response.timing.totalMs ?? response.timing.summaryMs;
-  return `${(ms / 1000).toFixed(1)}s`;
 }
 
 function setBusy(busy: boolean): void {

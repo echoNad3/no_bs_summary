@@ -2,7 +2,8 @@
 
 Paste a YouTube link. Get the point.
 
-[Open the app](https://no-bullshit-summary.echonad3.workers.dev)
+[Open the app](https://no-bullshit-summary.echonad3.workers.dev) ·
+[Chrome Web Store](https://chromewebstore.google.com/detail/no-bs-summary/fnphiadakmbpimdclfohfpbbliejhnmc)
 
 ## What it does
 
@@ -24,7 +25,7 @@ Android:
 3. Add the password in **Settings**.
 4. Paste a link or share a YouTube video to the app.
 
-If it is missing from ReVanced's share menu, choose **Share → More**. Make sure Chrome installed the app; a home-screen shortcut is not enough.
+**Share → More** is the correct system share sheet. If No BS Summary is absent there, Android did not register the PWA as a share target. Chrome must install it as a WebAPK; a plain home-screen shortcut is not enough. The native wrapper in `apps/android` is the reliable fallback because it registers an Android `ACTION_SEND` handler directly.
 
 Chrome:
 
@@ -33,6 +34,16 @@ Chrome:
 3. Open the side panel.
 4. Add the password in **Settings**.
 5. Click **Cut the BS**.
+
+## Change the shared password
+
+The app does not contain a default password. The accepted password is the Cloudflare Worker secret. From this project directory, change it with:
+
+```text
+npx wrangler secret put APP_PASSWORD
+```
+
+Enter the new password when prompted, then put the same value in **Settings** in the PWA and extension. The Settings field changes only the copy saved on that device; it does not change the server secret.
 
 ## Stack
 
@@ -75,5 +86,10 @@ npm run smoke:a11y
 2. Set `GEMINI_API_KEY`, `TRANSCRIPTAPI_API_KEY`, and `APP_PASSWORD` with `wrangler secret put`.
 3. Run `npm run deploy`.
 4. Set the deployed URL in `apps/extension/src/settings.ts` and rebuild the extension.
+
+## Android wrapper
+
+`apps/android` contains a Trusted Web Activity wrapper with a native `text/plain` share target. See
+`apps/android/README.md` for local debug builds and the release-signing requirements.
 
 MIT licensed.

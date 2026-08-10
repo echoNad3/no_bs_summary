@@ -1,0 +1,57 @@
+{
+  "packageId": "dev.echonad3.nobssummary",
+  "host": "no-bullshit-summary.echonad3.workers.dev",
+  "name": "No BS Summary",
+  "launcherName": "No BS",
+  "display": "standalone",
+  "themeColor": "#0D0F12",
+  "themeColorDark": "#000000",
+  "navigationColor": "#000000",
+  "navigationColorDark": "#000000",
+  "navigationDividerColor": "#000000",
+  "navigationDividerColorDark": "#000000",
+  "backgroundColor": "#0D0F12",
+  "enableNotifications": false,
+  "startUrl": "/",
+  "iconUrl": "https://no-bullshit-summary.echonad3.workers.dev/icons/icon-512.png",
+  "maskableIconUrl": "https://no-bullshit-summary.echonad3.workers.dev/icons/icon-512-maskable.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "android.keystore",
+    "alias": "no_bs_summary"
+  },
+  "appVersionName": "0.3.2",
+  "appVersionCode": 1,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://no-bullshit-summary.echonad3.workers.dev/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://no-bullshit-summary.echonad3.workers.dev/",
+  "minSdkVersion": 21,
+  "shareTarget": {
+    "action": "https://no-bullshit-summary.echonad3.workers.dev/share",
+    "method": "GET",
+    "enctype": "application/x-www-form-urlencoded",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
+  "orientation": "default",
+  "fingerprints": [],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "protocolHandlers": [],
+  "fileHandlers": [],
+  "launchHandlerClientMode": "",
+  "displayOverride": [],
+  "appVersion": "0.3.2"
+}
