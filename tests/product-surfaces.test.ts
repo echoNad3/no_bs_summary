@@ -68,7 +68,7 @@ describe('local MVP manifests', () => {
     expect(manifest).toMatchObject({
       manifest_version: 3,
       name: 'No BS Summary',
-      version: '0.3.2',
+      version: '0.4.0',
       minimum_chrome_version: '114',
       permissions: ['sidePanel', 'storage'],
       background: { service_worker: 'background.js', type: 'module' },
@@ -88,13 +88,13 @@ describe('local MVP manifests', () => {
     expect(manifestText).not.toMatch(/TRANSCRIPTAPI_API_KEY|GEMINI_API_KEY/u);
   });
 
-  it('ships the privacy policy and links it from the hosted app', async () => {
+  it('ships the required privacy policy without adding it to the primary UI', async () => {
     const [privacy, pwaHtml] = await Promise.all([
       fs.readFile('apps/pwa/public/privacy.html', 'utf8'),
       fs.readFile('apps/pwa/index.html', 'utf8'),
     ]);
 
-    expect(pwaHtml).toContain('href="/privacy"');
+    expect(pwaHtml).not.toContain('href="/privacy"');
     expect(privacy).toMatch(/Chrome\s+Web Store User Data Policy/u);
     expect(privacy).toContain('The URL and title of the active YouTube video.');
     expect(privacy).toContain('shared app password');
@@ -136,41 +136,49 @@ describe('local MVP manifests', () => {
 
   it('precaches the built JS and CSS needed for a first offline launch', async () => {
     const worker = await fs.readFile('apps/pwa/public/sw.js', 'utf8');
-    expect(worker).toContain("const CACHE = 'nbs-shell-v5'");
+    expect(worker).toContain("const CACHE = 'nbs-shell-v7'");
     expect(worker).toContain("event.data?.type === 'SKIP_WAITING'");
     expect(worker).toContain('/\\.(?:css|js)$/u');
     expect(worker).toContain("'/icons/icon-192.svg'");
     expect(worker).toContain('precacheAppShell');
   });
 
-  it('ships the approved recovery, readability, preview, and help controls', async () => {
+  it('keeps secondary controls in Settings and removes explanatory clutter', async () => {
     const [pwa, extension] = await Promise.all([
       fs.readFile('apps/pwa/index.html', 'utf8'),
       fs.readFile('apps/extension/sidepanel.html', 'utf8'),
     ]);
 
     for (const html of [pwa, extension]) {
-      expect(html).toContain('id="help-button"');
       expect(html).toContain('id="cancel-request"');
       expect(html).toContain('id="retry-request"');
       expect(html).toContain('id="copy-diagnostics"');
       expect(html).toContain('id="test-connection"');
+      expect(html).toContain('id="save-settings"');
       expect(html).toContain('id="text-size"');
       expect(html).toContain('id="video-thumbnail"');
+      expect(html).toContain('class="control-icon"');
+      expect(html).toContain('id="settings-button"');
+      expect(html).not.toContain('id="help-button"');
+      expect(html).not.toContain('id="language"');
       expect(html).not.toContain('id="reading-stats"');
       expect(html).not.toContain('id="meta"');
+      expect(html).not.toContain('&#x24d8;');
+      expect(html).not.toMatch(/YouTube, without the padding|Cached summaries reopen instantly/iu);
+      expect(html).not.toMatch(
+        /These preferences stay on this device|Must match the server password/iu,
+      );
     }
     expect(pwa).toContain('id="share-summary"');
-    expect(pwa).toContain('id="install-app"');
-    expect(pwa.indexOf('id="install-app"')).toBeGreaterThan(pwa.indexOf('id="help-dialog"'));
+    expect(pwa).toContain('id="app-update-action"');
+    expect(pwa).toContain('id="android-update-status"');
     expect(pwa).toContain(
       'https://chromewebstore.google.com/detail/no-bs-summary/fnphiadakmbpimdclfohfpbbliejhnmc',
     );
     expect(pwa).toContain('https://github.com/echoNad3/no_bullshit_summary');
-    expect(pwa).toContain('&#x24d8;');
-    expect(pwa).toContain('Share &rarr; More');
+    expect(pwa).toContain('https://transcriptapi.com/billing');
     expect(extension).not.toContain('id="lock-video"');
-    expect(extension).toContain('&#x24d8;');
+    expect(extension).toContain('class="manual-link-field"');
     expect(extension).toContain(
       'https://chromewebstore.google.com/detail/no-bs-summary/fnphiadakmbpimdclfohfpbbliejhnmc',
     );

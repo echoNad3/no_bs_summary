@@ -4,7 +4,6 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="dark" />
-    <meta name="theme-color" content="#0d0f12" />
     <style>
       :root {
         color-scheme: dark;
@@ -14,65 +13,36 @@
     <title>No BS Summary</title>
   </head>
   <body>
-    <main class="panel-shell">
-      <header>
-        <h1>No BS Summary</h1>
-        <div class="header-actions">
-          <button id="settings-button" class="header-button" type="button">Settings</button>
-          <button
-            id="help-button"
-            class="icon-button"
-            type="button"
-            aria-label="How to use No BS Summary"
-            aria-haspopup="dialog"
-          >
-            <span class="info-glyph" aria-hidden="true">&#x24d8;</span>
-          </button>
+    <main class="app-shell">
+      <header class="app-header">
+        <div class="brand-lockup">
+          <img class="brand-icon" src="/icons/icon-128.png" alt="" width="36" height="36" />
+          <h1>No BS Summary</h1>
         </div>
+        <button
+          id="settings-button"
+          class="icon-button"
+          type="button"
+          aria-label="Open settings"
+          aria-haspopup="dialog"
+        >
+          <svg class="control-icon filled-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M19.43 12.98c.04-.32.07-.65.07-.98s-.02-.66-.07-.98l2.11-1.65a.5.5 0 0 0 .12-.64l-2-3.46a.5.5 0 0 0-.6-.22l-2.49 1a7.4 7.4 0 0 0-1.69-.98l-.38-2.65A.5.5 0 0 0 14 2h-4a.5.5 0 0 0-.49.42l-.38 2.65a7.7 7.7 0 0 0-1.69.98l-2.49-1a.5.5 0 0 0-.6.22l-2 3.46a.5.5 0 0 0 .12.64l2.11 1.65a7.3 7.3 0 0 0 0 1.96l-2.11 1.65a.5.5 0 0 0-.12.64l2 3.46a.5.5 0 0 0 .6.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65A.5.5 0 0 0 10 22h4a.5.5 0 0 0 .49-.42l.38-2.65a7.7 7.7 0 0 0 1.69-.98l2.49 1a.5.5 0 0 0 .6-.22l2-3.46a.5.5 0 0 0-.12-.64zM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5z"
+            />
+          </svg>
+        </button>
       </header>
 
-      <form id="summary-form" novalidate>
-        <div id="video-context" class="video-context" data-detected="false">
-          <img id="video-thumbnail" class="video-thumbnail" alt="" width="120" height="68" hidden />
-          <div class="context-copy">
-            <span id="context-label" class="context-label">Current video</span>
-            <strong id="detected-title" class="detected-title">No YouTube video detected</strong>
+      <section class="composer-card" aria-label="Summarize a video">
+        <form id="summary-form" novalidate>
+          <div id="video-context" class="video-context" data-detected="false">
+            <img id="video-thumbnail" alt="" width="160" height="90" hidden />
+            <strong id="detected-title">No YouTube video detected</strong>
+            <span id="context-label" class="sr-only">Current video</span>
           </div>
-        </div>
-        <input id="title" name="title" type="hidden" />
 
-        <dialog id="settings-dialog" aria-labelledby="settings-title">
-          <div class="dialog-heading">
-            <h2 id="settings-title">Settings</h2>
-            <button
-              id="close-settings"
-              class="icon-button"
-              type="button"
-              aria-label="Close settings"
-            >
-              ×
-            </button>
-          </div>
-          <div class="settings-fields">
-            <label for="password">App password</label>
-            <div class="password-control">
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autocomplete="current-password"
-                aria-describedby="password-help"
-                maxlength="200"
-              />
-              <label class="visibility-toggle" for="show-password">
-                <input id="show-password" type="checkbox" />
-                Show
-              </label>
-            </div>
-            <p id="password-help" class="help">
-              Enter the server's shared password. Saved in Chrome.
-            </p>
-
+          <div class="manual-link-field">
             <label for="url">YouTube link</label>
             <input
               id="url"
@@ -84,101 +54,120 @@
               autocorrect="off"
               enterkeyhint="go"
               spellcheck="false"
-              placeholder="Paste a YouTube link"
+              placeholder="https://youtu.be/…"
               required
             />
-
-            <div class="settings-row">
-              <div>
-                <label for="language">Caption language</label>
-                <input
-                  id="language"
-                  name="language"
-                  type="text"
-                  value="en"
-                  maxlength="20"
-                  autocapitalize="none"
-                  enterkeyhint="done"
-                  spellcheck="false"
-                  required
-                />
-              </div>
-              <div>
-                <label for="text-size">Text size</label>
-                <select id="text-size" name="text-size">
-                  <option value="normal">Normal</option>
-                  <option value="large">Large</option>
-                  <option value="extra-large">Extra large</option>
-                </select>
-              </div>
-            </div>
-            <button id="test-connection" class="secondary-button option-button" type="button">
-              Test connection
-            </button>
-            <p id="connection-status" class="help" role="status" aria-live="polite"></p>
           </div>
-        </dialog>
+          <input id="title" name="title" type="hidden" />
 
-        <div class="submit-actions">
-          <button id="submit" type="submit">Cut the BS</button>
-          <button id="cancel-request" class="secondary-button" type="button" hidden>Cancel</button>
-        </div>
-        <p class="data-disclosure">Sends the link, title, language, and password to the backend.</p>
-      </form>
-      <p id="status" class="status" role="status" aria-live="polite" aria-atomic="true"></p>
-      <div id="error-actions" class="error-actions" hidden>
-        <button id="retry-request" class="secondary-button" type="button">Retry</button>
-        <button id="copy-diagnostics" class="secondary-button" type="button">
-          Copy diagnostics
-        </button>
-      </div>
+          <div class="submit-actions">
+            <button id="submit" class="primary-button" type="submit">Cut the BS</button>
+            <button id="cancel-request" class="secondary-button" type="button" hidden>
+              Cancel
+            </button>
+          </div>
+        </form>
 
-      <section id="result" class="result" aria-label="Summary result" tabindex="-1" hidden>
-        <div class="verdict-row">
-          <span id="verdict" class="verdict"></span>
-        </div>
-        <p id="reason" class="reason"></p>
-        <div id="summary" class="summary"></div>
-        <div class="result-actions">
-          <button id="copy-summary" class="secondary-button" type="button">Copy summary</button>
+        <p id="status" class="status" role="status" aria-live="polite" aria-atomic="true"></p>
+        <div id="error-actions" class="error-actions" hidden>
+          <button id="retry-request" class="secondary-button" type="button">Retry</button>
+          <button id="copy-diagnostics" class="secondary-button" type="button">
+            Copy diagnostics
+          </button>
         </div>
       </section>
 
-      <dialog id="help-dialog" aria-labelledby="help-title">
-        <div class="dialog-heading">
-          <h2 id="help-title">How this works</h2>
-          <button id="close-help" class="icon-button" type="button" aria-label="Close instructions">
-            ×
+      <section id="result" class="result" aria-label="Summary result" tabindex="-1" hidden>
+        <span id="verdict" class="verdict"></span>
+        <p id="reason" class="reason"></p>
+        <div id="summary" class="summary"></div>
+        <div class="result-actions">
+          <button id="copy-summary" class="action-button" type="button" aria-label="Copy summary">
+            <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="8" y="8" width="11" height="11" rx="2" />
+              <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
+            </svg>
+            <span class="sr-only action-label">Copy summary</span>
           </button>
         </div>
-        <ol>
-          <li>Open a YouTube video.</li>
-          <li>Add the shared password in <strong>Settings</strong>.</li>
-          <li>Tap <strong>Cut the BS</strong>.</li>
-        </ol>
-        <p>Cached repeats use no new API request.</p>
-        <h3>Links</h3>
-        <div class="resource-actions">
-          <a
-            class="resource-link"
-            href="https://chromewebstore.google.com/detail/no-bs-summary/fnphiadakmbpimdclfohfpbbliejhnmc"
-            target="_blank"
-            rel="noreferrer"
-            >Chrome Web Store</a
+      </section>
+
+      <dialog id="settings-dialog" aria-labelledby="settings-title">
+        <div class="dialog-heading">
+          <h2 id="settings-title">Settings</h2>
+          <button
+            id="close-settings"
+            class="icon-button dialog-close"
+            type="button"
+            aria-label="Close settings"
           >
-          <a
-            class="resource-link"
-            href="https://github.com/echoNad3/no_bullshit_summary"
-            target="_blank"
-            rel="noreferrer"
-            >GitHub repository</a
-          >
+            <svg class="control-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M7 7l10 10M17 7 7 17" />
+            </svg>
+          </button>
         </div>
-        <p>
-          <a href="https://transcriptapi.com/billing" target="_blank" rel="noreferrer"
-            >TranscriptAPI billing</a
-          >
-        </p>
+
+        <div class="settings-fields">
+          <div class="field-group">
+            <label for="password">Password</label>
+            <div class="password-control">
+              <input
+                id="password"
+                name="password"
+                type="password"
+                autocomplete="current-password"
+                maxlength="200"
+              />
+              <label class="visibility-toggle" for="show-password">
+                <input id="show-password" type="checkbox" />
+                Show
+              </label>
+            </div>
+          </div>
+
+          <div class="field-group compact-field">
+            <label for="text-size">Text size</label>
+            <select id="text-size" name="text-size">
+              <option value="normal">Normal</option>
+              <option value="large">Large</option>
+              <option value="extra-large">Extra large</option>
+            </select>
+          </div>
+
+          <div class="settings-section">
+            <div class="section-heading">
+              <h3>Connection</h3>
+              <button id="test-connection" class="small-button" type="button">Test</button>
+            </div>
+            <p id="connection-status" class="settings-status" role="status" aria-live="polite"></p>
+          </div>
+
+          <div class="resource-actions">
+            <a
+              class="resource-link"
+              href="https://transcriptapi.com/billing"
+              target="_blank"
+              rel="noreferrer"
+              >TranscriptAPI billing</a
+            >
+            <a
+              class="resource-link"
+              href="https://chromewebstore.google.com/detail/no-bs-summary/fnphiadakmbpimdclfohfpbbliejhnmc"
+              target="_blank"
+              rel="noreferrer"
+              >Chrome Web Store</a
+            >
+            <a
+              class="resource-link"
+              href="https://github.com/echoNad3/no_bullshit_summary"
+              target="_blank"
+              rel="noreferrer"
+              >GitHub</a
+            >
+          </div>
+
+          <button id="save-settings" class="primary-button full-width" type="button">Done</button>
+        </div>
       </dialog>
     </main>
     <script type="module" src="/src/sidepanel.ts"></script>

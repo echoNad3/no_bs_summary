@@ -27,11 +27,11 @@ interface RenderedSummary {
 const form = requiredElement<HTMLFormElement>('summary-form');
 const urlInput = requiredElement<HTMLInputElement>('url');
 const titleInput = requiredElement<HTMLInputElement>('title');
-const languageInput = requiredElement<HTMLInputElement>('language');
 const passwordInput = requiredElement<HTMLInputElement>('password');
 const showPasswordInput = requiredElement<HTMLInputElement>('show-password');
 const submitButton = requiredElement<HTMLButtonElement>('submit');
 const copyButton = requiredElement<HTMLButtonElement>('copy-summary');
+const copyButtonLabel = copyButton.querySelector<HTMLElement>('.action-label');
 const status = requiredElement<HTMLParagraphElement>('status');
 const result = requiredElement<HTMLElement>('result');
 const videoContext = requiredElement<HTMLElement>('video-context');
@@ -40,6 +40,7 @@ const detectedTitle = requiredElement<HTMLElement>('detected-title');
 const settingsDialog = requiredElement<HTMLDialogElement>('settings-dialog');
 const settingsButton = requiredElement<HTMLButtonElement>('settings-button');
 const closeSettingsButton = requiredElement<HTMLButtonElement>('close-settings');
+const saveSettingsButton = requiredElement<HTMLButtonElement>('save-settings');
 const cancelButton = requiredElement<HTMLButtonElement>('cancel-request');
 const retryButton = requiredElement<HTMLButtonElement>('retry-request');
 const diagnosticsButton = requiredElement<HTMLButtonElement>('copy-diagnostics');
@@ -48,9 +49,6 @@ const testConnectionButton = requiredElement<HTMLButtonElement>('test-connection
 const connectionStatus = requiredElement<HTMLParagraphElement>('connection-status');
 const textSizeInput = requiredElement<HTMLSelectElement>('text-size');
 const videoThumbnail = requiredElement<HTMLImageElement>('video-thumbnail');
-const helpButton = requiredElement<HTMLButtonElement>('help-button');
-const helpDialog = requiredElement<HTMLDialogElement>('help-dialog');
-const closeHelpButton = requiredElement<HTMLButtonElement>('close-help');
 
 let detectedUrl: string | undefined;
 let detectedVideoId: string | undefined;
@@ -88,8 +86,6 @@ urlInput.addEventListener('paste', (event) => {
   useYouTubeUrlFromPaste(event, urlInput);
 });
 
-languageInput.addEventListener('input', showControlsForNewVideo);
-
 showPasswordInput.addEventListener('change', () => {
   passwordInput.type = showPasswordInput.checked ? 'text' : 'password';
 });
@@ -109,10 +105,9 @@ textSizeInput.addEventListener('change', () => {
   void saveSettings({ password: passwordInput.value.trim(), textSize });
 });
 
-helpButton.addEventListener('click', () => helpDialog.showModal());
-closeHelpButton.addEventListener('click', () => helpDialog.close());
 settingsButton.addEventListener('click', openSettings);
 closeSettingsButton.addEventListener('click', () => settingsDialog.close());
+saveSettingsButton.addEventListener('click', () => settingsDialog.close());
 settingsDialog.addEventListener('close', () => {
   void saveSettings({
     password: passwordInput.value.trim(),
@@ -187,7 +182,7 @@ async function submitSummary(): Promise<void> {
   const input: SummarizeInput = {
     url: urlInput.value.trim(),
     title: titleInput.value.trim() || undefined,
-    language: languageInput.value.trim(),
+    language: 'en',
   };
   const password = passwordInput.value.trim();
   const controller = new AbortController();
@@ -257,7 +252,7 @@ function renderResult(
 
 function setBusy(busy: boolean): void {
   submitButton.disabled = busy;
-  submitButton.textContent = busy ? 'Working...' : 'Cut the BS';
+  submitButton.textContent = busy ? 'Working…' : 'Cut the BS';
   cancelButton.hidden = !busy;
   form.setAttribute('aria-busy', String(busy));
 }
@@ -309,8 +304,13 @@ function cancelFromButton(): void {
 function clearResult(): void {
   renderedSummary = undefined;
   result.hidden = true;
-  copyButton.textContent = 'Copy summary';
+  setCopyButtonLabel('Copy summary');
   if (copyResetTimer !== undefined) window.clearTimeout(copyResetTimer);
+}
+
+function setCopyButtonLabel(label: string): void {
+  copyButton.setAttribute('aria-label', label);
+  if (copyButtonLabel) copyButtonLabel.textContent = label;
 }
 
 async function copySummary(): Promise<void> {
@@ -322,11 +322,11 @@ async function copySummary(): Promise<void> {
         url: renderedSummary.url,
       }),
     );
-    copyButton.textContent = 'Copied';
-    setStatus('Summary copied.', 'success');
+    setCopyButtonLabel('Copied');
+    setStatus('Copied.', 'success');
     if (copyResetTimer !== undefined) window.clearTimeout(copyResetTimer);
     copyResetTimer = window.setTimeout(() => {
-      copyButton.textContent = 'Copy summary';
+      setCopyButtonLabel('Copy summary');
     }, 2_000);
   } catch {
     setStatus('Copy failed. Select the text and copy it.', 'error');
@@ -337,12 +337,12 @@ async function testConnection(): Promise<void> {
   const password = passwordInput.value.trim();
   await saveSettings({ password, textSize: parseTextSize(textSizeInput.value) });
   testConnectionButton.disabled = true;
-  connectionStatus.textContent = 'Testing...';
+  connectionStatus.textContent = 'Testing…';
   try {
     const backend = await checkBackend(DEFAULT_BACKEND_URL, { password, timeoutMs: 8_000 });
     connectionStatus.textContent = backend.dailyGeneration
-      ? `Connected. ${backend.dailyGeneration.remaining}/${backend.dailyGeneration.limit} new summaries left today.`
-      : 'Connected.';
+      ? `Connected · ${backend.dailyGeneration.remaining}/${backend.dailyGeneration.limit} remaining`
+      : 'Connected';
   } catch (error) {
     connectionStatus.textContent =
       error instanceof ApiClientError ? error.message : 'Connection test failed.';
@@ -383,7 +383,6 @@ function stopElapsedTimer(): void {
 function restoreSummary(saved: SavedSummary): void {
   const url = detectedUrl ?? saved.url;
   const title = titleInput.value.trim() || saved.title;
-  languageInput.value = saved.response.language;
   renderResult(saved.response, { url, title, language: saved.response.language }, { focus: false });
   if (settingsDialog.open) settingsDialog.close();
   document.body.classList.add('has-result');

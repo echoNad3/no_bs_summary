@@ -11,6 +11,23 @@ const youtubeUrl = 'https://www.youtube.com/watch?v=EwMSGdE2bOQ';
 const secondYoutubeUrl = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
 const productionApiUrl = 'https://no-bullshit-summary.echonad3.workers.dev/api/summarize';
 const productionStatusUrl = 'https://no-bullshit-summary.echonad3.workers.dev/api/status';
+const localApiUrl = 'http://127.0.0.1:8787/api/summarize';
+const summaryFixture = {
+  verdict: 'SKIM',
+  reason: 'The useful updates are specific, but the commentary circles around them.',
+  summary: [
+    "- **Wizard Detective:** The segment explains the project's mystery structure, the clues already shown, and why its restrained presentation is more interesting than a conventional lore dump.",
+    "- **Kane Pixels:** The discussion separates the creator's newer work from the familiar Backrooms material and points out the production choices that make the environments feel unusually physical.",
+    '- **Backrooms projects:** Several adaptations are compared by how well they preserve uncertainty instead of replacing it with an oversized monster catalogue and repetitive chase scenes.',
+    '- **Release updates:** The concrete announcements, delays, and production notes are collected in one place so the useful facts can be skimmed without sitting through every tangent.',
+    '- **What to skip:** Repeated reactions, sponsor-like detours, and speculative loops add runtime without changing the core assessment of any project mentioned in the episode.',
+  ].join('\n'),
+  videoId: 'EwMSGdE2bOQ',
+  language: 'en',
+  source: 'CACHED',
+  timing: { transcriptMs: 8, summaryMs: 14, totalMs: 22 },
+  retries: { transcript: 0, summary: 0 },
+};
 const userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'nbs-extension-smoke-'));
 const startedAt = new Date().toISOString();
 
@@ -83,6 +100,29 @@ try {
     });
   });
 
+  await context.route(
+    'https://api.github.com/repos/echoNad3/no_bullshit_summary/releases/latest',
+    async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        headers: { 'access-control-allow-origin': '*' },
+        body: JSON.stringify({
+          tag_name: 'android-v80',
+          name: 'Android APK build 80',
+          published_at: '2026-08-10T00:00:00.000Z',
+        }),
+      });
+    },
+  );
+
+  await context.route(localApiUrl, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(summaryFixture),
+    });
+  });
+
   let worker = context.serviceWorkers()[0];
   if (!worker) worker = await context.waitForEvent('serviceworker', { timeout: 10_000 });
   const extensionId = new URL(worker.url()).host;
@@ -115,19 +155,18 @@ try {
   await pwaPage.locator('#text-size').selectOption('large');
   assert.equal(await pwaPage.locator('html').getAttribute('data-text-size'), 'large');
   await pwaPage.locator('#test-connection').click();
-  await waitForText(pwaPage.locator('#connection-status'), 'Connected.');
+  await waitForText(pwaPage.locator('#connection-status'), 'Connected · 300/300 remaining');
+  assert.equal(
+    await pwaPage.locator('#settings-dialog a[href*="transcriptapi.com/billing"]').isVisible(),
+    true,
+  );
+  assert.equal(
+    await pwaPage.locator('#settings-dialog a[href*="github.com/echoNad3"]').isVisible(),
+    true,
+  );
+  await waitForText(pwaPage.locator('#android-update-status'), 'APK available.');
   await pwaPage.locator('#close-settings').click();
-  await pwaPage.locator('#help-button').click();
-  assert.equal(await pwaPage.locator('#help-dialog').isVisible(), true);
-  assert.equal(
-    await pwaPage.locator('#help-dialog a[href*="github.com/echoNad3"]').isVisible(),
-    true,
-  );
-  assert.equal(
-    await pwaPage.locator('#help-dialog a[href*="chromewebstore.google.com"]').isVisible(),
-    true,
-  );
-  await pwaPage.locator('#close-help').click();
+  await assertHeaderControlsAligned(pwaPage);
   await assertNoHorizontalOverflow(pwaPage);
   await pwaPage.locator('#url').fill(youtubeUrl);
   await pwaPage.locator('#video-thumbnail').waitFor({ state: 'visible' });
@@ -255,30 +294,28 @@ try {
   assert.equal(await titleInput.inputValue(), 'PyroLIVE Smoke');
   assert.equal(await detectedTitle.innerText(), 'PyroLIVE Smoke');
   assert.equal(await settingsDialog.isVisible(), true);
-  assert.equal(await urlInput.isVisible(), true);
+  assert.equal(await urlInput.isHidden(), true);
   await sidePanelPage.locator('#password').fill('test-password');
   await sidePanelPage.locator('#video-thumbnail').waitFor({ state: 'visible' });
   await sidePanelPage.locator('#text-size').selectOption('extra-large');
   assert.equal(await sidePanelPage.locator('html').getAttribute('data-text-size'), 'extra-large');
   await sidePanelPage.locator('#test-connection').click();
-  await waitForText(
-    sidePanelPage.locator('#connection-status'),
-    'Connected. 296/300 new summaries left today.',
+  await waitForText(sidePanelPage.locator('#connection-status'), 'Connected · 296/300 remaining');
+  assert.equal(
+    await sidePanelPage
+      .locator('#settings-dialog a[href*="transcriptapi.com/billing"]')
+      .isVisible(),
+    true,
+  );
+  assert.equal(
+    await sidePanelPage.locator('#settings-dialog a[href*="github.com/echoNad3"]').isVisible(),
+    true,
   );
   await sidePanelPage.locator('#close-settings').click();
-  await sidePanelPage.locator('#help-button').click();
-  assert.equal(await sidePanelPage.locator('#help-dialog').isVisible(), true);
-  assert.equal(
-    await sidePanelPage.locator('#help-dialog a[href*="github.com/echoNad3"]').isVisible(),
-    true,
-  );
-  assert.equal(
-    await sidePanelPage.locator('#help-dialog a[href*="chromewebstore.google.com"]').isVisible(),
-    true,
-  );
-  await sidePanelPage.locator('#close-help').click();
+  await assertHeaderControlsAligned(sidePanelPage);
   report.checks.currentYouTubeUrlDetected = true;
   report.checks.detectedTitleReplacesUrl = true;
+  report.checks.alignedHeaderIcons = true;
 
   report.checks.productionBackendConfigured = true;
 
@@ -311,7 +348,7 @@ try {
       .locator('#summary-form')
       .evaluate((element) => element.getBoundingClientRect().width),
   ]);
-  assert.ok(buttonWidth < formWidth / 2);
+  assert.ok(buttonWidth > formWidth * 0.8);
   await sidePanelPage.setViewportSize({ width: 320, height: 800 });
   await assertNoHorizontalOverflow(sidePanelPage);
   assert.deepEqual(extensionPayload, pwaPayload);
@@ -321,7 +358,7 @@ try {
   report.checks.cachedPyroLiveResult = true;
   report.checks.verdictReasonAndSummary = true;
   report.checks.crossClientSavedResult = true;
-  report.checks.compactButtonAndCollapsedSuccessControls = true;
+  report.checks.stableComposerLayout = true;
   report.checks.narrowSidePanel = true;
   report.checks.extensionInstructionsTextSizeAndConnection = true;
   report.output = { pwa: pwaOutput, extension: extensionOutput };
@@ -370,10 +407,11 @@ try {
   report.checks.activeYouTubeTabRefresh = true;
   report.checks.savedSummaryRestoredOnTabReturn = true;
 
-  await sidePanelPage.locator('#settings-button').click();
-  assert.equal(await settingsDialog.isVisible(), true);
+  await youtubePage.goto('https://www.youtube.com/');
+  await youtubePage.bringToFront();
+  await waitForText(detectedTitle, 'No YouTube video detected');
+  await urlInput.waitFor({ state: 'visible' });
   await urlInput.fill('https://example.com');
-  await sidePanelPage.locator('#close-settings').click();
   await submit.click();
   await waitForText(status, 'Not a YouTube link: "https://example.com"');
   assert.equal(await sidePanelPage.locator('#error-actions').isVisible(), true);
@@ -492,7 +530,7 @@ async function waitForText(locator, expected, timeoutMs = 5_000) {
   assert.equal(await locator.innerText(), expected);
 }
 
-async function waitForSummaryResponse(page, apiUrl = 'http://127.0.0.1:8787/api/summarize') {
+async function waitForSummaryResponse(page, apiUrl = localApiUrl) {
   return page.waitForResponse(
     (response) => response.url() === apiUrl && response.status() === 200,
     { timeout: 20_000 },
@@ -531,7 +569,7 @@ async function assertLoadingRecorded(page) {
       (state) =>
         state.busy === 'true' &&
         state.disabled === true &&
-        state.submitText === 'Working...' &&
+        state.submitText === 'Working…' &&
         /^Reading captions.+ \d+s$/u.test(state.statusText),
     ),
     `Loading state was not observed: ${JSON.stringify(states)}`,
@@ -547,14 +585,62 @@ async function readRenderedOutput(page) {
 }
 
 async function assertNoHorizontalOverflow(page) {
-  const widths = await page.evaluate(() => ({
-    viewport: document.documentElement.clientWidth,
-    content: document.documentElement.scrollWidth,
-  }));
+  const widths = await page.evaluate(() => {
+    const viewport = document.documentElement.clientWidth;
+    return {
+      viewport,
+      content: document.documentElement.scrollWidth,
+      overflowers: [...document.querySelectorAll('body *')]
+        .map((element) => {
+          const box = element.getBoundingClientRect();
+          return {
+            element: `${element.tagName.toLowerCase()}${element.id ? `#${element.id}` : ''}${
+              element.classList.length ? `.${[...element.classList].join('.')}` : ''
+            }`,
+            left: Math.round(box.left),
+            right: Math.round(box.right),
+            width: Math.round(box.width),
+          };
+        })
+        .filter((box) => box.left < 0 || box.right > viewport)
+        .slice(0, 10),
+    };
+  });
   assert.ok(
     widths.content <= widths.viewport,
     `Horizontal overflow: ${JSON.stringify(widths)} at ${page.url()}`,
   );
+}
+
+async function assertHeaderControlsAligned(page) {
+  const controls = await page.locator('.app-header > .icon-button').evaluateAll((elements) =>
+    elements.map((element) => {
+      const control = element.getBoundingClientRect();
+      const icon = element.querySelector('.control-icon')?.getBoundingClientRect();
+      return {
+        x: control.x,
+        y: control.y,
+        width: control.width,
+        height: control.height,
+        controlCenterX: control.x + control.width / 2,
+        controlCenterY: control.y + control.height / 2,
+        iconCenterX: icon ? icon.x + icon.width / 2 : null,
+        iconCenterY: icon ? icon.y + icon.height / 2 : null,
+      };
+    }),
+  );
+
+  assert.equal(controls.length, 1);
+  for (const control of controls) {
+    assert.ok(Math.abs(control.width - control.height) < 0.5, JSON.stringify(controls));
+    assert.ok(
+      control.iconCenterX !== null &&
+        control.iconCenterY !== null &&
+        Math.abs(control.controlCenterX - control.iconCenterX) < 0.5 &&
+        Math.abs(control.controlCenterY - control.iconCenterY) < 0.5,
+      `Header icon is not centered: ${JSON.stringify(controls)}`,
+    );
+  }
 }
 
 function assertSummaryOutput({ verdict, reason, summary }) {

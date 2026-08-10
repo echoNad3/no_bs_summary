@@ -1,11 +1,14 @@
 {
   "name": "no-bs-summary",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "private": true,
   "description": "Blunt YouTube summaries from existing captions.",
   "type": "module",
   "engines": {
     "node": ">=24"
+  },
+  "overrides": {
+    "uuid": "^11.1.1"
   },
   "scripts": {
     "dev:api": "tsx src/server.ts",
@@ -14,6 +17,7 @@
     "build:server": "tsc -p tsconfig.server.json",
     "build:pwa": "vite build --config vite.pwa.config.ts --configLoader runner",
     "build:extension": "vite build --config vite.extension.config.ts --configLoader runner",
+    "android:sync": "npm run build:pwa && cap sync android",
     "assets:extension": "node scripts/generate-extension-icons.mjs",
     "assets:pwa": "node scripts/generate-pwa-icons.mjs",
     "assets": "npm run assets:pwa && npm run assets:extension",
@@ -29,11 +33,15 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
+    "@capacitor/android": "^8.4.1",
+    "@capacitor/app": "^8.1.0",
+    "@capacitor/core": "^8.4.1",
     "@google/genai": "^2.3.0",
     "dotenv": "^17.2.3",
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.4.1",
     "@axe-core/playwright": "^4.12.1",
     "@types/chrome": "^0.2.2",
     "@types/node": "^24.10.1",

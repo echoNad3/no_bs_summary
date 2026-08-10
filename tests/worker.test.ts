@@ -346,6 +346,9 @@ describe('worker request handling', () => {
     expect(await page.text()).toContain('PWA');
     expect(page.headers.get('x-content-type-options')).toBe('nosniff');
     expect(page.headers.get('content-security-policy')).toContain("default-src 'self'");
+    expect(page.headers.get('content-security-policy')).toContain(
+      "connect-src 'self' https://api.github.com",
+    );
     expect(page.headers.get('permissions-policy')).toContain('camera=()');
     expect(page.headers.get('cross-origin-opener-policy')).toBe('same-origin');
     expect(page.headers.get('cache-control')).toBe('no-cache');

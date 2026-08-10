@@ -340,7 +340,8 @@ async function serveAsset(request: Request, env: WorkerEnv): Promise<Response> {
     response.headers.set(
       'Content-Security-Policy',
       "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
-        "img-src 'self' data: https://i.ytimg.com; connect-src 'self'; manifest-src 'self'; " +
+        "img-src 'self' data: https://i.ytimg.com; connect-src 'self' https://api.github.com; " +
+        "manifest-src 'self'; " +
         "worker-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
     );
   } else if (pathname === '/sw.js' || pathname.endsWith('.webmanifest')) {

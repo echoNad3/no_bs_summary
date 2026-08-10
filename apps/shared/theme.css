@@ -14,14 +14,15 @@
   text-rendering: optimizeLegibility;
 
   --color-bg: #0d0f12;
-  --color-surface: #171a20;
-  --color-surface-raised: #1e222a;
+  --color-surface: #16191e;
+  --color-surface-raised: #1d2128;
+  --color-surface-hover: #242a33;
   --color-input: #101318;
   --color-text: #f5f7fa;
   --color-text-muted: #b4bcc8;
   --color-text-subtle: #949eac;
-  --color-border: #363d49;
-  --color-border-strong: #596474;
+  --color-border: #2d333d;
+  --color-border-strong: #46505f;
   --color-accent: #ff8a61;
   --color-accent-strong: #ff7448;
   --color-on-accent: #1a0d08;
@@ -32,7 +33,12 @@
   --color-skim: #74500c;
   --color-skip: #87342d;
   --color-on-verdict: #ffffff;
-  --shadow-panel: 0 1rem 3rem rgb(0 0 0 / 28%);
+  --shadow-panel: 0 1rem 3rem rgb(0 0 0 / 24%);
+  --shadow-dialog: 0 1.5rem 4rem rgb(0 0 0 / 48%);
+  --radius-small: 0.55rem;
+  --radius-medium: 0.75rem;
+  --radius-large: 1rem;
+  --control-size: 2.75rem;
 }
 
 html[data-text-size='large'] {

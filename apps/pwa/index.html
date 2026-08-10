@@ -5,10 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#0d0f12" />
-    <meta
-      name="description"
-      content="Get the point of a captioned YouTube video without the padding."
-    />
+    <meta name="description" content="Summarize a captioned YouTube video." />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icons/icon-192.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
@@ -23,121 +20,56 @@
   <body>
     <main class="app-shell">
       <header class="app-header">
-        <div class="brand-copy">
+        <a class="brand-lockup" href="/" aria-label="No BS Summary home">
+          <img class="brand-icon" src="/icons/icon-192.svg" alt="" width="40" height="40" />
           <h1>No BS Summary</h1>
-          <p class="lede">Paste a YouTube link. Get the point.</p>
-        </div>
-        <div class="header-actions">
-          <button id="settings-button" class="header-button" type="button">Settings</button>
-          <button
-            id="help-button"
-            class="icon-button"
-            type="button"
-            aria-label="How to use No BS Summary"
-            aria-haspopup="dialog"
-          >
-            <span class="info-glyph" aria-hidden="true">&#x24d8;</span>
-          </button>
-        </div>
+        </a>
+        <button
+          id="settings-button"
+          class="icon-button"
+          type="button"
+          aria-label="Open settings"
+          aria-haspopup="dialog"
+        >
+          <svg class="control-icon filled-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M19.43 12.98c.04-.32.07-.65.07-.98s-.02-.66-.07-.98l2.11-1.65a.5.5 0 0 0 .12-.64l-2-3.46a.5.5 0 0 0-.6-.22l-2.49 1a7.4 7.4 0 0 0-1.69-.98l-.38-2.65A.5.5 0 0 0 14 2h-4a.5.5 0 0 0-.49.42l-.38 2.65a7.7 7.7 0 0 0-1.69.98l-2.49-1a.5.5 0 0 0-.6.22l-2 3.46a.5.5 0 0 0 .12.64l2.11 1.65a7.3 7.3 0 0 0 0 1.96l-2.11 1.65a.5.5 0 0 0-.12.64l2 3.46a.5.5 0 0 0 .6.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65A.5.5 0 0 0 10 22h4a.5.5 0 0 0 .49-.42l.38-2.65a7.7 7.7 0 0 0 1.69-.98l2.49 1a.5.5 0 0 0 .6-.22l2-3.46a.5.5 0 0 0-.12-.64zM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5z"
+            />
+          </svg>
+        </button>
       </header>
 
-      <section class="panel" aria-label="Summarize a video">
-        <p id="share-note" class="share-note" hidden>
-          Shared link ready. Check it, then summarize.
-        </p>
+      <section class="composer-card" aria-label="Summarize a video">
         <form id="summary-form" novalidate>
           <label for="url">YouTube link</label>
-          <div class="link-row">
-            <input
-              id="url"
-              name="url"
-              type="url"
-              inputmode="url"
-              autocomplete="url"
-              autocapitalize="none"
-              autocorrect="off"
-              enterkeyhint="go"
-              spellcheck="false"
-              placeholder="https://youtu.be/…"
-              required
-            />
-            <div class="submit-actions">
-              <button id="submit" type="submit">Cut the BS</button>
-              <button id="cancel-request" class="secondary-button" type="button" hidden>
-                Cancel
-              </button>
-            </div>
-          </div>
-          <div id="video-preview" class="video-preview" hidden>
-            <img id="video-thumbnail" alt="" width="160" height="90" />
-            <div>
-              <strong id="preview-title">YouTube video</strong>
-            </div>
-          </div>
+          <input
+            id="url"
+            name="url"
+            type="url"
+            inputmode="url"
+            autocomplete="url"
+            autocapitalize="none"
+            autocorrect="off"
+            enterkeyhint="go"
+            spellcheck="false"
+            placeholder="https://youtu.be/…"
+            required
+          />
           <input id="title" name="title" type="hidden" />
 
-          <dialog id="settings-dialog" aria-labelledby="settings-title">
-            <div class="dialog-heading">
-              <h2 id="settings-title">Settings</h2>
-              <button
-                id="close-settings"
-                class="icon-button"
-                type="button"
-                aria-label="Close settings"
-              >
-                ×
-              </button>
-            </div>
-            <div class="settings-fields">
-              <label for="password">App password</label>
-              <div class="password-control">
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  autocomplete="current-password"
-                  aria-describedby="password-help"
-                  maxlength="200"
-                />
-                <label class="visibility-toggle" for="show-password">
-                  <input id="show-password" type="checkbox" />
-                  Show
-                </label>
-              </div>
-              <p id="password-help" class="field-help">
-                Enter the server's shared password. Saved only on this device.
-              </p>
-              <div class="settings-row">
-                <div>
-                  <label for="language">Caption language</label>
-                  <input
-                    id="language"
-                    name="language"
-                    type="text"
-                    value="en"
-                    maxlength="20"
-                    autocapitalize="none"
-                    enterkeyhint="done"
-                    spellcheck="false"
-                    required
-                  />
-                </div>
-                <div>
-                  <label for="text-size">Text size</label>
-                  <select id="text-size" name="text-size">
-                    <option value="normal">Normal</option>
-                    <option value="large">Large</option>
-                    <option value="extra-large">Extra large</option>
-                  </select>
-                </div>
-              </div>
-              <button id="test-connection" class="secondary-button option-button" type="button">
-                Test connection
-              </button>
-              <p id="connection-status" class="field-help" role="status" aria-live="polite"></p>
-            </div>
-          </dialog>
+          <div id="video-preview" class="video-preview" hidden>
+            <img id="video-thumbnail" alt="" width="160" height="90" />
+            <strong id="preview-title">YouTube video</strong>
+          </div>
+
+          <div class="submit-actions">
+            <button id="submit" class="primary-button" type="submit">Cut the BS</button>
+            <button id="cancel-request" class="secondary-button" type="button" hidden>
+              Cancel
+            </button>
+          </div>
         </form>
+
         <p id="status" class="status" role="status" aria-live="polite" aria-atomic="true"></p>
         <div id="error-actions" class="error-actions" hidden>
           <button id="retry-request" class="secondary-button" type="button">Retry</button>
@@ -148,73 +80,149 @@
       </section>
 
       <section id="result" class="result" aria-label="Summary result" tabindex="-1" hidden>
-        <div class="verdict-row">
-          <span id="verdict" class="verdict"></span>
-        </div>
+        <span id="verdict" class="verdict"></span>
         <p id="reason" class="reason"></p>
         <div id="summary" class="summary"></div>
-        <div class="result-actions">
-          <button id="copy-summary" class="secondary-button" type="button">Copy summary</button>
-          <button id="share-summary" class="secondary-button" type="button" hidden>
-            Share summary
+        <div class="result-actions" aria-label="Summary actions">
+          <button id="copy-summary" class="action-button" type="button" aria-label="Copy summary">
+            <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="8" y="8" width="11" height="11" rx="2" />
+              <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
+            </svg>
+            <span class="sr-only action-label">Copy summary</span>
           </button>
-          <a id="open-video" class="secondary-link" href="#" rel="noreferrer">Open video</a>
+          <button
+            id="share-summary"
+            class="action-button"
+            type="button"
+            aria-label="Share summary"
+            hidden
+          >
+            <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="18" cy="5" r="2.5" />
+              <circle cx="6" cy="12" r="2.5" />
+              <circle cx="18" cy="19" r="2.5" />
+              <path d="m8.2 10.8 7.6-4.4M8.2 13.2l7.6 4.4" />
+            </svg>
+            <span class="sr-only">Share summary</span>
+          </button>
+          <a
+            id="open-video"
+            class="action-button"
+            href="#"
+            rel="noreferrer"
+            aria-label="Open video"
+          >
+            <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M14 5h5v5M19 5l-8 8" />
+              <path d="M18 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
+            </svg>
+            <span class="sr-only">Open video</span>
+          </a>
         </div>
       </section>
 
-      <footer>
-        <p id="update-prompt" class="footer-prompt" hidden>
-          <button id="update-app" class="footer-action" type="button">Update app</button>
-        </p>
-        <a href="/privacy">Privacy</a>
-      </footer>
-
-      <dialog id="help-dialog" aria-labelledby="help-title">
+      <dialog id="settings-dialog" aria-labelledby="settings-title">
         <div class="dialog-heading">
-          <h2 id="help-title">How this works</h2>
-          <button id="close-help" class="icon-button" type="button" aria-label="Close instructions">
-            ×
+          <h2 id="settings-title">Settings</h2>
+          <button
+            id="close-settings"
+            class="icon-button dialog-close"
+            type="button"
+            aria-label="Close settings"
+          >
+            <svg class="control-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M7 7l10 10M17 7 7 17" />
+            </svg>
           </button>
         </div>
-        <ol>
-          <li>Add the shared password in <strong>Settings</strong>.</li>
-          <li>Paste or share a YouTube link.</li>
-          <li>Tap <strong>Cut the BS</strong>.</li>
-        </ol>
-        <p>Cached repeats use no new API request.</p>
-        <h3>Get the app</h3>
-        <div class="resource-actions">
-          <p id="install-prompt" class="resource-install" hidden>
-            <button id="install-app" class="footer-action" type="button">Install web app</button>
-          </p>
-          <a
-            class="secondary-link"
-            href="https://chromewebstore.google.com/detail/no-bs-summary/fnphiadakmbpimdclfohfpbbliejhnmc"
-            target="_blank"
-            rel="noreferrer"
-            >Chrome extension</a
-          >
-          <a
-            class="secondary-link"
-            href="https://github.com/echoNad3/no_bullshit_summary"
-            target="_blank"
-            rel="noreferrer"
-            >GitHub repository</a
-          >
+
+        <div class="settings-fields">
+          <div class="field-group">
+            <label for="password">Password</label>
+            <div class="password-control">
+              <input
+                id="password"
+                name="password"
+                type="password"
+                autocomplete="current-password"
+                maxlength="200"
+              />
+              <label class="visibility-toggle" for="show-password">
+                <input id="show-password" type="checkbox" />
+                Show
+              </label>
+            </div>
+          </div>
+
+          <div class="field-group compact-field">
+            <label for="text-size">Text size</label>
+            <select id="text-size" name="text-size">
+              <option value="normal">Normal</option>
+              <option value="large">Large</option>
+              <option value="extra-large">Extra large</option>
+            </select>
+          </div>
+
+          <div class="settings-section">
+            <div class="section-heading">
+              <h3>Connection</h3>
+              <button id="test-connection" class="small-button" type="button">Test</button>
+            </div>
+            <p id="connection-status" class="settings-status" role="status" aria-live="polite"></p>
+          </div>
+
+          <div class="settings-section">
+            <div class="section-heading">
+              <h3>Android app</h3>
+              <span id="android-builds" class="build-label"></span>
+            </div>
+            <p id="android-update-status" class="settings-status" role="status" aria-live="polite">
+              Checking…
+            </p>
+            <div id="app-update-progress" class="update-progress" hidden>
+              <div
+                class="update-progress-track"
+                role="progressbar"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                aria-valuenow="0"
+              >
+                <i id="app-update-progress-fill"></i>
+              </div>
+            </div>
+            <p id="app-update-detail" class="settings-status" role="status"></p>
+            <button id="app-update-action" class="secondary-button full-width" type="button">
+              Download Android app
+            </button>
+          </div>
+
+          <div class="resource-actions">
+            <a
+              class="resource-link"
+              href="https://transcriptapi.com/billing"
+              target="_blank"
+              rel="noreferrer"
+              >TranscriptAPI billing</a
+            >
+            <a
+              class="resource-link"
+              href="https://chromewebstore.google.com/detail/no-bs-summary/fnphiadakmbpimdclfohfpbbliejhnmc"
+              target="_blank"
+              rel="noreferrer"
+              >Chrome extension</a
+            >
+            <a
+              class="resource-link"
+              href="https://github.com/echoNad3/no_bullshit_summary"
+              target="_blank"
+              rel="noreferrer"
+              >GitHub</a
+            >
+          </div>
+
+          <button id="save-settings" class="primary-button full-width" type="button">Done</button>
         </div>
-        <h3>Missing from the Android share menu?</h3>
-        <p>
-          <strong>Share &rarr; More</strong> is already the correct system share sheet. If No BS
-          Summary is absent there, Android did not register the web app as a share target.
-        </p>
-        <p>
-          Use <strong>Install web app</strong> above from Chrome. A plain home-screen shortcut
-          cannot receive shares. If reinstalling still creates only a shortcut, use the native
-          Android build; it registers directly with the system share sheet.
-        </p>
-        <p>
-          <a href="https://transcriptapi.com/billing" rel="noreferrer">TranscriptAPI billing</a>
-        </p>
       </dialog>
     </main>
     <script type="module" src="/src/main.ts"></script>

@@ -25,14 +25,25 @@ try {
 
   browser = await chromium.launch({ headless: true });
   pwaContext = await browser.newContext({ viewport: { width: 412, height: 915 } });
+  await pwaContext.route(
+    'https://api.github.com/repos/echoNad3/no_bullshit_summary/releases/latest',
+    async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        headers: { 'access-control-allow-origin': '*' },
+        body: JSON.stringify({
+          tag_name: 'android-v80',
+          published_at: '2026-08-10T00:00:00.000Z',
+        }),
+      });
+    },
+  );
   const pwaPage = await pwaContext.newPage();
   await pwaPage.goto(baseUrl);
   await pwaPage.locator('#settings-dialog').waitFor({ state: 'visible' });
   await assertAccessible(pwaPage, 'PWA settings dialog');
   await pwaPage.locator('#close-settings').click();
   await assertAccessible(pwaPage, 'Android PWA');
-  await pwaPage.locator('#help-button').click();
-  await assertAccessible(pwaPage, 'PWA instructions dialog');
   await pwaContext.close();
   pwaContext = undefined;
   await browser.close();
@@ -71,12 +82,6 @@ try {
   await youtubePage.bringToFront();
   await extensionPage.locator('#settings-dialog').waitFor({ state: 'hidden' });
   await assertAccessible(extensionPage, 'Chrome side panel');
-  await extensionPage.evaluate(() => {
-    const dialog = document.querySelector('#help-dialog');
-    if (!(dialog instanceof HTMLDialogElement)) throw new Error('Help dialog missing.');
-    dialog.showModal();
-  });
-  await assertAccessible(extensionPage, 'Extension instructions dialog');
 
   console.log('Accessibility smoke: no Axe violations in the tested surfaces.');
 } finally {

@@ -51,6 +51,9 @@ describe('local API server', () => {
     });
     const page = await fetch(`${base}/share?url=https://youtu.be/dQw4w9WgXcQ`);
     expect(await page.text()).toContain('Local MVP');
+    expect(page.headers.get('content-security-policy')).toContain(
+      "connect-src 'self' https://api.github.com",
+    );
   });
 
   it('accepts JSON requests and returns service errors without secrets', async () => {

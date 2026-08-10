@@ -1,0 +1,89 @@
+name: Build No BS Summary Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/android/**'
+      - 'apps/pwa/**'
+      - 'apps/shared/**'
+      - 'capacitor.config.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/android.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build-debug-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build and sync Android project
+        run: npm run android:sync
+
+      - name: Set up Java
+        uses: actions/setup-java@d7793b545071e98d581d3bf084a51c3213318a07 # v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+
+      - name: Install Android 36 platform
+        run: sdkmanager 'platforms;android-36'
+
+      - name: Build updateable debug APK
+        working-directory: apps/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug -PappBuildNumber=${{ github.run_number }}
+
+      - name: Write checksum and release notes
+        run: |
+          cd apps/android/app/build/outputs/apk/debug
+          sha256sum app-debug.apk > app-debug.apk.sha256
+          {
+            echo "No BS Summary Android build ${{ github.run_number }}."
+            echo
+            echo "Change: $(git -C ../../../../../../.. log -1 --pretty=%s)"
+            echo "Commit: ${{ github.sha }}"
+          } > android-release-notes.md
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: no-bs-summary-debug-apk
+          path: |
+            apps/android/app/build/outputs/apk/debug/app-debug.apk
+            apps/android/app/build/outputs/apk/debug/app-debug.apk.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish stable APK download
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          tag_name: android-v${{ github.run_number }}
+          name: Android APK build ${{ github.run_number }}
+          make_latest: true
+          body_path: apps/android/app/build/outputs/apk/debug/android-release-notes.md
+          files: |
+            apps/android/app/build/outputs/apk/debug/app-debug.apk
+            apps/android/app/build/outputs/apk/debug/app-debug.apk.sha256

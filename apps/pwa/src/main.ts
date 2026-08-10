@@ -1,3 +1,5 @@
+import { App as CapacitorApp } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
 import { ApiClientError, checkBackend, summarizeVideo } from '../../shared/api-client.js';
 import type { SummarizeInput, SummaryResult } from '../../shared/api-client.js';
 import {
@@ -10,17 +12,18 @@ import {
 import { renderDetailedSummary } from '../../shared/render-summary.js';
 import { summaryClipboardText } from '../../shared/summary-actions.js';
 import { firstYouTubeUrl, youtubeThumbnailUrl } from '../../shared/youtube-input.js';
+import { isDownloadedBuildInstallable } from './app-update-logic.js';
+import { AppUpdater, type AppUpdateState } from './app-updater.js';
+import { fetchLatestApk, readCachedLatestApk, type LatestApk } from './apk-version.js';
+import { hideLaunchScreen } from './launch-screen.js';
 import { readSharedValues } from './share.js';
 import './styles.css';
 
 const PASSWORD_STORAGE_KEY = 'nbs-app-password';
 const LAST_SUMMARY_STORAGE_KEY = 'nbs-last-summary';
 const TEXT_SIZE_STORAGE_KEY = 'nbs-text-size';
-
-interface BeforeInstallPromptEvent extends Event {
-  prompt(): Promise<void>;
-  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
-}
+const APK_DOWNLOAD_URL =
+  'https://github.com/echoNad3/no_bullshit_summary/releases/latest/download/app-debug.apk';
 
 interface RenderedSummary {
   response: SummaryResult;
@@ -31,22 +34,18 @@ interface RenderedSummary {
 const form = requiredElement<HTMLFormElement>('summary-form');
 const urlInput = requiredElement<HTMLInputElement>('url');
 const titleInput = requiredElement<HTMLInputElement>('title');
-const languageInput = requiredElement<HTMLInputElement>('language');
 const passwordInput = requiredElement<HTMLInputElement>('password');
 const showPasswordInput = requiredElement<HTMLInputElement>('show-password');
 const settingsDialog = requiredElement<HTMLDialogElement>('settings-dialog');
 const settingsButton = requiredElement<HTMLButtonElement>('settings-button');
 const closeSettingsButton = requiredElement<HTMLButtonElement>('close-settings');
+const saveSettingsButton = requiredElement<HTMLButtonElement>('save-settings');
 const submitButton = requiredElement<HTMLButtonElement>('submit');
 const status = requiredElement<HTMLParagraphElement>('status');
 const result = requiredElement<HTMLElement>('result');
-const shareNote = requiredElement<HTMLParagraphElement>('share-note');
 const copyButton = requiredElement<HTMLButtonElement>('copy-summary');
+const copyButtonLabel = copyButton.querySelector<HTMLElement>('.action-label');
 const openVideoLink = requiredElement<HTMLAnchorElement>('open-video');
-const installButton = requiredElement<HTMLButtonElement>('install-app');
-const installPromptElement = requiredElement<HTMLElement>('install-prompt');
-const updateButton = requiredElement<HTMLButtonElement>('update-app');
-const updatePromptElement = requiredElement<HTMLElement>('update-prompt');
 const shareButton = requiredElement<HTMLButtonElement>('share-summary');
 const cancelButton = requiredElement<HTMLButtonElement>('cancel-request');
 const retryButton = requiredElement<HTMLButtonElement>('retry-request');
@@ -58,19 +57,24 @@ const textSizeInput = requiredElement<HTMLSelectElement>('text-size');
 const videoPreview = requiredElement<HTMLElement>('video-preview');
 const videoThumbnail = requiredElement<HTMLImageElement>('video-thumbnail');
 const previewTitle = requiredElement<HTMLElement>('preview-title');
-const helpButton = requiredElement<HTMLButtonElement>('help-button');
-const helpDialog = requiredElement<HTMLDialogElement>('help-dialog');
-const closeHelpButton = requiredElement<HTMLButtonElement>('close-help');
+const androidBuilds = requiredElement<HTMLElement>('android-builds');
+const androidUpdateStatus = requiredElement<HTMLParagraphElement>('android-update-status');
+const appUpdateAction = requiredElement<HTMLButtonElement>('app-update-action');
+const appUpdateDetail = requiredElement<HTMLParagraphElement>('app-update-detail');
+const appUpdateProgress = requiredElement<HTMLElement>('app-update-progress');
+const appUpdateProgressTrack = appUpdateProgress.querySelector<HTMLElement>('[role="progressbar"]');
+const appUpdateProgressFill = requiredElement<HTMLElement>('app-update-progress-fill');
 
 let activeRequest: AbortController | undefined;
 let renderedSummary: RenderedSummary | undefined;
-let installPrompt: BeforeInstallPromptEvent | undefined;
 let copyResetTimer: number | undefined;
 let elapsedTimer: number | undefined;
 let requestStartedAt = 0;
 let lastFailure: Error | undefined;
-let serviceWorkerRegistration: ServiceWorkerRegistration | undefined;
-let reloadForUpdate = false;
+let latestApk: LatestApk | null = readCachedLatestApk();
+let installedBuild: number | null = null;
+let appUpdateState: AppUpdateState = { status: 'idle', progress: 0 };
+let updaterPollTimer: number | undefined;
 
 const savedPassword = loadSavedPassword();
 passwordInput.value = savedPassword;
@@ -81,47 +85,36 @@ applyTextSize(savedTextSize);
 const shared = readSharedValues(window.location.search);
 if (shared.url) urlInput.value = shared.url;
 if (shared.title) titleInput.value = cleanSharedTitle(shared.title);
-shareNote.hidden = !shared.wasShared;
 if (shared.wasShared && window.location.search) {
   window.history.replaceState(null, '', window.location.pathname);
 }
 if (!shared.wasShared) restoreLastSummary();
 updateVideoPreview();
 shareButton.hidden = typeof navigator.share !== 'function';
+updateAndroidUpdateUi();
+void hideLaunchScreen();
 
 form.addEventListener('submit', (event) => {
   event.preventDefault();
   void submitSummary();
 });
 
-for (const input of [urlInput, titleInput, languageInput]) {
-  input.addEventListener('input', handleSummaryInputChanged);
-}
-
 for (const input of [urlInput, titleInput]) {
+  input.addEventListener('input', handleSummaryInputChanged);
   input.addEventListener('input', updateVideoPreview);
 }
 
-urlInput.addEventListener('paste', (event) => {
-  useYouTubeUrlFromPaste(event, urlInput);
-});
-
+urlInput.addEventListener('paste', (event) => useYouTubeUrlFromPaste(event, urlInput));
 showPasswordInput.addEventListener('change', () => {
   passwordInput.type = showPasswordInput.checked ? 'text' : 'password';
 });
-
-copyButton.addEventListener('click', () => {
-  void copySummary();
-});
-
-shareButton.addEventListener('click', () => {
-  void shareSummary();
-});
-
+copyButton.addEventListener('click', () => void copySummary());
+shareButton.addEventListener('click', () => void shareSummary());
 cancelButton.addEventListener('click', cancelFromButton);
 retryButton.addEventListener('click', () => void submitSummary());
 diagnosticsButton.addEventListener('click', () => void copyDiagnostics());
 testConnectionButton.addEventListener('click', () => void testConnection());
+appUpdateAction.addEventListener('click', () => void handleAppUpdateAction());
 
 textSizeInput.addEventListener('change', () => {
   const size = parseTextSize(textSizeInput.value);
@@ -129,40 +122,28 @@ textSizeInput.addEventListener('change', () => {
   saveTextSize(size);
 });
 
-helpButton.addEventListener('click', () => helpDialog.showModal());
-closeHelpButton.addEventListener('click', () => helpDialog.close());
 settingsButton.addEventListener('click', openSettings);
 closeSettingsButton.addEventListener('click', () => settingsDialog.close());
+saveSettingsButton.addEventListener('click', () => settingsDialog.close());
 settingsDialog.addEventListener('close', () => {
   savePassword(passwordInput.value.trim());
   saveTextSize(parseTextSize(textSizeInput.value));
+  stopUpdaterPolling();
 });
 videoThumbnail.addEventListener('error', () => {
   videoPreview.hidden = true;
 });
 
-updateButton.addEventListener('click', () => {
-  reloadForUpdate = true;
-  serviceWorkerRegistration?.waiting?.postMessage({ type: 'SKIP_WAITING' });
-});
-
-installButton.addEventListener('click', () => {
-  void installApp();
-});
-
-window.addEventListener('beforeinstallprompt', (event) => {
-  event.preventDefault();
-  installPrompt = event as BeforeInstallPromptEvent;
-  installPromptElement.hidden = false;
-});
-
-window.addEventListener('appinstalled', () => {
-  installPrompt = undefined;
-  installPromptElement.hidden = true;
-});
-
 window.addEventListener('online', updateConnectivity);
 window.addEventListener('offline', updateConnectivity);
+window.addEventListener('focus', () => {
+  if (settingsDialog.open) void refreshAndroidUpdateInfo();
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && settingsDialog.open) {
+    void refreshAndroidUpdateInfo();
+  }
+});
 updateConnectivity();
 if (!savedPassword) openSettings();
 
@@ -176,7 +157,7 @@ async function submitSummary(): Promise<void> {
   const input: SummarizeInput = {
     url: urlInput.value.trim(),
     title: titleInput.value.trim() || undefined,
-    language: languageInput.value.trim(),
+    language: 'en',
   };
   const password = passwordInput.value.trim();
   const controller = new AbortController();
@@ -190,10 +171,7 @@ async function submitSummary(): Promise<void> {
   savePassword(password);
 
   try {
-    const response = await summarizeVideo('', input, {
-      password,
-      signal: controller.signal,
-    });
+    const response = await summarizeVideo('', input, { password, signal: controller.signal });
     if (activeRequest !== controller) return;
     if (settingsDialog.open) settingsDialog.close();
     renderResult(response, input);
@@ -245,18 +223,18 @@ function cancelFromButton(): void {
 
 function loadSavedPassword(): string {
   try {
-    return window.localStorage.getItem(PASSWORD_STORAGE_KEY) ?? '';
+    return localStorage.getItem(PASSWORD_STORAGE_KEY) ?? '';
   } catch {
-    return ''; // storage can be unavailable in private browsing
+    return '';
   }
 }
 
 function savePassword(password: string): void {
   try {
-    if (password) window.localStorage.setItem(PASSWORD_STORAGE_KEY, password);
-    else window.localStorage.removeItem(PASSWORD_STORAGE_KEY);
+    if (password) localStorage.setItem(PASSWORD_STORAGE_KEY, password);
+    else localStorage.removeItem(PASSWORD_STORAGE_KEY);
   } catch {
-    // Storage can be unavailable in private browsing; the password just isn't remembered.
+    // The password remains active for this session when storage is unavailable.
   }
 }
 
@@ -277,7 +255,7 @@ function renderResult(
   if (behavior.focus !== false) {
     result.focus({ preventScroll: true });
     result.scrollIntoView({
-      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
       block: 'nearest',
     });
   }
@@ -286,8 +264,13 @@ function renderResult(
 function clearResult(): void {
   renderedSummary = undefined;
   result.hidden = true;
-  copyButton.textContent = 'Copy summary';
+  setCopyButtonLabel('Copy summary');
   if (copyResetTimer !== undefined) window.clearTimeout(copyResetTimer);
+}
+
+function setCopyButtonLabel(label: string): void {
+  copyButton.setAttribute('aria-label', label);
+  if (copyButtonLabel) copyButtonLabel.textContent = label;
 }
 
 async function copySummary(): Promise<void> {
@@ -299,12 +282,10 @@ async function copySummary(): Promise<void> {
         url: renderedSummary.url,
       }),
     );
-    copyButton.textContent = 'Copied';
-    setStatus('Summary copied.', 'success');
+    setCopyButtonLabel('Copied');
+    setStatus('Copied.', 'success');
     if (copyResetTimer !== undefined) window.clearTimeout(copyResetTimer);
-    copyResetTimer = window.setTimeout(() => {
-      copyButton.textContent = 'Copy summary';
-    }, 2_000);
+    copyResetTimer = window.setTimeout(() => setCopyButtonLabel('Copy summary'), 2_000);
   } catch {
     setStatus('Copy failed. Select the text and copy it.', 'error');
   }
@@ -330,15 +311,15 @@ async function testConnection(): Promise<void> {
   const password = passwordInput.value.trim();
   savePassword(password);
   testConnectionButton.disabled = true;
-  connectionStatus.textContent = 'Testing...';
+  connectionStatus.textContent = 'Testing…';
   try {
     const backend = await checkBackend('', { password, timeoutMs: 8_000 });
     connectionStatus.textContent = backend.dailyGeneration
-      ? `Connected. ${backend.dailyGeneration.remaining}/${backend.dailyGeneration.limit} new summaries left today.`
-      : 'Connected.';
+      ? `Connected · ${backend.dailyGeneration.remaining}/${backend.dailyGeneration.limit} remaining`
+      : 'Connected';
   } catch (error) {
     connectionStatus.textContent =
-      error instanceof ApiClientError ? error.message : 'Connection test failed.';
+      error instanceof ApiClientError ? error.message : 'Connection failed.';
     if (error instanceof ApiClientError && error.code === 'UNAUTHORIZED') passwordInput.focus();
   } finally {
     testConnectionButton.disabled = false;
@@ -377,20 +358,19 @@ function saveLastSummary(summary: RenderedSummary | undefined): void {
   if (!summary) return;
   const saved: SavedSummary = { ...summary, savedAt: new Date().toISOString() };
   try {
-    window.localStorage.setItem(LAST_SUMMARY_STORAGE_KEY, JSON.stringify(saved));
+    localStorage.setItem(LAST_SUMMARY_STORAGE_KEY, JSON.stringify(saved));
   } catch {
-    // Restoring the last result is optional when browser storage is unavailable.
+    // Restoring the last result is optional.
   }
 }
 
 function restoreLastSummary(): void {
   try {
-    const raw = window.localStorage.getItem(LAST_SUMMARY_STORAGE_KEY);
+    const raw = localStorage.getItem(LAST_SUMMARY_STORAGE_KEY);
     const saved = raw ? parseSavedSummary(JSON.parse(raw) as unknown) : undefined;
     if (!saved) return;
     urlInput.value = saved.url;
     titleInput.value = saved.title ?? '';
-    languageInput.value = saved.response.language;
     if (settingsDialog.open) settingsDialog.close();
     renderResult(
       saved.response,
@@ -404,7 +384,7 @@ function restoreLastSummary(): void {
 
 function loadTextSize(): TextSize {
   try {
-    return parseTextSize(window.localStorage.getItem(TEXT_SIZE_STORAGE_KEY));
+    return parseTextSize(localStorage.getItem(TEXT_SIZE_STORAGE_KEY));
   } catch {
     return 'normal';
   }
@@ -412,7 +392,7 @@ function loadTextSize(): TextSize {
 
 function saveTextSize(size: TextSize): void {
   try {
-    window.localStorage.setItem(TEXT_SIZE_STORAGE_KEY, size);
+    localStorage.setItem(TEXT_SIZE_STORAGE_KEY, size);
   } catch {
     // Preference remains active for this session.
   }
@@ -434,14 +414,128 @@ function updateVideoPreview(): void {
   videoPreview.hidden = false;
 }
 
-async function installApp(): Promise<void> {
-  if (!installPrompt) return;
-  const prompt = installPrompt;
-  installPrompt = undefined;
-  installPromptElement.hidden = true;
-  await prompt.prompt();
-  const choice = await prompt.userChoice;
-  if (choice.outcome === 'dismissed') installPromptElement.hidden = false;
+async function refreshAndroidUpdateInfo(): Promise<void> {
+  const tasks: Promise<void>[] = [
+    fetchLatestApk().then((latest) => {
+      if (latest) latestApk = latest;
+    }),
+  ];
+  if (Capacitor.isNativePlatform()) {
+    tasks.push(
+      CapacitorApp.getInfo()
+        .then((info) => {
+          const build = Number(info.build);
+          if (Number.isInteger(build) && build > 0) installedBuild = build;
+        })
+        .catch(() => undefined),
+    );
+  }
+  await Promise.all(tasks);
+  updateAndroidUpdateUi();
+}
+
+async function pollNativeUpdater(): Promise<void> {
+  if (!Capacitor.isNativePlatform() || !settingsDialog.open) return;
+  try {
+    appUpdateState = await AppUpdater.getStatus();
+  } catch {
+    appUpdateState = { status: 'failed', progress: 0, detail: 'Updater unavailable.' };
+  }
+  updateAndroidUpdateUi();
+}
+
+function startUpdaterPolling(): void {
+  stopUpdaterPolling();
+  if (!Capacitor.isNativePlatform()) return;
+  void pollNativeUpdater();
+  updaterPollTimer = window.setInterval(() => void pollNativeUpdater(), 250);
+}
+
+function stopUpdaterPolling(): void {
+  if (updaterPollTimer !== undefined) window.clearInterval(updaterPollTimer);
+  updaterPollTimer = undefined;
+}
+
+async function handleAppUpdateAction(): Promise<void> {
+  if (!Capacitor.isNativePlatform()) {
+    if (latestApk) window.open(APK_DOWNLOAD_URL, '_blank', 'noopener,noreferrer');
+    return;
+  }
+
+  appUpdateAction.disabled = true;
+  try {
+    const installable = isDownloadedBuildInstallable(
+      appUpdateState.status,
+      appUpdateState.build,
+      latestApk?.build ?? null,
+      installedBuild,
+    );
+    appUpdateState = installable
+      ? await AppUpdater.install()
+      : await AppUpdater.download({ url: APK_DOWNLOAD_URL });
+  } catch {
+    appUpdateState = { status: 'failed', progress: 0, detail: 'Update failed.' };
+  }
+  updateAndroidUpdateUi();
+}
+
+function updateAndroidUpdateUi(): void {
+  const native = Capacitor.isNativePlatform();
+  const latestBuild = latestApk?.build ?? null;
+  const updateAvailable =
+    native && latestBuild !== null && installedBuild !== null && latestBuild > installedBuild;
+  const upToDate =
+    native && latestBuild !== null && installedBuild !== null && latestBuild <= installedBuild;
+  const installable = isDownloadedBuildInstallable(
+    appUpdateState.status,
+    appUpdateState.build,
+    latestBuild,
+    installedBuild,
+  );
+
+  androidBuilds.textContent = native
+    ? [installedBuild && `Installed ${installedBuild}`, latestBuild && `Latest ${latestBuild}`]
+        .filter(Boolean)
+        .join(' · ')
+    : latestBuild
+      ? `Build ${latestBuild}`
+      : '';
+
+  appUpdateProgress.hidden = appUpdateState.status !== 'downloading';
+  const progress = Math.min(100, Math.max(0, Math.round(appUpdateState.progress)));
+  appUpdateProgressFill.style.width = `${progress}%`;
+  appUpdateProgressTrack?.setAttribute('aria-valuenow', String(progress));
+  appUpdateDetail.textContent = appUpdateState.detail ?? '';
+
+  if (appUpdateState.status === 'downloading') {
+    androidUpdateStatus.textContent = `Downloading… ${progress}%`;
+    appUpdateAction.textContent = 'Downloading…';
+    appUpdateAction.disabled = true;
+  } else if (appUpdateState.status === 'installing') {
+    androidUpdateStatus.textContent = 'Installer opened.';
+    appUpdateAction.textContent = 'Installer opened';
+    appUpdateAction.disabled = true;
+  } else if (installable) {
+    androidUpdateStatus.textContent = updateAvailable ? 'Update ready.' : 'Ready to install.';
+    appUpdateAction.textContent = updateAvailable ? 'Install update' : 'Reinstall';
+    appUpdateAction.disabled = false;
+  } else if (!native) {
+    androidUpdateStatus.textContent = latestBuild ? 'APK available.' : 'No APK published yet.';
+    appUpdateAction.textContent = 'Download Android app';
+    appUpdateAction.disabled = latestBuild === null;
+  } else if (updateAvailable) {
+    androidUpdateStatus.textContent = 'Update available.';
+    appUpdateAction.textContent = 'Download update';
+    appUpdateAction.disabled = false;
+  } else if (upToDate) {
+    androidUpdateStatus.textContent = 'Up to date.';
+    appUpdateAction.textContent = 'Reinstall';
+    appUpdateAction.disabled = false;
+  } else {
+    androidUpdateStatus.textContent = 'Installed.';
+    appUpdateAction.textContent = 'Download latest build';
+    appUpdateAction.disabled = latestBuild === null;
+  }
 }
 
 function updateConnectivity(): void {
@@ -457,7 +551,7 @@ function updateConnectivity(): void {
 
 function setBusy(busy: boolean): void {
   submitButton.disabled = busy || !navigator.onLine;
-  submitButton.textContent = busy ? 'Working...' : 'Cut the BS';
+  submitButton.textContent = busy ? 'Working…' : 'Cut the BS';
   cancelButton.hidden = !busy;
   form.setAttribute('aria-busy', String(busy));
 }
@@ -488,26 +582,20 @@ function requiredElement<T extends HTMLElement>(id: string): T {
 }
 
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    void registerServiceWorker();
-  });
+  window.addEventListener('load', () => void registerServiceWorker());
 }
 
 async function registerServiceWorker(): Promise<void> {
   try {
     const registration = await navigator.serviceWorker.register('/sw.js');
-    serviceWorkerRegistration = registration;
-    if (registration.waiting) updatePromptElement.hidden = false;
+    registration.waiting?.postMessage({ type: 'SKIP_WAITING' });
     registration.addEventListener('updatefound', () => {
       const installing = registration.installing;
       installing?.addEventListener('statechange', () => {
         if (installing.state === 'installed' && navigator.serviceWorker.controller) {
-          updatePromptElement.hidden = false;
+          installing.postMessage({ type: 'SKIP_WAITING' });
         }
       });
-    });
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (reloadForUpdate) window.location.reload();
     });
   } catch {
     // The online app still works when service worker registration is blocked.
@@ -516,4 +604,6 @@ async function registerServiceWorker(): Promise<void> {
 
 function openSettings(): void {
   if (!settingsDialog.open) settingsDialog.showModal();
+  void refreshAndroidUpdateInfo();
+  startUpdaterPolling();
 }
