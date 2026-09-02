@@ -341,6 +341,10 @@ button:disabled {
   font-weight: var(--fw-semibold);
 }
 
+.summary em {
+  font-style: italic;
+}
+
 .result-actions {
   justify-content: flex-end;
   margin-top: var(--space-4);

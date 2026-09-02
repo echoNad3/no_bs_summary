@@ -2,7 +2,11 @@ import { promises as fs } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { SummaryResult } from '../apps/shared/api-client.js';
 import { summaryClipboardText } from '../apps/shared/summary-actions.js';
-import { parseSummaryBlocks, stripStrongMarkdown } from '../apps/shared/summary-format.js';
+import {
+  parseInlineMarkdown,
+  parseSummaryBlocks,
+  stripInlineMarkdown,
+} from '../apps/shared/summary-format.js';
 
 describe('local MVP manifests', () => {
   it('declares an installable PWA with an Android URL share target', async () => {
@@ -77,7 +81,7 @@ describe('local MVP manifests', () => {
     expect(manifest).toMatchObject({
       manifest_version: 3,
       name: 'No BS Summary',
-      version: '0.7.0',
+      version: '0.7.1',
       minimum_chrome_version: '114',
       permissions: ['sidePanel', 'storage'],
       background: { service_worker: 'background.js', type: 'module' },
@@ -144,11 +148,29 @@ describe('local MVP manifests', () => {
       },
       { kind: 'paragraph', text: 'Short conclusion.' },
     ]);
-    expect(stripStrongMarkdown('A **nested label** and \\*literal star\\*.')).toBe(
+    expect(stripInlineMarkdown('A **nested label** and \\*literal star\\*.')).toBe(
       'A nested label and *literal star*.',
     );
-    expect(stripStrongMarkdown('An unmatched **marker never leaks.')).toBe(
+    expect(stripInlineMarkdown('An unmatched **marker never leaks.')).toBe(
       'An unmatched marker never leaks.',
+    );
+  });
+
+  it('parses safe inline emphasis without leaking Markdown markers', () => {
+    expect(
+      parseInlineMarkdown('Marvel cast *Noah Jupe* in **Secret Wars**, not \\*Fantastic Four\\*.'),
+    ).toEqual([
+      { kind: 'text', text: 'Marvel cast ' },
+      { kind: 'emphasis', text: 'Noah Jupe' },
+      { kind: 'text', text: ' in ' },
+      { kind: 'strong', text: 'Secret Wars' },
+      { kind: 'text', text: ', not *Fantastic Four*.' },
+    ]);
+    expect(stripInlineMarkdown('Watch *Avengers* and **X-Men**; ignore *broken markup.')).toBe(
+      'Watch Avengers and X-Men; ignore broken markup.',
+    );
+    expect(stripInlineMarkdown('The calculation is 2*3 and 5 * 10.')).toBe(
+      'The calculation is 2*3 and 5 * 10.',
     );
   });
 
@@ -177,7 +199,7 @@ describe('local MVP manifests', () => {
 
   it('precaches the built JS and CSS needed for a first offline launch', async () => {
     const worker = await fs.readFile('apps/pwa/public/sw.js', 'utf8');
-    expect(worker).toContain("const CACHE = 'nbs-shell-v11'");
+    expect(worker).toContain("const CACHE = 'nbs-shell-v12'");
     expect(worker).toContain("event.data?.type === 'SKIP_WAITING'");
     expect(worker).toContain('/\\.(?:css|js)$/u');
     expect(worker).toContain("'/icons/icon-192.svg'");

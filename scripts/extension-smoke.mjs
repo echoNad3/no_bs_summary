@@ -21,7 +21,7 @@ const summaryFixture = {
   reason: 'The useful updates are specific, but the commentary circles around them.',
   summary: [
     "- **Wizard Detective:** The segment explains the project's mystery structure and the clues already shown.\n  **Main appeal:** Its restrained presentation is more interesting than a conventional lore dump.",
-    "- **Kane Pixels**: The discussion separates the creator's newer work from the familiar Backrooms material and points out the production choices that make the environments feel unusually physical.",
+    "- **Kane Pixels**: The discussion separates the creator's newer work from the familiar *Backrooms* material and points out the production choices that make the environments feel unusually physical.",
     '- **Backrooms projects:** Several adaptations are compared by how well they preserve uncertainty instead of replacing it with an oversized monster catalogue and repetitive chase scenes.',
     '- **Release updates:** The concrete announcements, delays, and production notes are collected in one place so the useful facts can be skimmed without sitting through every tangent.',
     '- **What to skip:** Repeated reactions, sponsor-like detours, and speculative loops add runtime without changing the core assessment of any project mentioned in the episode.',
@@ -230,6 +230,7 @@ try {
   const pwaOutput = await readRenderedOutput(pwaPage);
   assertSummaryOutput(pwaOutput);
   await assertDetailedTopics(pwaPage);
+  await assertInlineFormatting(pwaPage);
   await pwaPage.locator('#copy-summary').click();
   assert.match(await pwaPage.evaluate(() => navigator.clipboard.readText()), /SKIM:/u);
   assert.equal(await pwaPage.locator('#copy-summary').innerText(), 'Copied');
@@ -403,6 +404,7 @@ try {
   const extensionOutput = await readRenderedOutput(sidePanelPage);
   assertSummaryOutput(extensionOutput);
   await assertDetailedTopics(sidePanelPage);
+  await assertInlineFormatting(sidePanelPage);
   assert.equal(await submit.isEnabled(), true);
   assert.equal(await status.innerText(), 'Summary ready.');
   assert.equal(
@@ -772,7 +774,7 @@ function assertSummaryOutput({ verdict, reason, summary }) {
     reason,
     /^(?:the creator|the host|the speaker|the video)\s+(?:is|offers|provides|presents)\b|cohesive narrative|variety of topics|cultural commentary|varies in quality|offers? a perspective|presents? an exploration|holds? (?:the )?(?:viewer'?s )?attention|is essentially|feels like|scattered (?:collection|series)|loosely connected (?:topics|reactions|stories)/iu,
   );
-  assert.doesNotMatch(summary, /\*\*/u);
+  assert.doesNotMatch(summary, /\*/u);
 }
 
 async function assertDetailedTopics(page) {
@@ -780,4 +782,8 @@ async function assertDetailedTopics(page) {
   assert.ok((await topicItems.count()) >= 3);
   const firstTopicBoldText = await topicItems.first().locator('strong').allInnerTexts();
   assert.deepEqual(firstTopicBoldText, ['Wizard Detective: ', 'Main appeal:']);
+}
+
+async function assertInlineFormatting(page) {
+  assert.deepEqual(await page.locator('#summary em').allInnerTexts(), ['Backrooms']);
 }

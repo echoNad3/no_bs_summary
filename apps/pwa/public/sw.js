@@ -1,4 +1,4 @@
-const CACHE = 'nbs-shell-v11';
+const CACHE = 'nbs-shell-v12';
 const CORE = [
   '/manifest.webmanifest',
   '/icons/icon-192.png',
