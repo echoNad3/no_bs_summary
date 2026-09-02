@@ -47,6 +47,8 @@ const diagnosticsButton = requiredElement<HTMLButtonElement>('copy-diagnostics')
 const errorActions = requiredElement<HTMLElement>('error-actions');
 const testConnectionButton = requiredElement<HTMLButtonElement>('test-connection');
 const connectionStatus = requiredElement<HTMLParagraphElement>('connection-status');
+const freeUserUsage = requiredElement<HTMLElement>('free-user-usage');
+const freeSharedUsage = requiredElement<HTMLElement>('free-shared-usage');
 const textSizeInput = requiredElement<HTMLSelectElement>('text-size');
 const videoThumbnail = requiredElement<HTMLImageElement>('video-thumbnail');
 
@@ -101,7 +103,7 @@ textSizeInput.addEventListener('change', () => {
   void saveSettings({ password: passwordInput.value.trim(), textSize });
 });
 
-settingsButton.addEventListener('click', openSettings);
+settingsButton.addEventListener('click', () => openSettings());
 closeSettingsButton.addEventListener('click', () => settingsDialog.close());
 saveSettingsButton.addEventListener('click', () => settingsDialog.close());
 settingsDialog.addEventListener('close', () => {
@@ -134,7 +136,6 @@ async function initialize(): Promise<void> {
   textSizeInput.value = settings.textSize;
   applyTextSize(settings.textSize);
   await fillFromActiveTab();
-  if (!settings.password) openSettings();
 }
 
 async function fillFromActiveTab(): Promise<void> {
@@ -215,7 +216,7 @@ async function submitSummary(): Promise<void> {
       'error',
     );
     errorActions.hidden = false;
-    if (error instanceof ApiClientError && error.code === 'UNAUTHORIZED') {
+    if (error instanceof ApiClientError && error.code.startsWith('FREE_')) {
       openSettings();
       passwordInput.focus();
     }
@@ -330,17 +331,29 @@ async function copySummary(): Promise<void> {
 async function testConnection(): Promise<void> {
   const password = passwordInput.value.trim();
   await saveSettings({ password, textSize: parseTextSize(textSizeInput.value) });
+  await refreshBackendStatus();
+}
+
+async function refreshBackendStatus(): Promise<void> {
+  const password = passwordInput.value.trim();
   testConnectionButton.disabled = true;
-  connectionStatus.textContent = 'Testing…';
+  connectionStatus.dataset.state = '';
+  connectionStatus.textContent = 'Checking…';
   try {
     const backend = await checkBackend(DEFAULT_BACKEND_URL, { password, timeoutMs: 8_000 });
-    connectionStatus.textContent = backend.dailyGeneration
-      ? `Connected · ${backend.dailyGeneration.remaining}/${backend.dailyGeneration.limit} remaining`
-      : 'Connected';
+    const free = backend.freeGeneration;
+    freeUserUsage.textContent = `${free.user.remaining}/${free.user.limit} left`;
+    freeSharedUsage.textContent = `${free.shared.remaining}/${free.shared.limit} left`;
+    connectionStatus.textContent =
+      backend.access === 'free'
+        ? 'Connected · Free'
+        : `Connected · ${backend.dailyGeneration.remaining}/${backend.dailyGeneration.limit} daily remaining`;
+    connectionStatus.dataset.state = 'success';
   } catch (error) {
+    freeUserUsage.textContent = freeSharedUsage.textContent = 'Unavailable';
     connectionStatus.textContent =
       error instanceof ApiClientError ? error.message : 'Connection test failed.';
-    if (error instanceof ApiClientError && error.code === 'UNAUTHORIZED') passwordInput.focus();
+    connectionStatus.dataset.state = 'error';
   } finally {
     testConnectionButton.disabled = false;
   }
@@ -410,4 +423,5 @@ function requiredElement<T extends HTMLElement>(id: string): T {
 
 function openSettings(): void {
   if (!settingsDialog.open) settingsDialog.showModal();
+  void refreshBackendStatus();
 }

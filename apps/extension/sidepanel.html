@@ -110,7 +110,7 @@
 
         <div class="settings-fields">
           <div class="field-group">
-            <label for="password">Password</label>
+            <label for="password">Password (optional)</label>
             <div class="password-control">
               <input
                 id="password"
@@ -118,6 +118,7 @@
                 type="password"
                 autocomplete="current-password"
                 maxlength="200"
+                placeholder="Free access without a password"
               />
               <button
                 id="toggle-password"
@@ -141,6 +142,25 @@
               <option value="large">Large</option>
               <option value="extra-large">Extra large</option>
             </select>
+          </div>
+
+          <div class="settings-section">
+            <div class="section-heading">
+              <h3>Passwordless access this month</h3>
+            </div>
+            <div class="quota-list">
+              <p class="quota-row">
+                <span>Your network</span>
+                <strong id="free-user-usage">—/5 left</strong>
+              </p>
+              <p class="quota-row">
+                <span>Shared pool</span>
+                <strong id="free-shared-usage">—/50 left</strong>
+              </p>
+            </div>
+            <p class="settings-status">
+              Cached results don’t count. The owner password bypasses both limits.
+            </p>
           </div>
 
           <div class="settings-section">

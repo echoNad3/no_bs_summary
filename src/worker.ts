@@ -1,13 +1,27 @@
 import { ProductError, SummaryService } from './product/service.js';
+import type { SummaryRequestOptions } from './product/service.js';
 import { KvSummaryCache } from './product/kv-summary-cache.js';
 import type { KvNamespaceLike } from './product/kv-summary-cache.js';
+import {
+  DEFAULT_DAILY_SUMMARY_LIMIT,
+  DEFAULT_FREE_GLOBAL_MONTHLY_LIMIT,
+  DEFAULT_FREE_USER_MONTHLY_LIMIT,
+  DurableGenerationQuotaClient,
+  freeQuotaUserKey,
+  generationQuotaRequest,
+  type GenerationQuotaClient,
+  type GenerationQuotaNamespaceLike,
+  type GenerationQuotaRequest,
+  type FreeQuotaStatus,
+  type UsageCounterStatus,
+  type QuotaAccess,
+} from './generation-quota.js';
 import { MemoryTranscriptStore } from './transcript/store.js';
 import { GEMINI_PROMPT_VERSION, GeminiSummaryProvider } from './summary/gemini.js';
 import { TranscriptApiProvider } from './transcript/transcriptapi.js';
+import { DEFAULT_END_TO_END_TIMEOUT_MS } from './config.js';
 
 const MAX_BODY_BYTES = 16 * 1024;
-const DEFAULT_TIMEOUT_MS = 15_000;
-const DEFAULT_DAILY_SUMMARY_LIMIT = 300;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX_REQUESTS = 20;
 const RATE_LIMIT_MAX_TRACKED_CLIENTS = 5_000;
@@ -21,19 +35,25 @@ type RuntimeEnv = WorkerBindings;
 export interface WorkerEnv {
   ASSETS: AssetsFetcherLike;
   SUMMARIES: KvNamespaceLike;
+  GENERATION_QUOTA?: GenerationQuotaNamespaceLike;
   GEMINI_API_KEY?: string;
   TRANSCRIPTAPI_API_KEY?: string;
   APP_PASSWORD?: string;
   GEMINI_MODEL?: string;
   END_TO_END_TIMEOUT_MS?: string;
   DAILY_SUMMARY_LIMIT?: string;
+  FREE_USER_MONTHLY_LIMIT?: string;
+  FREE_GLOBAL_MONTHLY_LIMIT?: string;
 }
 
 export interface WorkerDeps {
   service?: Pick<SummaryService, 'summarize'>;
+  generationQuota?: GenerationQuotaClient;
   rateLimiter?: SlidingWindowRateLimiter;
   now?: () => number;
 }
+
+export { GenerationQuota } from './generation-quota.js';
 
 export class SlidingWindowRateLimiter {
   private readonly log = new Map<string, number[]>();
@@ -76,12 +96,25 @@ export async function handleRequest(
   env: WorkerEnv,
   deps: WorkerDeps = {},
 ): Promise<Response> {
+  const startedAt = Date.now();
   const now = deps.now ?? Date.now;
   try {
     return await routeRequest(request, env, deps, now);
   } catch (error) {
+    const corsHeaders = corsHeadersFor(request, new URL(request.url)) ?? {};
     if (error instanceof ProductError) {
-      const corsHeaders = corsHeadersFor(request, new URL(request.url)) ?? {};
+      if (error.statusCode >= 500) {
+        console.error(
+          JSON.stringify({
+            event: 'request_failed',
+            method: request.method,
+            path: new URL(request.url).pathname,
+            status: error.statusCode,
+            code: error.code,
+            durationMs: Math.max(0, Date.now() - startedAt),
+          }),
+        );
+      }
       const retryHeaders: Record<string, string> =
         error.retryAfterSeconds === undefined
           ? {}
@@ -100,7 +133,11 @@ export async function handleRequest(
         error: error instanceof Error ? error.name : 'UnknownError',
       }),
     );
-    return json(500, { error: { code: 'INTERNAL_ERROR', message: 'Unexpected server error.' } });
+    return json(
+      500,
+      { error: { code: 'INTERNAL_ERROR', message: 'Unexpected server error.' } },
+      corsHeaders,
+    );
   }
 }
 
@@ -129,23 +166,18 @@ async function routeRequest(
   }
 
   if (request.method === 'GET' && url.pathname === '/api/status') {
-    if (!(await passwordMatches(request.headers.get('x-app-password'), env.APP_PASSWORD))) {
-      return json(
-        401,
-        { error: { code: 'UNAUTHORIZED', message: 'Missing or wrong app password.' } },
-        corsHeaders,
-      );
-    }
+    const ownerAccess = await passwordMatches(
+      request.headers.get('x-app-password'),
+      env.APP_PASSWORD,
+    );
+    const generation = await readGenerationQuotaStatus(request, env, deps, now());
     return json(
       200,
       {
         status: 'ok',
-        cache: 'cloud',
-        dailyGeneration: await readDailyBudget(env, now()),
-        transcriptApiCredits: {
-          availableViaApi: false,
-          dashboardUrl: 'https://transcriptapi.com/billing',
-        },
+        access: ownerAccess ? 'owner' : 'free',
+        dailyGeneration: ownerAccess ? generation.daily : null,
+        freeGeneration: generation.free,
       },
       corsHeaders,
     );
@@ -177,13 +209,10 @@ async function summarize(
   now: () => number,
   corsHeaders: Record<string, string>,
 ): Promise<Response> {
-  if (!(await passwordMatches(request.headers.get('x-app-password'), env.APP_PASSWORD))) {
-    return json(
-      401,
-      { error: { code: 'UNAUTHORIZED', message: 'Missing or wrong app password.' } },
-      corsHeaders,
-    );
-  }
+  const ownerAccess = await passwordMatches(
+    request.headers.get('x-app-password'),
+    env.APP_PASSWORD,
+  );
 
   const client = request.headers.get('cf-connecting-ip') ?? 'unknown';
   const rateLimiter = deps.rateLimiter ?? defaultRateLimiter;
@@ -204,8 +233,114 @@ async function summarize(
 
   const input = await readJsonBody(request);
   const service = deps.service ?? getService(env);
-  const result = await service.summarize(input);
+  const access: QuotaAccess = ownerAccess ? 'owner' : 'free';
+  const requestOptions: SummaryRequestOptions = {
+    beforeGenerate: async () => {
+      await consumeGenerationQuota(request, env, deps, now(), access);
+    },
+  };
+  const result = await service.summarize(input, requestOptions);
   return json(200, result, corsHeaders);
+}
+
+async function readGenerationQuotaStatus(
+  request: Request,
+  env: WorkerEnv,
+  deps: WorkerDeps,
+  now: number,
+): Promise<{ daily: UsageCounterStatus; free: FreeQuotaStatus }> {
+  const input = await generationQuotaRequestFor(request, env, now);
+  try {
+    return await generationQuotaClient(env, deps).read(input);
+  } catch {
+    throw new ProductError(
+      503,
+      'QUOTA_UNAVAILABLE',
+      'Generation limits are temporarily unavailable. Try again shortly.',
+    );
+  }
+}
+
+async function consumeGenerationQuota(
+  request: Request,
+  env: WorkerEnv,
+  deps: WorkerDeps,
+  now: number,
+  access: QuotaAccess,
+): Promise<void> {
+  const input = await generationQuotaRequestFor(request, env, now);
+  let decision;
+  try {
+    decision = await generationQuotaClient(env, deps).consume(input, access);
+  } catch {
+    throw new ProductError(
+      503,
+      'QUOTA_UNAVAILABLE',
+      'Generation limits are temporarily unavailable. Try again shortly.',
+    );
+  }
+  if (decision.allowed) return;
+
+  if (decision.blockedBy === 'daily') {
+    const retryAfterSeconds = secondsUntil(decision.status.daily.resetsAt, now);
+    throw new ProductError(
+      429,
+      'DAILY_LIMIT_REACHED',
+      'Daily new-summary limit reached. Already cached videos still work.',
+      retryAfterSeconds,
+    );
+  }
+  const free = decision.status.free;
+  const retryAfterSeconds = Math.max(1, Math.ceil((Date.parse(free.shared.resetsAt) - now) / 1000));
+  if (decision.blockedBy === 'global') {
+    throw new ProductError(
+      429,
+      'FREE_GLOBAL_LIMIT_REACHED',
+      `The shared pool of ${free.shared.limit} free summaries is used up for this month. Use the main password or wait for the monthly reset.`,
+      retryAfterSeconds,
+    );
+  }
+  throw new ProductError(
+    429,
+    'FREE_USER_LIMIT_REACHED',
+    `You have used all ${free.user.limit} free summaries for this month. Use the main password or wait for the monthly reset.`,
+    retryAfterSeconds,
+  );
+}
+
+async function generationQuotaRequestFor(
+  request: Request,
+  env: WorkerEnv,
+  now: number,
+): Promise<GenerationQuotaRequest> {
+  const password = env.APP_PASSWORD?.trim();
+  if (!password) {
+    throw new ProductError(
+      500,
+      'SERVER_MISCONFIGURED',
+      'The app password is not configured on the server.',
+    );
+  }
+  const userKey = await freeQuotaUserKey(request.headers.get('cf-connecting-ip'), password);
+  return generationQuotaRequest(
+    now,
+    userKey,
+    configuredLimit(env.DAILY_SUMMARY_LIMIT) ?? DEFAULT_DAILY_SUMMARY_LIMIT,
+    configuredLimit(env.FREE_USER_MONTHLY_LIMIT) ?? DEFAULT_FREE_USER_MONTHLY_LIMIT,
+    configuredLimit(env.FREE_GLOBAL_MONTHLY_LIMIT) ?? DEFAULT_FREE_GLOBAL_MONTHLY_LIMIT,
+  );
+}
+
+function generationQuotaClient(env: WorkerEnv, deps: WorkerDeps): GenerationQuotaClient {
+  if (deps.generationQuota) return deps.generationQuota;
+  if (!env.GENERATION_QUOTA) {
+    throw new ProductError(
+      500,
+      'SERVER_MISCONFIGURED',
+      'The generation quota service is not configured on the server.',
+    );
+  }
+  return new DurableGenerationQuotaClient(env.GENERATION_QUOTA);
 }
 
 /**
@@ -258,49 +393,6 @@ export async function passwordMatches(
   return difference === 0;
 }
 
-export interface DailyGenerationBudget {
-  used: number;
-  limit: number;
-  remaining: number;
-  resetsAt: string;
-}
-
-export async function readDailyBudget(
-  env: Pick<WorkerEnv, 'SUMMARIES' | 'DAILY_SUMMARY_LIMIT'>,
-  now: number,
-): Promise<DailyGenerationBudget> {
-  const limit = positiveInteger(env.DAILY_SUMMARY_LIMIT) ?? DEFAULT_DAILY_SUMMARY_LIMIT;
-  const key = `meter-${new Date(now).toISOString().slice(0, 10)}`;
-  const stored = Number((await env.SUMMARIES.get(key)) ?? '0');
-  const used = Number.isFinite(stored) && stored > 0 ? Math.floor(stored) : 0;
-  const reset = new Date(now);
-  reset.setUTCHours(24, 0, 0, 0);
-  return {
-    used,
-    limit,
-    remaining: Math.max(0, limit - used),
-    resetsAt: reset.toISOString(),
-  };
-}
-
-export async function consumeDailyBudget(
-  env: Pick<WorkerEnv, 'SUMMARIES' | 'DAILY_SUMMARY_LIMIT'>,
-  now: number,
-): Promise<void> {
-  const budget = await readDailyBudget(env, now);
-  if (budget.remaining <= 0) {
-    const retryAfterSeconds = Math.max(1, Math.ceil((Date.parse(budget.resetsAt) - now) / 1000));
-    throw new ProductError(
-      429,
-      'DAILY_LIMIT_REACHED',
-      'Daily new-summary limit reached. Already cached videos still work.',
-      retryAfterSeconds,
-    );
-  }
-  const key = `meter-${new Date(now).toISOString().slice(0, 10)}`;
-  await env.SUMMARIES.put(key, String(budget.used + 1), { expirationTtl: 2 * 24 * 60 * 60 });
-}
-
 async function readJsonBody(request: Request): Promise<unknown> {
   const contentType = request.headers.get('content-type') ?? '';
   if (!contentType.toLowerCase().startsWith('application/json')) {
@@ -343,6 +435,7 @@ async function serveAsset(request: Request, env: WorkerEnv): Promise<Response> {
   response.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
   response.headers.set('Cross-Origin-Resource-Policy', 'same-origin');
   response.headers.set('Permissions-Policy', 'camera=(), geolocation=(), microphone=()');
+  response.headers.set('Strict-Transport-Security', 'max-age=31536000');
   if ((response.headers.get('content-type') ?? '').includes('text/html')) {
     response.headers.set('Cache-Control', 'no-cache');
     response.headers.set(
@@ -350,7 +443,7 @@ async function serveAsset(request: Request, env: WorkerEnv): Promise<Response> {
       "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
         "img-src 'self' data: https://i.ytimg.com; connect-src 'self' https://api.github.com; " +
         "manifest-src 'self'; " +
-        "worker-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+        "worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
     );
   } else if (pathname === '/sw.js' || pathname.endsWith('.webmanifest')) {
     response.headers.set('Cache-Control', 'no-cache');
@@ -373,14 +466,8 @@ function getService(env: WorkerEnv): SummaryService {
     );
   }
   const model = env.GEMINI_MODEL?.trim() || 'gemini-3.1-flash-lite';
-  const timeoutMs = positiveInteger(env.END_TO_END_TIMEOUT_MS) ?? DEFAULT_TIMEOUT_MS;
-  const fingerprint = JSON.stringify([
-    model,
-    timeoutMs,
-    env.DAILY_SUMMARY_LIMIT,
-    geminiKey,
-    transcriptKey,
-  ]);
+  const timeoutMs = configuredLimit(env.END_TO_END_TIMEOUT_MS) ?? DEFAULT_END_TO_END_TIMEOUT_MS;
+  const fingerprint = JSON.stringify([model, timeoutMs, geminiKey, transcriptKey]);
   if (cachedService?.fingerprint !== fingerprint) {
     cachedService = {
       fingerprint,
@@ -392,17 +479,20 @@ function getService(env: WorkerEnv): SummaryService {
         summaryModel: model,
         summaryPromptVersion: GEMINI_PROMPT_VERSION,
         timeoutMs,
-        beforeGenerate: () => consumeDailyBudget(env, Date.now()),
       }),
     };
   }
   return cachedService.service;
 }
 
-function positiveInteger(value: string | undefined): number | undefined {
+function configuredLimit(value: string | undefined): number | undefined {
   if (value === undefined || value.trim() === '') return undefined;
   const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+  return Number.isInteger(parsed) && parsed > 0 && parsed <= 100_000 ? parsed : undefined;
+}
+
+function secondsUntil(timestamp: string, now: number): number {
+  return Math.max(1, Math.ceil((Date.parse(timestamp) - now) / 1000));
 }
 
 function json(
@@ -418,6 +508,7 @@ function json(
       'X-Content-Type-Options': 'nosniff',
       'Referrer-Policy': 'no-referrer',
       'Permissions-Policy': 'camera=(), geolocation=(), microphone=()',
+      'Strict-Transport-Security': 'max-age=31536000',
       ...extraHeaders,
     },
   });

@@ -40,6 +40,7 @@ try {
   );
   const pwaPage = await pwaContext.newPage();
   await pwaPage.goto(baseUrl);
+  await pwaPage.locator('#settings-button').click();
   await pwaPage.locator('#settings-dialog').waitFor({ state: 'visible' });
   await assertAccessible(pwaPage, 'PWA settings dialog');
   await pwaPage.locator('#close-settings').click();
@@ -72,6 +73,7 @@ try {
   await extensionPage.waitForFunction(
     () => document.querySelector('#detected-title')?.textContent === 'Accessibility video',
   );
+  await extensionPage.locator('#settings-button').click();
   await extensionPage.locator('#settings-dialog').waitFor({ state: 'visible' });
   await assertAccessible(extensionPage, 'Extension settings dialog');
   await extensionPage.evaluate(() => {

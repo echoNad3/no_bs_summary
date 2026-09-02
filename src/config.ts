@@ -1,0 +1,1 @@
+export const DEFAULT_END_TO_END_TIMEOUT_MS = 60_000;

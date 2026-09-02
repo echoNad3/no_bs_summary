@@ -13,7 +13,7 @@ export function extractVideoId(rawUrl: string): string {
     throw new Error(`Not a valid web address: "${trimmed}"`);
   }
 
-  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+  if (url.protocol !== 'https:') {
     throw new Error(`Not a normal web link (must start with https://): "${trimmed}"`);
   }
 
@@ -24,7 +24,7 @@ export function extractVideoId(rawUrl: string): string {
     candidate = url.pathname.split('/').filter(Boolean)[0];
   } else if (YOUTUBE_HOSTS.has(host)) {
     const parts = url.pathname.split('/').filter(Boolean);
-    if (url.pathname === '/watch') {
+    if (parts[0] === 'watch' && parts.length === 1) {
       candidate = url.searchParams.get('v') ?? undefined;
     } else if ((parts[0] === 'shorts' || parts[0] === 'live') && parts[1]) {
       candidate = parts[1];

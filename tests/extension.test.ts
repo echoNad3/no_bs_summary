@@ -1,7 +1,25 @@
 import { promises as fs } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getYouTubeTabContext } from '../apps/extension/src/tab-context.js';
-import { DEFAULT_BACKEND_URL } from '../apps/extension/src/settings.js';
+import { DEFAULT_BACKEND_URL, loadSettings, saveSettings } from '../apps/extension/src/settings.js';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+function storageArea(initial: Record<string, unknown> = {}) {
+  const values = new Map(Object.entries(initial));
+  return {
+    values,
+    get: vi.fn(async (key: string) => ({ [key]: values.get(key) })),
+    set: vi.fn(async (items: Record<string, unknown>) => {
+      for (const [key, value] of Object.entries(items)) values.set(key, value);
+    }),
+    remove: vi.fn(async (key: string) => {
+      values.delete(key);
+    }),
+  };
+}
 
 describe('extension manifest permissions', () => {
   it('can read the current supported YouTube tab while the side panel stays open', async () => {
@@ -16,7 +34,7 @@ describe('extension manifest permissions', () => {
       action: { default_title: string; default_icon: Record<string, string> };
     };
     expect(manifest.name).toBe('No BS Summary');
-    expect(manifest.version).toBe('0.6.1');
+    expect(manifest.version).toBe('0.7.0');
     expect((manifest as { minimum_chrome_version?: string }).minimum_chrome_version).toBe('114');
     expect(manifest.host_permissions).toEqual(
       expect.arrayContaining([
@@ -59,6 +77,9 @@ describe('extension controls', () => {
     expect(html.slice(settingsStart, settingsEnd)).not.toContain('id="url"');
     expect(html.slice(settingsStart, settingsEnd)).not.toContain('id="language"');
     expect(html.slice(settingsStart, settingsEnd)).toContain('id="password"');
+    expect(html.slice(settingsStart, settingsEnd)).toContain('id="free-user-usage"');
+    expect(html.slice(settingsStart, settingsEnd)).toContain('id="free-shared-usage"');
+    expect(html.slice(settingsStart, settingsEnd)).toContain('Passwordless access this month');
     expect(html).toContain('id="copy-summary"');
     expect(html).toContain('id="toggle-password"');
     expect(html).not.toContain('id="lock-video"');
@@ -67,12 +88,55 @@ describe('extension controls', () => {
     expect(html).toContain('id="save-settings"');
     expect(html).toContain('class="control-icon"');
     expect(html).not.toContain('data-disclosure');
+    expect(html).not.toMatch(/\bdemo\b/iu);
   });
 });
 
 describe('extension settings', () => {
   it('ships against the production HTTPS backend', () => {
     expect(DEFAULT_BACKEND_URL).toBe('https://no-bs-summary.echonad3.workers.dev');
+  });
+
+  it('migrates a legacy synced password to device-local storage', async () => {
+    const sync = storageArea({
+      'nbs-settings': { password: 'legacy-secret', textSize: 'large' },
+    });
+    const local = storageArea();
+    vi.stubGlobal('chrome', { storage: { sync, local } });
+
+    await expect(loadSettings()).resolves.toEqual({
+      password: 'legacy-secret',
+      textSize: 'large',
+    });
+    expect(local.values.get('nbs-app-password')).toBe('legacy-secret');
+    expect(sync.values.get('nbs-settings')).toEqual({ textSize: 'large' });
+  });
+
+  it('syncs only text size and keeps or removes the password locally', async () => {
+    const sync = storageArea();
+    const local = storageArea();
+    vi.stubGlobal('chrome', { storage: { sync, local } });
+
+    await saveSettings({ password: 'device-secret', textSize: 'extra-large' });
+    expect(sync.values.get('nbs-settings')).toEqual({ textSize: 'extra-large' });
+    expect(local.values.get('nbs-app-password')).toBe('device-secret');
+
+    await saveSettings({ password: '', textSize: 'normal' });
+    expect(local.values.has('nbs-app-password')).toBe(false);
+  });
+
+  it('keeps the legacy password synced when local migration fails', async () => {
+    const legacy = { password: 'legacy-secret', textSize: 'large' };
+    const sync = storageArea({ 'nbs-settings': legacy });
+    const local = storageArea();
+    local.set.mockRejectedValueOnce(new Error('local storage unavailable'));
+    vi.stubGlobal('chrome', { storage: { sync, local } });
+
+    await expect(loadSettings()).resolves.toEqual({
+      password: 'legacy-secret',
+      textSize: 'large',
+    });
+    expect(sync.values.get('nbs-settings')).toEqual(legacy);
   });
 });
 

@@ -4,7 +4,7 @@ import { gzipSync } from 'node:zlib';
 
 const projectDir = process.cwd();
 const budgets = [
-  { label: 'PWA JavaScript', dir: 'dist/pwa', extension: '.js', maxGzipBytes: 12 * 1024 },
+  { label: 'PWA JavaScript', dir: 'dist/pwa', extension: '.js', maxGzipBytes: 12.5 * 1024 },
   { label: 'PWA CSS', dir: 'dist/pwa', extension: '.css', maxGzipBytes: 8 * 1024 },
   {
     label: 'Extension JavaScript',

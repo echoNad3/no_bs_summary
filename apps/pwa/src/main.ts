@@ -64,6 +64,8 @@ const diagnosticsButton = requiredElement<HTMLButtonElement>('copy-diagnostics')
 const errorActions = requiredElement<HTMLElement>('error-actions');
 const testConnectionButton = requiredElement<HTMLButtonElement>('test-connection');
 const connectionStatus = requiredElement<HTMLParagraphElement>('connection-status');
+const freeUserUsage = requiredElement<HTMLElement>('free-user-usage');
+const freeSharedUsage = requiredElement<HTMLElement>('free-shared-usage');
 const textSizeInput = requiredElement<HTMLSelectElement>('text-size');
 const videoPreview = requiredElement<HTMLElement>('video-preview');
 const videoThumbnail = requiredElement<HTMLImageElement>('video-thumbnail');
@@ -141,7 +143,7 @@ textSizeInput.addEventListener('change', () => {
   saveTextSize(size);
 });
 
-settingsButton.addEventListener('click', openSettings);
+settingsButton.addEventListener('click', () => openSettings());
 closeSettingsButton.addEventListener('click', () => settingsDialog.close());
 saveSettingsButton.addEventListener('click', () => settingsDialog.close());
 settingsDialog.addEventListener('close', () => {
@@ -173,7 +175,6 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 updateConnectivity();
-if (!savedPassword) openSettings();
 
 async function submitSummary(): Promise<void> {
   if (activeRequest || !form.reportValidity()) return;
@@ -214,7 +215,7 @@ async function submitSummary(): Promise<void> {
       'error',
     );
     errorActions.hidden = false;
-    if (error instanceof ApiClientError && error.code === 'UNAUTHORIZED') {
+    if (error instanceof ApiClientError && error.code.startsWith('FREE_')) {
       openSettings();
       passwordInput.focus();
     }
@@ -352,17 +353,29 @@ async function shareSummary(): Promise<void> {
 async function testConnection(): Promise<void> {
   const password = passwordInput.value.trim();
   savePassword(password);
+  await refreshBackendStatus();
+}
+
+async function refreshBackendStatus(): Promise<void> {
+  const password = passwordInput.value.trim();
   testConnectionButton.disabled = true;
-  connectionStatus.textContent = 'Testing…';
+  connectionStatus.dataset.state = '';
+  connectionStatus.textContent = 'Checking…';
   try {
     const backend = await checkBackend('', { password, timeoutMs: 8_000 });
-    connectionStatus.textContent = backend.dailyGeneration
-      ? `Connected · ${backend.dailyGeneration.remaining}/${backend.dailyGeneration.limit} remaining`
-      : 'Connected';
+    const free = backend.freeGeneration;
+    freeUserUsage.textContent = `${free.user.remaining}/${free.user.limit} left`;
+    freeSharedUsage.textContent = `${free.shared.remaining}/${free.shared.limit} left`;
+    connectionStatus.textContent =
+      backend.access === 'free'
+        ? 'Connected · Free'
+        : `Connected · ${backend.dailyGeneration.remaining}/${backend.dailyGeneration.limit} daily remaining`;
+    connectionStatus.dataset.state = 'success';
   } catch (error) {
+    freeUserUsage.textContent = freeSharedUsage.textContent = 'Unavailable';
     connectionStatus.textContent =
       error instanceof ApiClientError ? error.message : 'Connection failed.';
-    if (error instanceof ApiClientError && error.code === 'UNAUTHORIZED') passwordInput.focus();
+    connectionStatus.dataset.state = 'error';
   } finally {
     testConnectionButton.disabled = false;
   }
@@ -741,6 +754,7 @@ function checkForWebUpdate(force = false): void {
 
 function openSettings(): void {
   if (!settingsDialog.open) settingsDialog.showModal();
+  void refreshBackendStatus();
   void refreshAndroidUpdateInfo();
   startUpdaterPolling();
 }

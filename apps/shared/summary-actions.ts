@@ -1,12 +1,14 @@
 import type { SummaryResult } from './api-client.js';
-import { parseSummaryBlocks } from './summary-format.js';
+import { parseSummaryBlocks, stripStrongMarkdown } from './summary-format.js';
 
 export function summaryClipboardText(
   response: SummaryResult,
   context: { title?: string; url?: string } = {},
 ): string {
   const detail = parseSummaryBlocks(response.summary)
-    .map((block) => (block.kind === 'topic' ? `${block.label}: ${block.body}` : block.text))
+    .map((block) =>
+      stripStrongMarkdown(block.kind === 'topic' ? `${block.label}: ${block.body}` : block.text),
+    )
     .join('\n\n');
   const heading = context.title?.trim();
   const source = context.url?.trim();

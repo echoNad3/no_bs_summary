@@ -9,9 +9,9 @@ jobs:
   checks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 24
           cache: npm
@@ -22,6 +22,8 @@ jobs:
 
       - run: npm run typecheck
 
+      - run: npm run types:check
+
       - run: npm test
 
       - run: npm run build
@@ -31,6 +33,11 @@ jobs:
       - run: npx playwright install --with-deps chromium
 
       - run: npm run smoke:a11y
+
+      - run: npm run smoke:extension
+
+      # Boots workerd and catches invalid Worker entry-module exports that a dry run cannot.
+      - run: npm run smoke:worker
 
       # Validates that the Worker still bundles for the Cloudflare runtime.
       # Deploys stay manual (npm run deploy) with the owner's wrangler login.

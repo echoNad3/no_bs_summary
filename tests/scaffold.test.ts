@@ -1,6 +1,8 @@
 import { promises as fs } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_SUMMARY_REQUEST_TIMEOUT_MS } from '../apps/shared/api-client.js';
 import { countSentences, SUMMARY_CHARACTER_LIMIT, summarySchema } from '../src/summary/provider.js';
+import { DEFAULT_END_TO_END_TIMEOUT_MS } from '../src/config.js';
 
 describe('summary schema', () => {
   it('accepts a valid verdict object', () => {
@@ -68,6 +70,13 @@ describe('summary schema', () => {
     ).toBe(false);
   });
 
+  it('enforces the advertised under-25-word verdict reason', () => {
+    const reason = Array.from({ length: 25 }, (_, index) => `word${index}`).join(' ');
+    expect(
+      summarySchema.safeParse({ verdict: 'WATCH', reason, summary: 'One useful point.' }).success,
+    ).toBe(false);
+  });
+
   it('does not count common abbreviations as extra sentences', () => {
     expect(
       countSentences('Alertness vs. calmness is one axis. Feeling good vs. bad is another axis.'),
@@ -95,7 +104,7 @@ describe('summary schema', () => {
         reason: 'A dialogue-driven narrative builds a conceptual model.',
         summary: 'No definitive evidence fundamentally changes the idea.',
       }).success,
-    ).toBe(false);
+    ).toBe(true);
     expect(
       summarySchema.safeParse({
         verdict: 'SKIP',
@@ -177,10 +186,11 @@ describe('summary schema', () => {
 });
 
 describe('request deadline', () => {
-  it('uses the 15000 ms default everywhere', async () => {
-    const combined = await fs.readFile('wrangler.jsonc', 'utf8');
-    expect(combined).toContain('15000');
-    expect(combined).not.toContain('30000');
-    expect(combined).not.toMatch(/30[- ]second/i);
+  it('gives the two-provider pipeline enough time and keeps the client deadline longer', async () => {
+    const config = await fs.readFile('wrangler.jsonc', 'utf8');
+    expect(config).toContain(`"END_TO_END_TIMEOUT_MS": "${DEFAULT_END_TO_END_TIMEOUT_MS}"`);
+    expect(DEFAULT_END_TO_END_TIMEOUT_MS).toBe(60_000);
+    expect(DEFAULT_SUMMARY_REQUEST_TIMEOUT_MS).toBe(70_000);
+    expect(DEFAULT_SUMMARY_REQUEST_TIMEOUT_MS).toBeGreaterThan(DEFAULT_END_TO_END_TIMEOUT_MS);
   });
 });

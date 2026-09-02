@@ -36,6 +36,9 @@ function retryAfterMs(response: Response): number | undefined {
 }
 
 export function sleepWithinDeadline(ms: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) {
+    return Promise.reject(new DOMException('The run deadline was reached.', 'AbortError'));
+  }
   if (ms <= 0) return Promise.resolve();
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -86,6 +89,9 @@ export async function fetchWithOneRetry(
     throw firstError;
   }
 
+  if (firstResponse?.body) {
+    await firstResponse.body.cancel().catch(() => undefined);
+  }
   await sleepWithinDeadline(waitMs, ctx.signal);
   recordRetry(ctx, 'transcript');
 

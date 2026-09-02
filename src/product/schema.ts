@@ -4,7 +4,6 @@ import { languageSchema } from '../transcript/provider.js';
 
 export const summarizeRequestSchema = z.object({
   url: z.string().trim().min(1).max(2048),
-  title: z.string().trim().min(1).max(300).optional(),
   language: languageSchema.default('en'),
 });
 

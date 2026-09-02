@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { ProductError } from '../src/product/service.js';
 import { KvSummaryCache } from '../src/product/kv-summary-cache.js';
 import type { KvNamespaceLike } from '../src/product/kv-summary-cache.js';
 import {
@@ -9,10 +10,15 @@ import {
 import type { SummarizeResponse } from '../src/product/schema.js';
 import { MemoryTranscriptStore, cacheKey } from '../src/transcript/store.js';
 import {
-  consumeDailyBudget,
+  blockedReason,
+  makeGenerationQuotaStatus,
+  type GenerationQuotaClient,
+  type GenerationQuotaRequest,
+  type QuotaAccess,
+} from '../src/generation-quota.js';
+import {
   handleRequest,
   passwordMatches,
-  readDailyBudget,
   SlidingWindowRateLimiter,
   type WorkerEnv,
 } from '../src/worker.js';
@@ -77,6 +83,42 @@ function summarizeRequest(headers: Record<string, string> = {}): Request {
 }
 
 const okService = () => ({ summarize: vi.fn().mockResolvedValue(response) });
+
+class FakeGenerationQuota implements GenerationQuotaClient {
+  dailyUsed = 0;
+  globalUsed = 0;
+  readonly users = new Map<string, number>();
+  consumeCalls = 0;
+
+  async read(input: GenerationQuotaRequest) {
+    return makeGenerationQuotaStatus(
+      this.dailyUsed,
+      this.users.get(input.userKey) ?? 0,
+      this.globalUsed,
+      input,
+    );
+  }
+
+  async consume(input: GenerationQuotaRequest, access: QuotaAccess) {
+    this.consumeCalls += 1;
+    const status = await this.read(input);
+    const blockedBy = blockedReason(status, access);
+    if (blockedBy) return { allowed: false, blockedBy, status } as const;
+    this.dailyUsed += 1;
+    if (access === 'free') {
+      this.globalUsed += 1;
+      this.users.set(input.userKey, (this.users.get(input.userKey) ?? 0) + 1);
+    }
+    return { allowed: true, status: await this.read(input) } as const;
+  }
+}
+
+const generatingService = () => ({
+  summarize: vi.fn(async (_input: unknown, options?: { beforeGenerate?: () => Promise<void> }) => {
+    await options?.beforeGenerate?.();
+    return response;
+  }),
+});
 
 describe('KvSummaryCache', () => {
   it('round-trips the complete response and misses on corrupt or mismatched entries', async () => {
@@ -162,27 +204,6 @@ describe('rate limiter', () => {
   });
 });
 
-describe('daily live-generation budget', () => {
-  it('counts only explicit generation attempts and exposes the UTC reset', async () => {
-    const env = makeEnv({ DAILY_SUMMARY_LIMIT: '2' });
-    const now = Date.parse('2026-08-08T12:00:00.000Z');
-
-    await expect(readDailyBudget(env, now)).resolves.toMatchObject({
-      used: 0,
-      limit: 2,
-      remaining: 2,
-      resetsAt: '2026-08-09T00:00:00.000Z',
-    });
-    await consumeDailyBudget(env, now);
-    await consumeDailyBudget(env, now);
-    await expect(consumeDailyBudget(env, now)).rejects.toMatchObject({
-      statusCode: 429,
-      code: 'DAILY_LIMIT_REACHED',
-      retryAfterSeconds: 43_200,
-    });
-  });
-});
-
 describe('worker request handling', () => {
   it('serves health without a password and rejects unknown API routes', async () => {
     const env = makeEnv();
@@ -200,44 +221,153 @@ describe('worker request handling', () => {
     expect(unknown.status).toBe(404);
   });
 
-  it('tests the password and reports cloud-cache generation budget status', async () => {
+  it('reports free limits without a password and owner budgets with the exact password', async () => {
     const env = makeEnv({ DAILY_SUMMARY_LIMIT: '7' });
+    const generationQuota = new FakeGenerationQuota();
     const statusRequest = (password: string) =>
       new Request('https://app.example.workers.dev/api/status', {
         headers: { 'x-app-password': password },
       });
 
-    expect((await handleRequest(statusRequest('wrong'), env)).status).toBe(401);
+    const freeResult = await handleRequest(statusRequest('wrong'), env, {
+      generationQuota,
+      now: () => Date.parse('2026-08-08T12:00:00.000Z'),
+    });
+    expect(freeResult.status).toBe(200);
+    expect(await freeResult.json()).toMatchObject({
+      access: 'free',
+      dailyGeneration: null,
+      freeGeneration: {
+        user: { used: 0, limit: 5, remaining: 5 },
+        shared: { used: 0, limit: 50, remaining: 50 },
+      },
+    });
     const result = await handleRequest(statusRequest('correct horse'), env, {
+      generationQuota,
       now: () => Date.parse('2026-08-08T12:00:00.000Z'),
     });
     expect(result.status).toBe(200);
     expect(await result.json()).toMatchObject({
       status: 'ok',
-      cache: 'cloud',
+      access: 'owner',
       dailyGeneration: { used: 0, limit: 7, remaining: 7 },
-      transcriptApiCredits: { availableViaApi: false },
+      freeGeneration: {
+        user: { used: 0, limit: 5, remaining: 5 },
+        shared: { used: 0, limit: 50, remaining: 50 },
+      },
     });
   });
 
-  it('requires the app password on summarize', async () => {
+  it('fails closed when the generation quota service is unavailable', async () => {
+    const env = makeEnv({ DAILY_SUMMARY_LIMIT: '7' });
+    const generationQuota = new FakeGenerationQuota();
+    vi.spyOn(generationQuota, 'read').mockRejectedValue(new Error('quota unavailable'));
+    const statusRequest = (password: string) =>
+      new Request('https://app.example.workers.dev/api/status', {
+        headers: { 'x-app-password': password },
+      });
+
+    const ownerResult = await handleRequest(statusRequest('correct horse'), env, {
+      generationQuota,
+      now: () => Date.parse('2026-08-08T12:00:00.000Z'),
+    });
+    expect(ownerResult.status).toBe(503);
+    expect(await ownerResult.json()).toMatchObject({
+      error: { code: 'QUOTA_UNAVAILABLE' },
+    });
+
+    const freeResult = await handleRequest(statusRequest('wrong'), env, { generationQuota });
+    expect(freeResult.status).toBe(503);
+    expect(await freeResult.json()).toMatchObject({
+      error: { code: 'QUOTA_UNAVAILABLE' },
+    });
+  });
+
+  it('applies monthly limits only to free access while every live generation uses the daily pool', async () => {
     const env = makeEnv();
-    const service = okService();
+    const service = generatingService();
+    const generationQuota = new FakeGenerationQuota();
 
     const missing = await handleRequest(summarizeRequest({ 'x-app-password': '' }), env, {
       service,
+      generationQuota,
     });
-    expect(missing.status).toBe(401);
+    expect(missing.status).toBe(200);
     const wrong = await handleRequest(summarizeRequest({ 'x-app-password': 'nope' }), env, {
       service,
+      generationQuota,
     });
-    expect(wrong.status).toBe(401);
-    expect(service.summarize).not.toHaveBeenCalled();
+    expect(wrong.status).toBe(200);
+    expect(generationQuota.consumeCalls).toBe(2);
 
-    const accepted = await handleRequest(summarizeRequest(), env, { service });
+    const accepted = await handleRequest(summarizeRequest(), env, { service, generationQuota });
     expect(accepted.status).toBe(200);
     expect(await accepted.json()).toEqual(response);
-    expect(service.summarize).toHaveBeenCalledWith({ url: 'https://youtu.be/dQw4w9WgXcQ' });
+    expect(generationQuota.consumeCalls).toBe(3);
+    expect(generationQuota.dailyUsed).toBe(3);
+    expect(generationQuota.globalUsed).toBe(2);
+    expect(service.summarize).toHaveBeenLastCalledWith(
+      { url: 'https://youtu.be/dQw4w9WgXcQ' },
+      expect.objectContaining({ beforeGenerate: expect.any(Function) }),
+    );
+  });
+
+  it('blocks owner and free generation at the atomic daily ceiling', async () => {
+    const env = makeEnv({ DAILY_SUMMARY_LIMIT: '2' });
+    const service = generatingService();
+    const generationQuota = new FakeGenerationQuota();
+    generationQuota.dailyUsed = 2;
+    const now = () => Date.parse('2026-08-08T12:00:00.000Z');
+
+    for (const password of ['correct horse', '']) {
+      const blocked = await handleRequest(summarizeRequest({ 'x-app-password': password }), env, {
+        service,
+        generationQuota,
+        now,
+      });
+      expect(blocked.status).toBe(429);
+      expect(blocked.headers.get('retry-after')).toBe('43200');
+      expect(await blocked.json()).toMatchObject({ error: { code: 'DAILY_LIMIT_REACHED' } });
+    }
+    expect(generationQuota.globalUsed).toBe(0);
+  });
+
+  it('blocks a free network at 5 and all free networks at the shared 50 ceiling', async () => {
+    const env = makeEnv();
+    const service = generatingService();
+    const userQuota = new FakeGenerationQuota();
+    const freeRequest = (ip: string) =>
+      summarizeRequest({ 'x-app-password': '', 'cf-connecting-ip': ip });
+
+    for (let index = 0; index < 5; index += 1) {
+      expect(
+        (
+          await handleRequest(freeRequest('198.51.100.1'), env, {
+            service,
+            generationQuota: userQuota,
+          })
+        ).status,
+      ).toBe(200);
+    }
+    const userBlocked = await handleRequest(freeRequest('198.51.100.1'), env, {
+      service,
+      generationQuota: userQuota,
+    });
+    expect(userBlocked.status).toBe(429);
+    expect(await userBlocked.json()).toMatchObject({
+      error: { code: 'FREE_USER_LIMIT_REACHED' },
+    });
+
+    const globalQuota = new FakeGenerationQuota();
+    globalQuota.globalUsed = 50;
+    const globalBlocked = await handleRequest(freeRequest('198.51.100.2'), env, {
+      service,
+      generationQuota: globalQuota,
+    });
+    expect(globalBlocked.status).toBe(429);
+    expect(await globalBlocked.json()).toMatchObject({
+      error: { code: 'FREE_GLOBAL_LIMIT_REACHED' },
+    });
   });
 
   it('fails closed with a safe error when the password secret is missing', async () => {
@@ -323,6 +453,28 @@ describe('worker request handling', () => {
     expect(await failing.text()).not.toContain('secret-key');
   });
 
+  it('logs safe structured diagnostics for server-side product failures', async () => {
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const result = await handleRequest(summarizeRequest(), makeEnv(), {
+      service: {
+        summarize: vi
+          .fn()
+          .mockRejectedValue(
+            new ProductError(
+              504,
+              'DEADLINE_EXCEEDED',
+              'This video took too long to process. Try again.',
+            ),
+          ),
+      },
+    });
+
+    expect(result.status).toBe(504);
+    expect(errorLog).toHaveBeenCalledWith(expect.stringContaining('"event":"request_failed"'));
+    expect(errorLog).toHaveBeenCalledWith(expect.stringContaining('"code":"DEADLINE_EXCEEDED"'));
+    errorLog.mockRestore();
+  });
+
   it('enforces per-client limits with an exact retry countdown', async () => {
     const env = makeEnv();
     const limiter = new SlidingWindowRateLimiter();
@@ -341,10 +493,12 @@ describe('worker request handling', () => {
 
   it('serves assets with security headers and a CSP on HTML', async () => {
     let assetRequestUrl = '';
+    let assetAuthorization: string | null = '';
     const env = makeEnv({
       ASSETS: {
         fetch: async (request) => {
           assetRequestUrl = request.url;
+          assetAuthorization = request.headers.get('authorization');
           return new Response('<html>PWA</html>', {
             status: 200,
             headers: { 'content-type': 'text/html' },
@@ -353,12 +507,15 @@ describe('worker request handling', () => {
       },
     });
     const page = await handleRequest(
-      new Request('https://app.example.workers.dev/?source=share'),
+      new Request('https://app.example.workers.dev/?source=share', {
+        headers: { authorization: 'Bearer must-not-reach-static-assets' },
+      }),
       env,
     );
     expect(page.status).toBe(200);
     expect(await page.text()).toContain('PWA');
     expect(assetRequestUrl).toBe('https://assets.local/?source=share');
+    expect(assetAuthorization).toBeNull();
     expect(page.headers.get('x-content-type-options')).toBe('nosniff');
     expect(page.headers.get('content-security-policy')).toContain("default-src 'self'");
     expect(page.headers.get('content-security-policy')).toContain(

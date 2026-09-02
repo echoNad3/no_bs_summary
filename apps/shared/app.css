@@ -261,7 +261,8 @@ button:disabled {
   color: var(--color-error);
 }
 
-.status[data-state='success'] {
+.status[data-state='success'],
+.settings-status[data-state='success'] {
   color: var(--color-text);
 }
 
@@ -335,7 +336,7 @@ button:disabled {
   border-top: 0;
 }
 
-.summary-topics strong {
+.summary strong {
   color: var(--color-text);
   font-weight: var(--fw-semibold);
 }
@@ -422,6 +423,27 @@ dialog::backdrop {
 .build-label {
   color: var(--color-text-subtle);
   font-size: var(--fs-caption);
+  text-align: right;
+}
+
+.quota-list {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.quota-row {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--fs-meta);
+}
+
+.quota-row strong {
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
   text-align: right;
 }
 

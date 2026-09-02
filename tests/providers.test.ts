@@ -141,10 +141,10 @@ describe('TranscriptApiProvider', () => {
     await expect(provider.fetchTranscript(ID, ctx())).rejects.toThrow('unexpected format');
   });
 
-  it('retries documented 503 once but does not retry a 500', async () => {
-    const retry503 = vi
+  it('retries temporary server failures once', async () => {
+    const retry502 = vi
       .fn()
-      .mockResolvedValueOnce(json(503, {}, { 'retry-after': '0' }))
+      .mockResolvedValueOnce(json(502, {}, { 'retry-after': '0' }))
       .mockResolvedValueOnce(
         json(200, {
           video_id: ID,
@@ -152,18 +152,18 @@ describe('TranscriptApiProvider', () => {
           transcript: [{ text: 'ok', start: 0, duration: 1 }],
         }),
       );
-    vi.stubGlobal('fetch', retry503);
+    vi.stubGlobal('fetch', retry502);
     const retryContext = ctx();
     await new TranscriptApiProvider('key').fetchTranscript(ID, retryContext);
-    expect(retry503).toHaveBeenCalledTimes(2);
+    expect(retry502).toHaveBeenCalledTimes(2);
     expect(retryContext.transcriptRetries).toBe(1);
 
-    const noRetry500 = vi.fn().mockResolvedValue(json(500, {}));
-    vi.stubGlobal('fetch', noRetry500);
+    const retry500 = vi.fn().mockResolvedValue(json(500, {}, { 'retry-after': '0' }));
+    vi.stubGlobal('fetch', retry500);
     await expect(new TranscriptApiProvider('key').fetchTranscript(ID, ctx())).rejects.toThrow(
       '500',
     );
-    expect(noRetry500).toHaveBeenCalledTimes(1);
+    expect(retry500).toHaveBeenCalledTimes(2);
   });
 
   it('preserves the first HTTP failure when the retry ends in a permanent error', async () => {

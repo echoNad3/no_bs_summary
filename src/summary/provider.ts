@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { RequestContext } from '../request-context.js';
 
 export const REASON_CHARACTER_LIMIT = 1200;
+export const REASON_WORD_LIMIT = 24;
 export const SUMMARY_CHARACTER_LIMIT = 12000;
 
 /** Shape sent to Gemini as JSON Schema. Cross-field rules are checked after parsing. */
@@ -23,12 +24,16 @@ export const summaryResponseSchema = z.object({
     .min(1)
     .max(SUMMARY_CHARACTER_LIMIT)
     .describe(
-      'The detailed summary is the main product. Preserve the important facts, names, events, arguments, numbers, context, and conclusions in direct English. Use clearly separated Markdown topic bullets for a genuinely multi-topic video. Let information density determine length. Attribute disputed claims, never invent details or unseen visuals, and do not repeat or review the verdict reason.',
+      'The detailed summary is the main product. Preserve the important facts, names, events, arguments, numbers, context, and conclusions in direct English. Keep it slightly shorter than an exhaustive recap: use compact paragraphs or labeled Markdown topic bullets, merge closely related points, and drop secondary examples that do not change the point. Attribute disputed claims, never invent details or unseen visuals, and do not repeat or review the verdict reason.',
     ),
 });
 
 export function countSentences(text: string): number {
   return sentenceSegments(text).length;
+}
+
+export function countWords(text: string): number {
+  return text.match(/[\p{L}\p{N}'’-]+/gu)?.length ?? 0;
 }
 
 function sentenceSegments(text: string): string[] {
@@ -61,6 +66,13 @@ export const summarySchema = summaryResponseSchema.superRefine((value, ctx) => {
       message: 'reason must be one sentence',
     });
   }
+  if (countWords(value.reason) > REASON_WORD_LIMIT) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['reason'],
+      message: `reason must be under ${REASON_WORD_LIMIT + 1} words`,
+    });
+  }
   if (value.reason.trim().toLowerCase() === value.summary.trim().toLowerCase()) {
     ctx.addIssue({
       code: 'custom',
@@ -73,13 +85,6 @@ export const summarySchema = summaryResponseSchema.superRefine((value, ctx) => {
       code: 'custom',
       path: ['summary'],
       message: 'output must start with substance, not generic video-summary wording',
-    });
-  }
-  if (containsPolishedAiWording(`${value.reason} ${value.summary}`)) {
-    ctx.addIssue({
-      code: 'custom',
-      path: ['summary'],
-      message: 'output contains polished AI-style wording',
     });
   }
   if (containsVagueReason(value.reason)) {
@@ -132,12 +137,6 @@ export const summarySchema = summaryResponseSchema.superRefine((value, ctx) => {
 function startsLikeAiCopy(text: string): boolean {
   return /^(?:this is\b|(?:the|this)\s+(?:video|episode|content|segment|course|podcast|tutorial)\b)/iu.test(
     text.trim(),
-  );
-}
-
-function containsPolishedAiWording(text: string): boolean {
-  return /\b(?:comprehensive|delves? into|ideal for|in conclusion|ultimately|highly effective|well-paced|well-structured|thought-provoking|unique perspective|fundamental concepts?|perfect for|narrative piece|narrative impact|narrative experience|dialogue-driven narrative|conceptual model|audio experience|useful framework|definitive evidence|fundamentally|serves as a mechanism|collective sum|the value lies in|core value|culminating in|offers? more value|offers? a practical way|benefits? from|could be condensed|feel its impact|cannot replicate|provides? essential practice|primary purpose|meaningful value)\b/iu.test(
-    text,
   );
 }
 
@@ -244,6 +243,5 @@ export interface SummaryProvider {
 }
 
 export interface SummarySource {
-  title: string;
   transcriptLanguage: string;
 }

@@ -32,7 +32,11 @@ describe('browser API client', () => {
     await expect(
       summarizeVideo(
         'https://app.example/',
-        { url: 'https://youtu.be/dQw4w9WgXcQ', language: 'en' },
+        {
+          url: 'https://youtu.be/dQw4w9WgXcQ',
+          title: 'Local display title',
+          language: 'en',
+        },
         { password: 'shared secret' },
       ),
     ).resolves.toEqual(validResponse);
@@ -44,6 +48,10 @@ describe('browser API client', () => {
         headers: expect.objectContaining({ 'x-app-password': 'shared secret' }),
       }),
     );
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      url: 'https://youtu.be/dQw4w9WgXcQ',
+      language: 'en',
+    });
   });
 
   it('distinguishes a caller cancellation from a network failure', async () => {
@@ -99,16 +107,26 @@ describe('browser API client', () => {
       new Response(
         JSON.stringify({
           status: 'ok',
-          cache: 'cloud',
+          access: 'owner',
           dailyGeneration: {
             used: 4,
             limit: 300,
             remaining: 296,
             resetsAt: '2026-08-09T00:00:00.000Z',
           },
-          transcriptApiCredits: {
-            availableViaApi: false,
-            dashboardUrl: 'https://transcriptapi.com/billing',
+          freeGeneration: {
+            user: {
+              used: 1,
+              limit: 5,
+              remaining: 4,
+              resetsAt: '2026-09-01T00:00:00.000Z',
+            },
+            shared: {
+              used: 8,
+              limit: 50,
+              remaining: 42,
+              resetsAt: '2026-09-01T00:00:00.000Z',
+            },
           },
         }),
         { status: 200, headers: { 'content-type': 'application/json' } },
@@ -118,7 +136,11 @@ describe('browser API client', () => {
 
     await expect(
       checkBackend('https://app.example/', { password: 'shared secret' }),
-    ).resolves.toMatchObject({ dailyGeneration: { remaining: 296 } });
+    ).resolves.toMatchObject({
+      access: 'owner',
+      dailyGeneration: { remaining: 296 },
+      freeGeneration: { user: { remaining: 4 }, shared: { remaining: 42 } },
+    });
     expect(fetchMock).toHaveBeenCalledWith(
       'https://app.example/api/status',
       expect.objectContaining({
@@ -126,6 +148,45 @@ describe('browser API client', () => {
         headers: { 'x-app-password': 'shared secret' },
       }),
     );
+  });
+
+  it('rejects missing or internally inconsistent generation counters', async () => {
+    const status = {
+      status: 'ok',
+      access: 'owner',
+      dailyGeneration: {
+        used: 4,
+        limit: 300,
+        remaining: 296,
+        resetsAt: '2026-08-09T00:00:00.000Z',
+      },
+      freeGeneration: {
+        user: { used: 1, limit: 5, remaining: 4, resetsAt: '2026-09-01T00:00:00.000Z' },
+        shared: {
+          used: 8,
+          limit: 50,
+          remaining: 42,
+          resetsAt: '2026-09-01T00:00:00.000Z',
+        },
+      },
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ ...status, freeGeneration: null }))
+      .mockResolvedValueOnce(
+        Response.json({
+          ...status,
+          dailyGeneration: { ...status.dailyGeneration, remaining: 999 },
+        }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(checkBackend('https://app.example/')).rejects.toMatchObject({
+      code: 'INVALID_RESPONSE',
+    });
+    await expect(checkBackend('https://app.example/')).rejects.toMatchObject({
+      code: 'INVALID_RESPONSE',
+    });
   });
 
   it('keeps HTTP status and retry timing on public API errors', async () => {

@@ -19,7 +19,10 @@ export interface SummaryServiceOptions {
   summaryModel: string;
   summaryPromptVersion: string;
   timeoutMs: number;
-  /** Runs after a cache miss, before paid work. */
+}
+
+export interface SummaryRequestOptions {
+  /** Runs after a persistent cache miss, before any paid work. */
   beforeGenerate?: () => Promise<void>;
 }
 
@@ -40,7 +43,10 @@ export class SummaryService {
 
   constructor(private readonly options: SummaryServiceOptions) {}
 
-  async summarize(rawInput: unknown): Promise<SummarizeResponse> {
+  async summarize(
+    rawInput: unknown,
+    requestOptions: SummaryRequestOptions = {},
+  ): Promise<SummarizeResponse> {
     const parsed = summarizeRequestSchema.safeParse(rawInput);
     if (!parsed.success) {
       const issue = parsed.error.issues[0];
@@ -72,7 +78,7 @@ export class SummaryService {
     const inFlight = this.inFlight.get(key);
     if (inFlight) return inFlight;
 
-    const pending = this.generateAndSave(parsed.data, videoId, identity);
+    const pending = this.generateAndSave(parsed.data, videoId, identity, requestOptions);
     this.inFlight.set(key, pending);
     try {
       return await pending;
@@ -95,15 +101,15 @@ export class SummaryService {
     input: SummarizeRequest,
     videoId: string,
     identity: SummaryCacheIdentity,
+    requestOptions: SummaryRequestOptions,
   ): Promise<SummarizeResponse> {
-    await this.options.beforeGenerate?.();
+    await requestOptions.beforeGenerate?.();
 
     let generated: SummarizeResponse;
     try {
       generated = await runSummaryPipeline(
         {
           videoId,
-          title: input.title ?? 'YouTube video',
           language: input.language,
         },
         {
@@ -122,8 +128,16 @@ export class SummaryService {
 
     try {
       await this.options.summaryCache.write(identity, response);
-    } catch {
-      throw new ProductError(503, 'SUMMARY_CACHE_FAILED', 'Could not save the summary.');
+    } catch (error) {
+      // Paid work already succeeded. Returning the result is more useful than
+      // making the user pay again because an optional cache write failed.
+      console.warn(
+        JSON.stringify({
+          event: 'summary_cache_write_failed',
+          videoId,
+          error: error instanceof Error ? error.name : 'UnknownError',
+        }),
+      );
     }
     return response;
   }
@@ -131,7 +145,11 @@ export class SummaryService {
 
 function productErrorFromPipeline(error: PipelineError): ProductError {
   if (error.stage === 'deadline') {
-    return new ProductError(504, 'DEADLINE_EXCEEDED', error.message);
+    return new ProductError(
+      504,
+      'DEADLINE_EXCEEDED',
+      'This video took too long to process. Try again.',
+    );
   }
   if (error.stage === 'transcript') {
     return new ProductError(502, 'TRANSCRIPT_FAILED', error.message);

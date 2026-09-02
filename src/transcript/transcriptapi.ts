@@ -32,7 +32,7 @@ const responseSchema = z.object({
 });
 
 const TRANSCRIPTAPI_RETRY_POLICY = {
-  isRetryableStatus: (status: number) => status === 408 || status === 429 || status === 503,
+  isRetryableStatus: (status: number) => status === 408 || status === 429 || status >= 500,
   defaultDelayMs: 1000,
 };
 

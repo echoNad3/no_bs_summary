@@ -19,7 +19,6 @@ export class PipelineError extends Error {
 
 export interface PipelineInput {
   videoId: string;
-  title: string;
   language: string;
 }
 
@@ -82,7 +81,6 @@ async function fetchAndSummarize(
     const summaryStartedAt = performance.now();
     try {
       const summary = await options.summaryProvider.summarize(transcript.text, context, {
-        title: input.title,
         transcriptLanguage: transcript.language,
       });
       assertWithinDeadline(context.deadlineAt, options.timeoutMs);
@@ -123,7 +121,6 @@ async function summarizeCached(
   try {
     try {
       const summary = await options.summaryProvider.summarize(transcript.text, context, {
-        title: input.title,
         transcriptLanguage: transcript.language,
       });
       assertWithinDeadline(context.deadlineAt, options.timeoutMs);

@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { SummaryResult } from '../apps/shared/api-client.js';
 import { summaryClipboardText } from '../apps/shared/summary-actions.js';
-import { parseSummaryBlocks } from '../apps/shared/summary-format.js';
+import { parseSummaryBlocks, stripStrongMarkdown } from '../apps/shared/summary-format.js';
 
 describe('local MVP manifests', () => {
   it('declares an installable PWA with an Android URL share target', async () => {
@@ -77,7 +77,7 @@ describe('local MVP manifests', () => {
     expect(manifest).toMatchObject({
       manifest_version: 3,
       name: 'No BS Summary',
-      version: '0.6.1',
+      version: '0.7.0',
       minimum_chrome_version: '114',
       permissions: ['sidePanel', 'storage'],
       background: { service_worker: 'background.js', type: 'module' },
@@ -107,6 +107,10 @@ describe('local MVP manifests', () => {
     expect(privacy).toMatch(/Chrome\s+Web Store User Data Policy/u);
     expect(privacy).toContain('The URL and title of the active YouTube video.');
     expect(privacy).toContain('shared app password');
+    expect(privacy).toContain('public network address');
+    expect(privacy).toContain('keyed hash');
+    expect(privacy).toMatch(/only the text-size setting\s+may use Chrome Sync/u);
+    expect(privacy).toMatch(/Video titles stay on the device\s+for display and copying/u);
     expect(privacy).toMatch(/Full transcripts and the app password are not\s+stored/u);
   });
 
@@ -121,11 +125,39 @@ describe('local MVP manifests', () => {
     ]);
   });
 
+  it('keeps mixed paragraphs, continued bullets, and nested bold text renderable', () => {
+    expect(
+      parseSummaryBlocks(
+        'Short intro.\n\n- **Training research:** The studies mostly use beginners.\n  **Main caveat:** Results may not transfer to advanced lifters.\n- **Programming philosophy**: The plan rotates hard techniques.\n\nShort conclusion.',
+      ),
+    ).toEqual([
+      { kind: 'paragraph', text: 'Short intro.' },
+      {
+        kind: 'topic',
+        label: 'Training research',
+        body: 'The studies mostly use beginners. **Main caveat:** Results may not transfer to advanced lifters.',
+      },
+      {
+        kind: 'topic',
+        label: 'Programming philosophy',
+        body: 'The plan rotates hard techniques.',
+      },
+      { kind: 'paragraph', text: 'Short conclusion.' },
+    ]);
+    expect(stripStrongMarkdown('A **nested label** and \\*literal star\\*.')).toBe(
+      'A nested label and *literal star*.',
+    );
+    expect(stripStrongMarkdown('An unmatched **marker never leaks.')).toBe(
+      'An unmatched marker never leaks.',
+    );
+  });
+
   it('copies a clean, useful summary with context and no markdown decoration', () => {
     const response: SummaryResult = {
       verdict: 'WATCH',
       reason: 'Specific, useful, and concise.',
-      summary: '- **First topic:** One fact.\n\n- **Second topic:** Another fact.',
+      summary:
+        '- **First topic:** One fact.\n  **Extra detail:** Another fact.\n\n- **Second topic:** Final fact.',
       videoId: 'dQw4w9WgXcQ',
       language: 'en',
       source: 'CACHED',
@@ -139,13 +171,13 @@ describe('local MVP manifests', () => {
         url: 'https://youtu.be/dQw4w9WgXcQ',
       }),
     ).toBe(
-      'Useful video\n\nWATCH: Specific, useful, and concise.\n\nFirst topic: One fact.\n\nSecond topic: Another fact.\n\nhttps://youtu.be/dQw4w9WgXcQ\n\nSummarized with No BS Summary',
+      'Useful video\n\nWATCH: Specific, useful, and concise.\n\nFirst topic: One fact. Extra detail: Another fact.\n\nSecond topic: Final fact.\n\nhttps://youtu.be/dQw4w9WgXcQ\n\nSummarized with No BS Summary',
     );
   });
 
   it('precaches the built JS and CSS needed for a first offline launch', async () => {
     const worker = await fs.readFile('apps/pwa/public/sw.js', 'utf8');
-    expect(worker).toContain("const CACHE = 'nbs-shell-v10'");
+    expect(worker).toContain("const CACHE = 'nbs-shell-v11'");
     expect(worker).toContain("event.data?.type === 'SKIP_WAITING'");
     expect(worker).toContain('/\\.(?:css|js)$/u');
     expect(worker).toContain("'/icons/icon-192.svg'");
@@ -163,6 +195,10 @@ describe('local MVP manifests', () => {
       expect(html).toContain('id="retry-request"');
       expect(html).toContain('id="copy-diagnostics"');
       expect(html).toContain('id="test-connection"');
+      expect(html).toContain('id="free-user-usage"');
+      expect(html).toContain('id="free-shared-usage"');
+      expect(html).toContain('Passwordless access this month');
+      expect(html).toContain('Your network');
       expect(html).toContain('id="save-settings"');
       expect(html).toContain('id="text-size"');
       expect(html).toContain('id="video-thumbnail"');
@@ -174,6 +210,7 @@ describe('local MVP manifests', () => {
       expect(html).not.toContain('id="reading-stats"');
       expect(html).not.toContain('id="meta"');
       expect(html).not.toContain('&#x24d8;');
+      expect(html).not.toMatch(/\bdemo\b/iu);
       expect(html).not.toMatch(/YouTube, without the padding|Cached summaries reopen instantly/iu);
       expect(html).not.toMatch(
         /These preferences stay on this device|Must match the server password/iu,

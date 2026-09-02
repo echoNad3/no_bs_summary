@@ -4,7 +4,7 @@
   "name": "no-bs-summary",
   "main": "src/worker.ts",
   "preview_urls": false,
-  "compatibility_date": "2026-08-08",
+  "compatibility_date": "2026-08-29",
   "compatibility_flags": ["nodejs_compat"],
   "assets": {
     "directory": "./dist/pwa",
@@ -19,13 +19,21 @@
       "id": "5787832cee5f4475bc64d748b574b4f0",
     },
   ],
+  "exports": {
+    "GenerationQuota": { "type": "durable-object", "storage": "sqlite" },
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "GENERATION_QUOTA", "class_name": "GenerationQuota" }],
+  },
   "secrets": {
     "required": ["APP_PASSWORD", "GEMINI_API_KEY", "TRANSCRIPTAPI_API_KEY"],
   },
   "vars": {
     "GEMINI_MODEL": "gemini-3.1-flash-lite",
-    "END_TO_END_TIMEOUT_MS": "15000",
+    "END_TO_END_TIMEOUT_MS": "60000",
     "DAILY_SUMMARY_LIMIT": "300",
+    "FREE_USER_MONTHLY_LIMIT": "5",
+    "FREE_GLOBAL_MONTHLY_LIMIT": "50",
   },
   "observability": {
     "enabled": true,

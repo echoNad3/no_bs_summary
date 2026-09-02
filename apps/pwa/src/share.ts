@@ -1,3 +1,5 @@
+import { firstYouTubeUrl } from '../../shared/youtube-input.js';
+
 export interface SharedValues {
   url: string;
   title: string;
@@ -15,7 +17,5 @@ export function readSharedValues(search: string): SharedValues {
     wasShared: url !== '' || text !== '' || params.has('title'),
   };
 }
-
-import { firstYouTubeUrl } from '../../shared/youtube-input.js';
 
 export { firstYouTubeUrl } from '../../shared/youtube-input.js';

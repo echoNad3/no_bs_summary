@@ -53,6 +53,9 @@ describe('client quality-of-life state', () => {
     expect(firstYouTubeUrl('Watch this https://m.youtube.com/watch?v=dQw4w9WgXcQ now')).toBe(
       'https://m.youtube.com/watch?v=dQw4w9WgXcQ',
     );
+    expect(firstYouTubeUrl('Watch [https://youtu.be/dQw4w9WgXcQ].')).toBe(
+      'https://youtu.be/dQw4w9WgXcQ',
+    );
     expect(youtubeThumbnailUrl('https://youtu.be/dQw4w9WgXcQ?si=tracking')).toBe(
       'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
     );

@@ -1,23 +1,27 @@
 import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright';
 
 const projectDir = process.cwd();
+const pwaDir = path.resolve(projectDir, 'dist/pwa');
 const extensionDir = path.resolve(projectDir, 'dist/extension');
 const resultsDir = path.resolve(projectDir, 'results');
 const youtubeUrl = 'https://www.youtube.com/watch?v=EwMSGdE2bOQ';
 const secondYoutubeUrl = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
 const productionApiUrl = 'https://no-bs-summary.echonad3.workers.dev/api/summarize';
 const productionStatusUrl = 'https://no-bs-summary.echonad3.workers.dev/api/status';
-const localApiUrl = 'http://127.0.0.1:8787/api/summarize';
+let baseUrl = '';
+let localApiUrl = '';
+let localStatusUrl = '';
 const summaryFixture = {
   verdict: 'SKIM',
   reason: 'The useful updates are specific, but the commentary circles around them.',
   summary: [
-    "- **Wizard Detective:** The segment explains the project's mystery structure, the clues already shown, and why its restrained presentation is more interesting than a conventional lore dump.",
-    "- **Kane Pixels:** The discussion separates the creator's newer work from the familiar Backrooms material and points out the production choices that make the environments feel unusually physical.",
+    "- **Wizard Detective:** The segment explains the project's mystery structure and the clues already shown.\n  **Main appeal:** Its restrained presentation is more interesting than a conventional lore dump.",
+    "- **Kane Pixels**: The discussion separates the creator's newer work from the familiar Backrooms material and points out the production choices that make the environments feel unusually physical.",
     '- **Backrooms projects:** Several adaptations are compared by how well they preserve uncertainty instead of replacing it with an oversized monster catalogue and repetitive chase scenes.',
     '- **Release updates:** The concrete announcements, delays, and production notes are collected in one place so the useful facts can be skimmed without sitting through every tangent.',
     '- **What to skip:** Repeated reactions, sponsor-like detours, and speculative loops add runtime without changing the core assessment of any project mentioned in the episode.',
@@ -29,6 +33,7 @@ const summaryFixture = {
   retries: { transcript: 0, summary: 0 },
 };
 const userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'nbs-extension-smoke-'));
+const server = createStaticServer(pwaDir);
 const startedAt = new Date().toISOString();
 
 const report = {
@@ -49,6 +54,16 @@ let failure;
 
 try {
   await fs.access(path.join(extensionDir, 'manifest.json'));
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Static test server did not start.');
+  baseUrl = `http://127.0.0.1:${address.port}`;
+  localApiUrl = `${baseUrl}/api/summarize`;
+  localStatusUrl = `${baseUrl}/api/status`;
+
   context = await chromium.launchPersistentContext(userDataDir, {
     channel: 'chromium',
     headless: true,
@@ -122,6 +137,36 @@ try {
       body: JSON.stringify(summaryFixture),
     });
   });
+  await context.route(localStatusUrl, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        status: 'ok',
+        access: 'owner',
+        dailyGeneration: {
+          used: 0,
+          limit: 300,
+          remaining: 300,
+          resetsAt: '2026-08-30T00:00:00.000Z',
+        },
+        freeGeneration: {
+          user: {
+            used: 0,
+            limit: 5,
+            remaining: 5,
+            resetsAt: '2026-09-01T00:00:00.000Z',
+          },
+          shared: {
+            used: 0,
+            limit: 50,
+            remaining: 50,
+            resetsAt: '2026-09-01T00:00:00.000Z',
+          },
+        },
+      }),
+    });
+  });
 
   let worker = context.serviceWorkers()[0];
   if (!worker) worker = await context.waitForEvent('serviceworker', { timeout: 10_000 });
@@ -144,18 +189,23 @@ try {
     });
   });
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], {
-    origin: 'http://127.0.0.1:8787',
+    origin: baseUrl,
   });
-  await pwaPage.goto('http://127.0.0.1:8787/');
+  await pwaPage.goto(`${baseUrl}/`);
   await pwaPage.locator('h1').waitFor({ state: 'visible' });
   assert.equal(await pwaPage.locator('h1').innerText(), 'No BS Summary');
   const pwaSettings = pwaPage.locator('#settings-dialog');
+  assert.equal(await pwaSettings.isVisible(), false);
+  await pwaPage.locator('#settings-button').click();
   assert.equal(await pwaSettings.isVisible(), true);
   await pwaPage.locator('#password').fill('test-password');
   await pwaPage.locator('#text-size').selectOption('large');
   assert.equal(await pwaPage.locator('html').getAttribute('data-text-size'), 'large');
   await pwaPage.locator('#test-connection').click();
-  await waitForText(pwaPage.locator('#connection-status'), 'Connected · 300/300 remaining');
+  await waitForText(pwaPage.locator('#connection-status'), 'Connected · 300/300 daily remaining');
+  assert.equal(await pwaPage.locator('#connection-status').getAttribute('data-state'), 'success');
+  await waitForText(pwaPage.locator('#free-user-usage'), '5/5 left');
+  await waitForText(pwaPage.locator('#free-shared-usage'), '50/50 left');
   assert.equal(
     await pwaPage.locator('#settings-dialog a[href*="transcriptapi.com/billing"]').isVisible(),
     true,
@@ -193,12 +243,12 @@ try {
   assert.equal(await pwaPage.locator('#url').inputValue(), youtubeUrl);
 
   const cancelPage = await context.newPage();
-  await cancelPage.goto('http://127.0.0.1:8787/');
+  await cancelPage.goto(`${baseUrl}/`);
   let releaseHeldRequest;
   const heldRequest = new Promise((resolve) => {
     releaseHeldRequest = resolve;
   });
-  await cancelPage.route('http://127.0.0.1:8787/api/summarize', async (route) => {
+  await cancelPage.route(localApiUrl, async (route) => {
     await heldRequest;
     try {
       await route.fulfill({
@@ -260,16 +310,26 @@ try {
       headers: { 'access-control-allow-origin': '*' },
       body: JSON.stringify({
         status: 'ok',
-        cache: 'cloud',
+        access: 'owner',
         dailyGeneration: {
           used: 4,
           limit: 300,
           remaining: 296,
           resetsAt: '2026-08-09T00:00:00.000Z',
         },
-        transcriptApiCredits: {
-          availableViaApi: false,
-          dashboardUrl: 'https://transcriptapi.com/billing',
+        freeGeneration: {
+          user: {
+            used: 1,
+            limit: 5,
+            remaining: 4,
+            resetsAt: '2026-09-01T00:00:00.000Z',
+          },
+          shared: {
+            used: 8,
+            limit: 50,
+            remaining: 42,
+            resetsAt: '2026-09-01T00:00:00.000Z',
+          },
         },
       }),
     });
@@ -293,14 +353,25 @@ try {
   await waitForValue(urlInput, youtubeUrl);
   assert.equal(await titleInput.inputValue(), 'PyroLIVE Smoke');
   assert.equal(await detectedTitle.innerText(), 'PyroLIVE Smoke');
-  assert.equal(await settingsDialog.isVisible(), true);
+  assert.equal(await settingsDialog.isVisible(), false);
   assert.equal(await urlInput.isHidden(), true);
+  await sidePanelPage.locator('#settings-button').click();
+  assert.equal(await settingsDialog.isVisible(), true);
   await sidePanelPage.locator('#password').fill('test-password');
   await sidePanelPage.locator('#video-thumbnail').waitFor({ state: 'visible' });
   await sidePanelPage.locator('#text-size').selectOption('extra-large');
   assert.equal(await sidePanelPage.locator('html').getAttribute('data-text-size'), 'extra-large');
   await sidePanelPage.locator('#test-connection').click();
-  await waitForText(sidePanelPage.locator('#connection-status'), 'Connected · 296/300 remaining');
+  await waitForText(
+    sidePanelPage.locator('#connection-status'),
+    'Connected · 296/300 daily remaining',
+  );
+  assert.equal(
+    await sidePanelPage.locator('#connection-status').getAttribute('data-state'),
+    'success',
+  );
+  await waitForText(sidePanelPage.locator('#free-user-usage'), '4/5 left');
+  await waitForText(sidePanelPage.locator('#free-shared-usage'), '42/50 left');
   assert.equal(
     await sidePanelPage
       .locator('#settings-dialog a[href*="transcriptapi.com/billing"]')
@@ -447,7 +518,7 @@ try {
   const sharedPage = await context.newPage();
   await sharedPage.setViewportSize({ width: 412, height: 915 });
   await sharedPage.goto(
-    `http://127.0.0.1:8787/share?title=Shared+video+-+YouTube&text=${encodeURIComponent(youtubeUrl)}`,
+    `${baseUrl}/share?title=Shared+video+-+YouTube&text=${encodeURIComponent(youtubeUrl)}`,
   );
   await waitForValue(sharedPage.locator('#url'), youtubeUrl);
   assert.equal(await sharedPage.locator('#title').inputValue(), 'Shared video');
@@ -457,7 +528,7 @@ try {
 
   const desktopPage = await context.newPage();
   await desktopPage.setViewportSize({ width: 1440, height: 1000 });
-  await desktopPage.goto('http://127.0.0.1:8787/');
+  await desktopPage.goto(`${baseUrl}/`);
   await desktopPage.locator('h1').waitFor({ state: 'visible' });
   await assertNoHorizontalOverflow(desktopPage);
   const desktopShellWidth = await desktopPage
@@ -468,10 +539,12 @@ try {
 
   await pwaPage.evaluate(() => navigator.serviceWorker.ready);
   await context.setOffline(true);
-  await pwaPage.reload({ waitUntil: 'domcontentloaded' });
-  assert.equal(await pwaPage.locator('h1').innerText(), 'No BS Summary');
+  await pwaPage.waitForFunction(() => !navigator.onLine);
   await waitForText(pwaPage.locator('#status'), 'Offline. Summaries need a connection.');
   assert.equal(await pwaPage.locator('#submit').isDisabled(), true);
+  await pwaPage.reload({ waitUntil: 'domcontentloaded' });
+  assert.equal(await pwaPage.locator('h1').innerText(), 'No BS Summary');
+  assert.equal(await pwaPage.locator('html').getAttribute('data-text-size'), 'large');
   await context.setOffline(false);
   report.checks.firstOfflineLaunch = true;
 
@@ -493,7 +566,7 @@ try {
   const unexpectedConsoleErrors = consoleErrors.filter(
     ({ text, url }) =>
       !/Failed to load resource.*400 \(Bad Request\)/iu.test(text) &&
-      !(url === 'http://127.0.0.1:8787/' && /ERR_INTERNET_DISCONNECTED/iu.test(text)),
+      !(url === `${baseUrl}/` && /ERR_INTERNET_DISCONNECTED/iu.test(text)),
   );
   assert.deepEqual(unexpectedConsoleErrors, []);
   report.checks.consoleAndNetworkErrors = true;
@@ -503,6 +576,7 @@ try {
   report.failure = error instanceof Error ? (error.stack ?? error.message) : String(error);
 } finally {
   if (context) await context.close();
+  if (server.listening) await new Promise((resolve) => server.close(resolve));
   await fs.rm(userDataDir, { recursive: true, force: true });
   report.profileRemoved = true;
   report.finishedAt = new Date().toISOString();
@@ -515,6 +589,47 @@ try {
 }
 
 if (failure) throw failure;
+
+function createStaticServer(root) {
+  return createServer(async (request, response) => {
+    const url = new URL(request.url ?? '/', 'http://localhost');
+    const requested =
+      url.pathname === '/' || url.pathname === '/share' ? 'index.html' : url.pathname.slice(1);
+    const resolved = path.resolve(root, requested);
+    const safeRoot = path.resolve(root) + path.sep;
+    if (resolved !== path.resolve(root, 'index.html') && !resolved.startsWith(safeRoot)) {
+      response.writeHead(400).end();
+      return;
+    }
+    try {
+      const body = await fs.readFile(resolved);
+      response.setHeader('Content-Type', contentType(resolved));
+      response.end(body);
+    } catch {
+      response.writeHead(404).end();
+    }
+  });
+}
+
+function contentType(file) {
+  switch (path.extname(file)) {
+    case '.html':
+      return 'text/html; charset=utf-8';
+    case '.js':
+      return 'text/javascript; charset=utf-8';
+    case '.css':
+      return 'text/css; charset=utf-8';
+    case '.json':
+    case '.webmanifest':
+      return 'application/json';
+    case '.png':
+      return 'image/png';
+    case '.svg':
+      return 'image/svg+xml';
+    default:
+      return 'application/octet-stream';
+  }
+}
 
 async function waitForValue(locator, expected, timeoutMs = 5_000) {
   const deadline = Date.now() + timeoutMs;
@@ -663,4 +778,6 @@ function assertSummaryOutput({ verdict, reason, summary }) {
 async function assertDetailedTopics(page) {
   const topicItems = page.locator('#summary .summary-topics > li');
   assert.ok((await topicItems.count()) >= 3);
+  const firstTopicBoldText = await topicItems.first().locator('strong').allInnerTexts();
+  assert.deepEqual(firstTopicBoldText, ['Wizard Detective: ', 'Main appeal:']);
 }

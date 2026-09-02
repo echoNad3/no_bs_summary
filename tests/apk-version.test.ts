@@ -13,12 +13,9 @@ describe('Android update versioning', () => {
   });
 
   it('accepts complete positive release metadata', () => {
-    expect(parseLatestApk({ build: 12, publishedAt: 500 })).toEqual({
-      build: 12,
-      publishedAt: 500,
-    });
-    expect(parseLatestApk({ build: 0, publishedAt: 500 })).toBeNull();
-    expect(parseLatestApk({ build: 12 })).toBeNull();
+    expect(parseLatestApk({ build: 12 })).toEqual({ build: 12 });
+    expect(parseLatestApk({ build: 0 })).toBeNull();
+    expect(parseLatestApk({ build: '12' })).toBeNull();
   });
 
   it('installs only the current downloaded build and never a downgrade', () => {

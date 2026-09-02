@@ -6,6 +6,7 @@ const ID = 'dQw4w9WgXcQ';
 describe('extractVideoId', () => {
   it('parses a normal watch link', () => {
     expect(extractVideoId(`https://www.youtube.com/watch?v=${ID}`)).toBe(ID);
+    expect(extractVideoId(`https://www.youtube.com/watch/?v=${ID}`)).toBe(ID);
   });
 
   it('parses a youtu.be short link', () => {
@@ -53,5 +54,6 @@ describe('extractVideoId', () => {
 
   it('rejects non-web protocols', () => {
     expect(() => extractVideoId(`ftp://youtube.com/watch?v=${ID}`)).toThrow('https://');
+    expect(() => extractVideoId(`http://youtube.com/watch?v=${ID}`)).toThrow('https://');
   });
 });

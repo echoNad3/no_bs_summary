@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "No BS Summary",
   "description": "Blunt summaries of captioned YouTube videos.",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "minimum_chrome_version": "114",
   "permissions": ["sidePanel", "storage"],
   "host_permissions": [

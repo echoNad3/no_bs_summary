@@ -21,22 +21,28 @@ export interface SummaryResult {
   retries: { transcript: number; summary: number };
 }
 
-export interface DailyGenerationStatus {
+export interface GenerationUsageStatus {
   used: number;
   limit: number;
   remaining: number;
   resetsAt: string;
 }
 
-export interface BackendStatus {
-  status: 'ok';
-  cache: 'cloud' | 'local';
-  dailyGeneration: DailyGenerationStatus | null;
-  transcriptApiCredits: {
-    availableViaApi: false;
-    dashboardUrl: string;
-  };
+export interface FreeGenerationStatus {
+  user: GenerationUsageStatus;
+  shared: GenerationUsageStatus;
 }
+
+interface BackendStatusBase {
+  status: 'ok';
+  freeGeneration: FreeGenerationStatus;
+}
+
+export type BackendStatus = BackendStatusBase &
+  (
+    | { access: 'owner'; dailyGeneration: GenerationUsageStatus }
+    | { access: 'free'; dailyGeneration: null }
+  );
 
 export class ApiClientError extends Error {
   constructor(
@@ -54,11 +60,11 @@ export interface SummarizeOptions {
   signal?: AbortSignal;
   /** Shared app password for the hosted backend. Sent only when non-empty. */
   password?: string;
-  /** Client-side ceiling; intentionally longer than the backend's 15 second deadline. */
+  /** Client-side ceiling; keeps a 10-second transport buffer above the backend deadline. */
   timeoutMs?: number;
 }
 
-const DEFAULT_TIMEOUT_MS = 20_000;
+export const DEFAULT_SUMMARY_REQUEST_TIMEOUT_MS = 70_000;
 
 export async function summarizeVideo(
   apiBase: string,
@@ -69,7 +75,7 @@ export async function summarizeVideo(
   if (options.password) headers['x-app-password'] = options.password;
 
   const controller = new AbortController();
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_SUMMARY_REQUEST_TIMEOUT_MS;
   const timeout = globalThis.setTimeout(() => controller.abort('timeout'), timeoutMs);
   const cancelFromCaller = () => controller.abort(options.signal?.reason);
   if (options.signal?.aborted) cancelFromCaller();
@@ -82,7 +88,10 @@ export async function summarizeVideo(
       response = await fetch(`${normalizedBase}/api/summarize`, {
         method: 'POST',
         headers,
-        body: JSON.stringify(input),
+        // Titles are presentation-only. Keeping them out of the shared backend
+        // prevents the first caller from poisoning a cached summary with a
+        // misleading or instruction-like title.
+        body: JSON.stringify({ url: input.url, language: input.language }),
         signal: controller.signal,
       });
     } catch {
@@ -138,7 +147,7 @@ export async function checkBackend(
   const controller = new AbortController();
   const timeout = globalThis.setTimeout(
     () => controller.abort('timeout'),
-    options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    options.timeoutMs ?? DEFAULT_SUMMARY_REQUEST_TIMEOUT_MS,
   );
 
   try {
@@ -203,34 +212,63 @@ export function isSummaryResult(value: unknown): value is SummaryResult {
     (candidate?.verdict === 'WATCH' ||
       candidate?.verdict === 'SKIM' ||
       candidate?.verdict === 'SKIP') &&
-    typeof candidate.reason === 'string' &&
-    typeof candidate.summary === 'string' &&
+    isNonemptyString(candidate.reason) &&
+    isNonemptyString(candidate.summary) &&
     typeof candidate.videoId === 'string' &&
+    /^[A-Za-z0-9_-]{11}$/u.test(candidate.videoId) &&
     typeof candidate.language === 'string' &&
+    /^(?:asr-)?[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/u.test(candidate.language) &&
     (candidate.source === 'LIVE' || candidate.source === 'CACHED') &&
-    typeof timing?.summaryMs === 'number' &&
-    typeof retries?.transcript === 'number' &&
-    typeof retries.summary === 'number'
+    isNonnegativeInteger(timing?.summaryMs) &&
+    isOptionalNonnegativeInteger(timing?.transcriptMs) &&
+    isOptionalNonnegativeInteger(timing?.totalMs) &&
+    isNonnegativeInteger(retries?.transcript) &&
+    isNonnegativeInteger(retries?.summary)
   );
 }
 
 function isBackendStatus(value: unknown): value is BackendStatus {
   const candidate = asObject(value);
   const daily = asObject(candidate?.dailyGeneration);
-  const credits = asObject(candidate?.transcriptApiCredits);
-  const validDaily =
-    candidate?.dailyGeneration === null ||
-    (typeof daily?.used === 'number' &&
-      typeof daily.limit === 'number' &&
-      typeof daily.remaining === 'number' &&
-      typeof daily.resetsAt === 'string');
+  const free = asObject(candidate?.freeGeneration);
+  const freeUser = asObject(free?.user);
+  const freeShared = asObject(free?.shared);
   return (
     candidate?.status === 'ok' &&
-    (candidate.cache === 'cloud' || candidate.cache === 'local') &&
-    validDaily &&
-    credits?.availableViaApi === false &&
-    typeof credits.dashboardUrl === 'string'
+    (candidate.access === 'owner' || candidate.access === 'free') &&
+    (candidate.access === 'owner'
+      ? isGenerationStatus(daily)
+      : candidate.dailyGeneration === null) &&
+    isGenerationStatus(freeUser) &&
+    isGenerationStatus(freeShared)
   );
+}
+
+function isGenerationStatus(value: Record<string, unknown> | undefined): boolean {
+  return (
+    isNonnegativeInteger(value?.used) &&
+    isPositiveInteger(value?.limit) &&
+    isNonnegativeInteger(value?.remaining) &&
+    value.remaining === Math.max(0, value.limit - value.used) &&
+    typeof value.resetsAt === 'string' &&
+    Number.isFinite(Date.parse(value.resetsAt))
+  );
+}
+
+function isNonemptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim() !== '';
+}
+
+function isNonnegativeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
+}
+
+function isOptionalNonnegativeInteger(value: unknown): boolean {
+  return value === undefined || isNonnegativeInteger(value);
 }
 
 function retryAfterSeconds(response: Response): number | undefined {

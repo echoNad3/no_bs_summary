@@ -22,7 +22,7 @@ function service(
   overrides: {
     transcript?: TranscriptProvider;
     summary?: SummaryProvider;
-    beforeGenerate?: () => Promise<void>;
+    summaryCache?: SummaryCache;
   } = {},
 ) {
   const transcript: TranscriptProvider =
@@ -52,11 +52,10 @@ function service(
       transcriptProvider: transcript,
       summaryProvider: summary,
       cache: new MemoryTranscriptStore(),
-      summaryCache: new MemorySummaryCache(),
+      summaryCache: overrides.summaryCache ?? new MemorySummaryCache(),
       summaryModel: 'gemini-3.1-flash-lite',
       summaryPromptVersion: 'summary-first-test-v1',
       timeoutMs: 15000,
-      beforeGenerate: overrides.beforeGenerate,
     }),
     transcript,
     summary,
@@ -65,7 +64,7 @@ function service(
 
 describe('SummaryService', () => {
   it('runs the existing pipeline and returns only safe product fields', async () => {
-    const { instance } = service();
+    const { instance, summary } = service();
     const result = await instance.summarize({
       url: 'https://youtu.be/dQw4w9WgXcQ',
       title: 'A video',
@@ -80,6 +79,9 @@ describe('SummaryService', () => {
     });
     expect(result).not.toHaveProperty('transcript');
     expect(JSON.stringify(result)).not.toContain('API_KEY');
+    expect(summary.summarize).toHaveBeenCalledWith('Useful caption text.', expect.any(Object), {
+      transcriptLanguage: 'en',
+    });
   });
 
   it('returns the exact saved response to PWA- and extension-shaped requests', async () => {
@@ -101,14 +103,14 @@ describe('SummaryService', () => {
   });
 
   it('runs the live-generation guard only on a persistent summary-cache miss', async () => {
-    const beforeGenerate = vi.fn().mockResolvedValue(undefined);
-    const { instance } = service({ beforeGenerate });
+    const requestGuard = vi.fn().mockResolvedValue(undefined);
+    const { instance } = service();
     const input = { url: 'https://youtu.be/dQw4w9WgXcQ', language: 'en' };
 
-    await instance.summarize(input);
-    await instance.summarize(input);
+    await instance.summarize(input, { beforeGenerate: requestGuard });
+    await instance.summarize(input, { beforeGenerate: requestGuard });
 
-    expect(beforeGenerate).toHaveBeenCalledTimes(1);
+    expect(requestGuard).toHaveBeenCalledTimes(1);
   });
 
   it('keeps different caption languages in separate summary-cache entries', async () => {
@@ -195,5 +197,34 @@ describe('SummaryService', () => {
     await expect(
       service({ summary }).instance.summarize({ url: 'https://youtu.be/dQw4w9WgXcQ' }),
     ).rejects.toMatchObject({ code: 'SUMMARY_FAILED', statusCode: 502 });
+  });
+
+  it('returns a stable, useful public error when the provider deadline is reached', async () => {
+    const summary = {
+      name: 'gemini',
+      summarize: vi.fn().mockRejectedValue(new DOMException('aborted', 'AbortError')),
+    } satisfies SummaryProvider;
+
+    await expect(
+      service({ summary }).instance.summarize({ url: 'https://youtu.be/dQw4w9WgXcQ' }),
+    ).rejects.toMatchObject({
+      statusCode: 504,
+      code: 'DEADLINE_EXCEEDED',
+      message: 'This video took too long to process. Try again.',
+    } satisfies Partial<ProductError>);
+  });
+
+  it('returns completed paid work even when the optional cache write fails', async () => {
+    const summaryCache: SummaryCache = {
+      read: vi.fn().mockResolvedValue(undefined),
+      write: vi.fn().mockRejectedValue(new Error('KV unavailable')),
+    };
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    await expect(
+      service({ summaryCache }).instance.summarize({ url: 'https://youtu.be/dQw4w9WgXcQ' }),
+    ).resolves.toMatchObject({ verdict: 'SKIP', summary: 'One useful fact.' });
+    expect(warning).toHaveBeenCalledWith(expect.stringContaining('summary_cache_write_failed'));
+    warning.mockRestore();
   });
 });
