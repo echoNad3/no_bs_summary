@@ -219,7 +219,8 @@ describe('local MVP manifests', () => {
     expect(pwa).toContain('id="share-summary"');
     expect(pwa).toContain('id="app-update-action"');
     expect(pwa).toContain('id="android-update-status"');
-    expect(pwa).toContain('id="install-pwa"');
+    expect(pwa).not.toContain('id="install-pwa"');
+    expect(pwa).not.toContain('Install web app');
     expect(pwa).toContain(
       'https://chromewebstore.google.com/detail/no-bs-summary/fnphiadakmbpimdclfohfpbbliejhnmc',
     );

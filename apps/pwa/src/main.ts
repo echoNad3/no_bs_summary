@@ -37,11 +37,6 @@ type AppUpdateUiState =
   | AppUpdateState
   | { status: 'checking' | 'unsupported'; progress: number; detail?: string; build?: number };
 
-interface InstallPromptEvent extends Event {
-  prompt(): Promise<void>;
-  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
-}
-
 const form = requiredElement<HTMLFormElement>('summary-form');
 const urlInput = requiredElement<HTMLInputElement>('url');
 const titleInput = requiredElement<HTMLInputElement>('title');
@@ -78,7 +73,6 @@ const appUpdateProgress = requiredElement<HTMLElement>('app-update-progress');
 const appUpdateProgressTrack = appUpdateProgress.querySelector<HTMLElement>('[role="progressbar"]');
 const appUpdateProgressFill = requiredElement<HTMLElement>('app-update-progress-fill');
 const appUpdateProgressValue = requiredElement<HTMLElement>('app-update-progress-value');
-const installPwaButton = requiredElement<HTMLButtonElement>('install-pwa');
 
 let activeRequest: AbortController | undefined;
 let renderedSummary: RenderedSummary | undefined;
@@ -94,7 +88,6 @@ let downloadReadyTimer: number | undefined;
 let downloadStarted = false;
 let updaterUnsupported = false;
 let lastVersionCheckAt = 0;
-let installPrompt: InstallPromptEvent | undefined;
 let serviceWorkerRegistration: ServiceWorkerRegistration | undefined;
 let lastServiceWorkerCheckAt = 0;
 
@@ -135,7 +128,6 @@ retryButton.addEventListener('click', () => void submitSummary());
 diagnosticsButton.addEventListener('click', () => void copyDiagnostics());
 testConnectionButton.addEventListener('click', () => void testConnection());
 appUpdateAction.addEventListener('click', () => void handleAppUpdateAction());
-installPwaButton.addEventListener('click', () => void installPwa());
 
 textSizeInput.addEventListener('change', () => {
   const size = parseTextSize(textSizeInput.value);
@@ -157,15 +149,6 @@ videoThumbnail.addEventListener('error', () => {
 
 window.addEventListener('online', updateConnectivity);
 window.addEventListener('offline', updateConnectivity);
-window.addEventListener('beforeinstallprompt', (event) => {
-  event.preventDefault();
-  installPrompt = event as InstallPromptEvent;
-  installPwaButton.hidden = Capacitor.isNativePlatform();
-});
-window.addEventListener('appinstalled', () => {
-  installPrompt = undefined;
-  installPwaButton.hidden = true;
-});
 window.addEventListener('focus', () => {
   if (settingsDialog.open) void refreshAndroidUpdateInfo();
 });
@@ -270,15 +253,6 @@ function togglePasswordVisibility(): void {
   passwordInput.type = visible ? 'password' : 'text';
   togglePasswordButton.setAttribute('aria-pressed', String(!visible));
   togglePasswordButton.setAttribute('aria-label', visible ? 'Show password' : 'Hide password');
-}
-
-async function installPwa(): Promise<void> {
-  if (!installPrompt) return;
-  const prompt = installPrompt;
-  installPrompt = undefined;
-  installPwaButton.hidden = true;
-  await prompt.prompt();
-  await prompt.userChoice;
 }
 
 function renderResult(
