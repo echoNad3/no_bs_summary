@@ -13,6 +13,8 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - 'scripts/generate-pwa-icons.mjs'
+      - 'scripts/worker-types.mjs'
+      - 'worker-configuration.d.ts'
       - '.github/workflows/android.yml'
 
 permissions:
