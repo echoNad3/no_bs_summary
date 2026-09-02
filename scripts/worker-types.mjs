@@ -5,7 +5,8 @@ import path from 'node:path';
 
 const wrangler = path.resolve('node_modules', 'wrangler', 'bin', 'wrangler.js');
 const checking = process.argv.includes('--check');
-const temporaryDirectory = checking
+const useGeneratedComparison = checking && process.platform === 'win32';
+const temporaryDirectory = useGeneratedComparison
   ? mkdtempSync(path.join(os.tmpdir(), 'nbs-worker-types-'))
   : undefined;
 const outputPath = temporaryDirectory
@@ -19,11 +20,12 @@ const args = [
   'WorkerBindings',
   '--include-runtime',
   'false',
+  ...(checking && !useGeneratedComparison ? ['--check'] : []),
 ];
 
 const result = spawnSync(process.execPath, args, {
-  stdio: checking ? 'pipe' : 'inherit',
-  encoding: checking ? 'utf8' : undefined,
+  stdio: useGeneratedComparison ? 'pipe' : 'inherit',
+  encoding: useGeneratedComparison ? 'utf8' : undefined,
   env: {
     ...process.env,
     CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV: 'false',
@@ -32,7 +34,7 @@ const result = spawnSync(process.execPath, args, {
 });
 
 let exitCode = result.status ?? 1;
-if (checking) {
+if (useGeneratedComparison) {
   try {
     if (exitCode !== 0) {
       process.stdout.write(result.stdout ?? '');
