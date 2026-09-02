@@ -104,12 +104,6 @@ export function parseInlineMarkdown(text: string): SummaryInlinePart[] {
   return parts;
 }
 
-export function stripInlineMarkdown(text: string): string {
-  return parseInlineMarkdown(text)
-    .map((part) => part.text)
-    .join('');
-}
-
 function joinLine(current: string, next: string): string {
   return current ? `${current} ${next}` : next;
 }

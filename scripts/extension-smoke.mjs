@@ -179,18 +179,6 @@ try {
 
   const pwaPage = await context.newPage();
   await pwaPage.setViewportSize({ width: 412, height: 915 });
-  await pwaPage.addInitScript(() => {
-    globalThis.__nbsSharedPayload = undefined;
-    Object.defineProperty(navigator, 'share', {
-      configurable: true,
-      value: async (payload) => {
-        globalThis.__nbsSharedPayload = payload;
-      },
-    });
-  });
-  await context.grantPermissions(['clipboard-read', 'clipboard-write'], {
-    origin: baseUrl,
-  });
   await pwaPage.goto(`${baseUrl}/`);
   await pwaPage.locator('h1').waitFor({ state: 'visible' });
   assert.equal(await pwaPage.locator('h1').innerText(), 'No BS Summary');
@@ -217,6 +205,7 @@ try {
   await waitForText(pwaPage.locator('#android-update-status'), 'APK available.');
   await pwaPage.locator('#close-settings').click();
   await assertHeaderControlsAligned(pwaPage);
+  await assertBrandArtworkCentered(pwaPage);
   await assertNoHorizontalOverflow(pwaPage);
   await pwaPage.locator('#url').fill(youtubeUrl);
   await pwaPage.locator('#video-thumbnail').waitFor({ state: 'visible' });
@@ -231,14 +220,9 @@ try {
   assertSummaryOutput(pwaOutput);
   await assertDetailedTopics(pwaPage);
   await assertInlineFormatting(pwaPage);
-  await pwaPage.locator('#copy-summary').click();
-  assert.match(await pwaPage.evaluate(() => navigator.clipboard.readText()), /SKIM:/u);
-  assert.equal(await pwaPage.locator('#copy-summary').innerText(), 'Copied');
-  assert.equal(await pwaPage.locator('#open-video').getAttribute('href'), youtubeUrl);
+  await assertResultPolish(pwaPage);
   assert.equal(await pwaPage.locator('#reading-stats').count(), 0);
   assert.equal(await pwaPage.locator('#meta').count(), 0);
-  await pwaPage.locator('#share-summary').click();
-  assert.match(await pwaPage.evaluate(() => globalThis.__nbsSharedPayload?.text ?? ''), /SKIM:/u);
   await pwaPage.reload();
   await pwaPage.locator('#result').waitFor({ state: 'visible' });
   assert.equal(await pwaPage.locator('#url').inputValue(), youtubeUrl);
@@ -271,7 +255,8 @@ try {
   releaseHeldRequest();
   await cancelPage.close();
   report.checks.androidViewport = true;
-  report.checks.copyAndOpenActions = true;
+  report.checks.cleanResultLayout = true;
+  report.checks.centeredBrandArtwork = true;
   report.checks.instructionsTextSizeAndConnection = true;
   report.checks.thumbnailAndNativeShare = true;
   report.checks.pwaLastResultRestored = true;
@@ -385,6 +370,7 @@ try {
   );
   await sidePanelPage.locator('#close-settings').click();
   await assertHeaderControlsAligned(sidePanelPage);
+  await assertBrandArtworkCentered(sidePanelPage);
   report.checks.currentYouTubeUrlDetected = true;
   report.checks.detectedTitleReplacesUrl = true;
   report.checks.alignedHeaderIcons = true;
@@ -405,14 +391,9 @@ try {
   assertSummaryOutput(extensionOutput);
   await assertDetailedTopics(sidePanelPage);
   await assertInlineFormatting(sidePanelPage);
+  await assertResultPolish(sidePanelPage);
   assert.equal(await submit.isEnabled(), true);
   assert.equal(await status.innerText(), 'Summary ready.');
-  assert.equal(
-    await sidePanelPage
-      .locator('body')
-      .evaluate((element) => element.classList.contains('has-result')),
-    true,
-  );
   assert.equal(await settingsDialog.isHidden(), true);
   assert.equal(await sidePanelPage.locator('header').isVisible(), true);
   const [buttonWidth, formWidth] = await Promise.all([
@@ -445,12 +426,6 @@ try {
   await youtubePage.goto(sameVideoUrl);
   await waitForValue(urlInput, sameVideoUrl);
   assert.equal(await result.isVisible(), true);
-  assert.equal(
-    await sidePanelPage
-      .locator('body')
-      .evaluate((element) => element.classList.contains('has-result')),
-    true,
-  );
   report.checks.sameVideoNavigationKeepsResult = true;
 
   const secondYoutubePage = await context.newPage();
@@ -460,22 +435,10 @@ try {
   await waitForValue(urlInput, secondYoutubeUrl);
   await waitForText(detectedTitle, 'Rick Astley Smoke');
   assert.equal(await result.isHidden(), true);
-  assert.equal(
-    await sidePanelPage
-      .locator('body')
-      .evaluate((element) => element.classList.contains('has-result')),
-    false,
-  );
   assert.equal(await settingsDialog.isHidden(), true);
   await youtubePage.bringToFront();
   await waitForValue(urlInput, sameVideoUrl);
   assert.equal(await result.isVisible(), true);
-  assert.equal(
-    await sidePanelPage
-      .locator('body')
-      .evaluate((element) => element.classList.contains('has-result')),
-    true,
-  );
   await secondYoutubePage.close();
   report.checks.activeYouTubeTabRefresh = true;
   report.checks.savedSummaryRestoredOnTabReturn = true;
@@ -786,4 +749,68 @@ async function assertDetailedTopics(page) {
 
 async function assertInlineFormatting(page) {
   assert.deepEqual(await page.locator('#summary em').allInnerTexts(), ['Backrooms']);
+}
+
+async function assertResultPolish(page) {
+  assert.equal(await page.locator('.result-actions').count(), 0);
+  const styles = await page.locator('#result').evaluate((element) => {
+    const result = getComputedStyle(element);
+    const reason = getComputedStyle(element.querySelector('#reason'));
+    const summary = getComputedStyle(element.querySelector('#summary'));
+    const firstTopic = getComputedStyle(element.querySelector('.summary-topics > li:first-child'));
+    const secondTopic = getComputedStyle(
+      element.querySelector('.summary-topics > li:nth-child(2)'),
+    );
+    return {
+      resultPadding: Number.parseFloat(result.paddingTop),
+      reasonPaddingBottom: Number.parseFloat(reason.paddingBottom),
+      reasonDivider: Number.parseFloat(reason.borderBottomWidth),
+      summaryLineHeight: Number.parseFloat(summary.lineHeight),
+      summaryFontSize: Number.parseFloat(summary.fontSize),
+      firstTopicPaddingTop: Number.parseFloat(firstTopic.paddingTop),
+      secondTopicDivider: Number.parseFloat(secondTopic.borderTopWidth),
+    };
+  });
+  assert.ok(styles.resultPadding >= 20, JSON.stringify(styles));
+  assert.ok(styles.reasonPaddingBottom >= 20, JSON.stringify(styles));
+  assert.ok(styles.reasonDivider >= 1, JSON.stringify(styles));
+  assert.ok(styles.summaryLineHeight >= styles.summaryFontSize * 1.6, JSON.stringify(styles));
+  assert.ok(styles.firstTopicPaddingTop >= 16, JSON.stringify(styles));
+  assert.ok(styles.secondTopicDivider >= 1, JSON.stringify(styles));
+}
+
+async function assertBrandArtworkCentered(page) {
+  const centerOffset = await page.locator('.brand-icon').evaluate(async (image) => {
+    await image.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    context.drawImage(image, 0, 0);
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    let left = canvas.width;
+    let top = canvas.height;
+    let right = -1;
+    let bottom = -1;
+    for (let y = 0; y < canvas.height; y += 1) {
+      for (let x = 0; x < canvas.width; x += 1) {
+        const offset = (y * canvas.width + x) * 4;
+        const red = pixels[offset];
+        const green = pixels[offset + 1];
+        const blue = pixels[offset + 2];
+        const alpha = pixels[offset + 3];
+        if (alpha < 128 || (red < 150 && green < 80 && blue < 80)) continue;
+        left = Math.min(left, x);
+        top = Math.min(top, y);
+        right = Math.max(right, x);
+        bottom = Math.max(bottom, y);
+      }
+    }
+    return {
+      x: (left + right) / 2 - canvas.width / 2,
+      y: (top + bottom) / 2 - canvas.height / 2,
+    };
+  });
+  assert.ok(Math.abs(centerOffset.x) <= 1.5, JSON.stringify(centerOffset));
+  assert.ok(Math.abs(centerOffset.y) <= 1.5, JSON.stringify(centerOffset));
 }

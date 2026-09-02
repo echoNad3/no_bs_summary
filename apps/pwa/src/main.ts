@@ -10,7 +10,6 @@ import {
   type TextSize,
 } from '../../shared/client-state.js';
 import { renderDetailedSummary } from '../../shared/render-summary.js';
-import { summaryClipboardText } from '../../shared/summary-actions.js';
 import { firstYouTubeUrl, youtubeThumbnailUrl } from '../../shared/youtube-input.js';
 import { isDownloadedBuildInstallable, nextDisplayedDownloadProgress } from './app-update-logic.js';
 import { AppUpdater, type AppUpdateState } from './app-updater.js';
@@ -49,10 +48,6 @@ const saveSettingsButton = requiredElement<HTMLButtonElement>('save-settings');
 const submitButton = requiredElement<HTMLButtonElement>('submit');
 const status = requiredElement<HTMLParagraphElement>('status');
 const result = requiredElement<HTMLElement>('result');
-const copyButton = requiredElement<HTMLButtonElement>('copy-summary');
-const copyButtonLabel = copyButton.querySelector<HTMLElement>('.action-label');
-const openVideoLink = requiredElement<HTMLAnchorElement>('open-video');
-const shareButton = requiredElement<HTMLButtonElement>('share-summary');
 const cancelButton = requiredElement<HTMLButtonElement>('cancel-request');
 const retryButton = requiredElement<HTMLButtonElement>('retry-request');
 const diagnosticsButton = requiredElement<HTMLButtonElement>('copy-diagnostics');
@@ -76,7 +71,6 @@ const appUpdateProgressValue = requiredElement<HTMLElement>('app-update-progress
 
 let activeRequest: AbortController | undefined;
 let renderedSummary: RenderedSummary | undefined;
-let copyResetTimer: number | undefined;
 let lastFailure: Error | undefined;
 let latestApk: LatestApk | null = readCachedLatestApk();
 let installedBuild: number | null = null;
@@ -105,7 +99,6 @@ if (shared.wasShared && window.location.search) {
 }
 if (!shared.wasShared) restoreLastSummary();
 updateVideoPreview();
-shareButton.hidden = typeof navigator.share !== 'function';
 updateAndroidUpdateUi();
 void hideLaunchScreen();
 
@@ -121,8 +114,6 @@ for (const input of [urlInput, titleInput]) {
 
 urlInput.addEventListener('paste', (event) => useYouTubeUrlFromPaste(event, urlInput));
 togglePasswordButton.addEventListener('click', togglePasswordVisibility);
-copyButton.addEventListener('click', () => void copySummary());
-shareButton.addEventListener('click', () => void shareSummary());
 cancelButton.addEventListener('click', cancelFromButton);
 retryButton.addEventListener('click', () => void submitSummary());
 diagnosticsButton.addEventListener('click', () => void copyDiagnostics());
@@ -266,8 +257,6 @@ function renderResult(
   verdict.dataset.verdict = response.verdict;
   requiredElement<HTMLParagraphElement>('reason').textContent = response.reason;
   renderDetailedSummary(requiredElement<HTMLElement>('summary'), response.summary);
-  openVideoLink.href = input.url;
-  openVideoLink.target = '_blank';
   result.hidden = false;
   if (behavior.focus !== false) {
     result.focus({ preventScroll: true });
@@ -281,47 +270,6 @@ function renderResult(
 function clearResult(): void {
   renderedSummary = undefined;
   result.hidden = true;
-  setCopyButtonLabel('Copy summary');
-  if (copyResetTimer !== undefined) window.clearTimeout(copyResetTimer);
-}
-
-function setCopyButtonLabel(label: string): void {
-  copyButton.setAttribute('aria-label', label);
-  if (copyButtonLabel) copyButtonLabel.textContent = label;
-}
-
-async function copySummary(): Promise<void> {
-  if (!renderedSummary) return;
-  try {
-    await navigator.clipboard.writeText(
-      summaryClipboardText(renderedSummary.response, {
-        title: renderedSummary.title,
-        url: renderedSummary.url,
-      }),
-    );
-    setCopyButtonLabel('Copied');
-    setStatus('Copied.', 'success');
-    if (copyResetTimer !== undefined) window.clearTimeout(copyResetTimer);
-    copyResetTimer = window.setTimeout(() => setCopyButtonLabel('Copy summary'), 2_000);
-  } catch {
-    setStatus('Copy failed. Select the text and copy it.', 'error');
-  }
-}
-
-async function shareSummary(): Promise<void> {
-  if (!renderedSummary || typeof navigator.share !== 'function') return;
-  try {
-    await navigator.share({
-      title: renderedSummary.title || 'No BS Summary',
-      text: summaryClipboardText(renderedSummary.response, {
-        title: renderedSummary.title,
-        url: renderedSummary.url,
-      }),
-    });
-  } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') return;
-    setStatus('Share failed. Copy it instead.', 'error');
-  }
 }
 
 async function testConnection(): Promise<void> {

@@ -6,7 +6,6 @@ import {
   type SavedSummary,
 } from '../../shared/client-state.js';
 import { renderDetailedSummary } from '../../shared/render-summary.js';
-import { summaryClipboardText } from '../../shared/summary-actions.js';
 import { firstYouTubeUrl, youtubeThumbnailUrl } from '../../shared/youtube-input.js';
 import { getYouTubeTabContext } from './tab-context.js';
 import {
@@ -30,8 +29,6 @@ const titleInput = requiredElement<HTMLInputElement>('title');
 const passwordInput = requiredElement<HTMLInputElement>('password');
 const togglePasswordButton = requiredElement<HTMLButtonElement>('toggle-password');
 const submitButton = requiredElement<HTMLButtonElement>('submit');
-const copyButton = requiredElement<HTMLButtonElement>('copy-summary');
-const copyButtonLabel = copyButton.querySelector<HTMLElement>('.action-label');
 const status = requiredElement<HTMLParagraphElement>('status');
 const result = requiredElement<HTMLElement>('result');
 const videoContext = requiredElement<HTMLElement>('video-context');
@@ -57,7 +54,6 @@ let detectedVideoId: string | undefined;
 let activeTabId: number | undefined;
 let activeRequest: AbortController | undefined;
 let renderedSummary: RenderedSummary | undefined;
-let copyResetTimer: number | undefined;
 let refreshVersion = 0;
 let manualOverride = false;
 let lastFailure: Error | undefined;
@@ -87,10 +83,6 @@ urlInput.addEventListener('paste', (event) => {
 });
 
 togglePasswordButton.addEventListener('click', togglePasswordVisibility);
-
-copyButton.addEventListener('click', () => {
-  void copySummary();
-});
 
 cancelButton.addEventListener('click', cancelFromButton);
 retryButton.addEventListener('click', () => void submitSummary());
@@ -205,12 +197,10 @@ async function submitSummary(): Promise<void> {
     }
     setStatus('Summary ready.', 'success');
     if (settingsDialog.open) settingsDialog.close();
-    document.body.classList.add('has-result');
   } catch (error) {
     if (activeRequest !== controller) return;
     if (error instanceof ApiClientError && error.code === 'REQUEST_CANCELLED') return;
     lastFailure = error instanceof Error ? error : new Error('Unknown client error');
-    document.body.classList.remove('has-result');
     setStatus(
       error instanceof ApiClientError ? error.message : 'Something went wrong. Try again.',
       'error',
@@ -279,7 +269,6 @@ function showControlsForNewVideo(): void {
   clearResult();
   errorActions.hidden = true;
   lastFailure = undefined;
-  document.body.classList.remove('has-result');
   setStatus('');
 }
 
@@ -299,33 +288,6 @@ function cancelFromButton(): void {
 function clearResult(): void {
   renderedSummary = undefined;
   result.hidden = true;
-  setCopyButtonLabel('Copy summary');
-  if (copyResetTimer !== undefined) window.clearTimeout(copyResetTimer);
-}
-
-function setCopyButtonLabel(label: string): void {
-  copyButton.setAttribute('aria-label', label);
-  if (copyButtonLabel) copyButtonLabel.textContent = label;
-}
-
-async function copySummary(): Promise<void> {
-  if (!renderedSummary) return;
-  try {
-    await navigator.clipboard.writeText(
-      summaryClipboardText(renderedSummary.response, {
-        title: renderedSummary.title,
-        url: renderedSummary.url,
-      }),
-    );
-    setCopyButtonLabel('Copied');
-    setStatus('Copied.', 'success');
-    if (copyResetTimer !== undefined) window.clearTimeout(copyResetTimer);
-    copyResetTimer = window.setTimeout(() => {
-      setCopyButtonLabel('Copy summary');
-    }, 2_000);
-  } catch {
-    setStatus('Copy failed. Select the text and copy it.', 'error');
-  }
 }
 
 async function testConnection(): Promise<void> {
@@ -376,7 +338,6 @@ function restoreSummary(saved: SavedSummary): void {
   const title = titleInput.value.trim() || saved.title;
   renderResult(saved.response, { url, title, language: saved.response.language }, { focus: false });
   if (settingsDialog.open) settingsDialog.close();
-  document.body.classList.add('has-result');
 }
 
 function updateThumbnail(url: string): void {

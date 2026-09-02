@@ -1,12 +1,6 @@
 import { promises as fs } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import type { SummaryResult } from '../apps/shared/api-client.js';
-import { summaryClipboardText } from '../apps/shared/summary-actions.js';
-import {
-  parseInlineMarkdown,
-  parseSummaryBlocks,
-  stripInlineMarkdown,
-} from '../apps/shared/summary-format.js';
+import { parseInlineMarkdown, parseSummaryBlocks } from '../apps/shared/summary-format.js';
 
 describe('local MVP manifests', () => {
   it('declares an installable PWA with an Android URL share target', async () => {
@@ -81,7 +75,7 @@ describe('local MVP manifests', () => {
     expect(manifest).toMatchObject({
       manifest_version: 3,
       name: 'No BS Summary',
-      version: '0.7.1',
+      version: '0.7.2',
       minimum_chrome_version: '114',
       permissions: ['sidePanel', 'storage'],
       background: { service_worker: 'background.js', type: 'module' },
@@ -114,7 +108,9 @@ describe('local MVP manifests', () => {
     expect(privacy).toContain('public network address');
     expect(privacy).toContain('keyed hash');
     expect(privacy).toMatch(/only the text-size setting\s+may use Chrome Sync/u);
-    expect(privacy).toMatch(/Video titles stay on the device\s+for display and copying/u);
+    expect(privacy).toMatch(
+      /Video titles stay on the device\s+for display and saved-result restoration/u,
+    );
     expect(privacy).toMatch(/Full transcripts and the app password are not\s+stored/u);
   });
 
@@ -148,10 +144,10 @@ describe('local MVP manifests', () => {
       },
       { kind: 'paragraph', text: 'Short conclusion.' },
     ]);
-    expect(stripInlineMarkdown('A **nested label** and \\*literal star\\*.')).toBe(
+    expect(inlineText('A **nested label** and \\*literal star\\*.')).toBe(
       'A nested label and *literal star*.',
     );
-    expect(stripInlineMarkdown('An unmatched **marker never leaks.')).toBe(
+    expect(inlineText('An unmatched **marker never leaks.')).toBe(
       'An unmatched marker never leaks.',
     );
   });
@@ -166,40 +162,17 @@ describe('local MVP manifests', () => {
       { kind: 'strong', text: 'Secret Wars' },
       { kind: 'text', text: ', not *Fantastic Four*.' },
     ]);
-    expect(stripInlineMarkdown('Watch *Avengers* and **X-Men**; ignore *broken markup.')).toBe(
+    expect(inlineText('Watch *Avengers* and **X-Men**; ignore *broken markup.')).toBe(
       'Watch Avengers and X-Men; ignore broken markup.',
     );
-    expect(stripInlineMarkdown('The calculation is 2*3 and 5 * 10.')).toBe(
+    expect(inlineText('The calculation is 2*3 and 5 * 10.')).toBe(
       'The calculation is 2*3 and 5 * 10.',
-    );
-  });
-
-  it('copies a clean, useful summary with context and no markdown decoration', () => {
-    const response: SummaryResult = {
-      verdict: 'WATCH',
-      reason: 'Specific, useful, and concise.',
-      summary:
-        '- **First topic:** One fact.\n  **Extra detail:** Another fact.\n\n- **Second topic:** Final fact.',
-      videoId: 'dQw4w9WgXcQ',
-      language: 'en',
-      source: 'CACHED',
-      timing: { summaryMs: 10 },
-      retries: { transcript: 0, summary: 0 },
-    };
-
-    expect(
-      summaryClipboardText(response, {
-        title: 'Useful video',
-        url: 'https://youtu.be/dQw4w9WgXcQ',
-      }),
-    ).toBe(
-      'Useful video\n\nWATCH: Specific, useful, and concise.\n\nFirst topic: One fact. Extra detail: Another fact.\n\nSecond topic: Final fact.\n\nhttps://youtu.be/dQw4w9WgXcQ\n\nSummarized with No BS Summary',
     );
   });
 
   it('precaches the built JS and CSS needed for a first offline launch', async () => {
     const worker = await fs.readFile('apps/pwa/public/sw.js', 'utf8');
-    expect(worker).toContain("const CACHE = 'nbs-shell-v12'");
+    expect(worker).toContain("const CACHE = 'nbs-shell-v13'");
     expect(worker).toContain("event.data?.type === 'SKIP_WAITING'");
     expect(worker).toContain('/\\.(?:css|js)$/u');
     expect(worker).toContain("'/icons/icon-192.svg'");
@@ -231,6 +204,10 @@ describe('local MVP manifests', () => {
       expect(html).not.toContain('id="language"');
       expect(html).not.toContain('id="reading-stats"');
       expect(html).not.toContain('id="meta"');
+      expect(html).not.toContain('class="result-actions"');
+      expect(html).not.toContain('id="copy-summary"');
+      expect(html).not.toContain('id="share-summary"');
+      expect(html).not.toContain('id="open-video"');
       expect(html).not.toContain('&#x24d8;');
       expect(html).not.toMatch(/\bdemo\b/iu);
       expect(html).not.toMatch(/YouTube, without the padding|Cached summaries reopen instantly/iu);
@@ -238,7 +215,6 @@ describe('local MVP manifests', () => {
         /These preferences stay on this device|Must match the server password/iu,
       );
     }
-    expect(pwa).toContain('id="share-summary"');
     expect(pwa).toContain('id="app-update-action"');
     expect(pwa).toContain('id="android-update-status"');
     expect(pwa).not.toContain('id="install-pwa"');
@@ -267,8 +243,17 @@ describe('local MVP manifests', () => {
       expect(asset).toContain('#e86437');
       expect(asset).not.toContain('#ff8a61');
       expect(asset).not.toContain('#f5f7fa');
+      expect(asset).toContain('transform="translate(-18 24)"');
     }
     expect(splash).toContain('#F1EEE7');
     expect(splash).toContain('#E86437');
+    expect(splash).toContain('android:translateX="64"');
+    expect(splash).toContain('android:translateY="64"');
   });
 });
+
+function inlineText(text: string): string {
+  return parseInlineMarkdown(text)
+    .map((part) => part.text)
+    .join('');
+}

@@ -7,14 +7,14 @@
     <group
         android:scaleX="0.75"
         android:scaleY="0.75"
-        android:translateX="50"
-        android:translateY="82">
+        android:translateX="64"
+        android:translateY="64">
         <path
             android:name="splash_vector_anchor"
             android:fillColor="#F1EEE7"
-            android:pathData="M112,126 H184 L296,294 V126 H400 V386 H328 L216,218 V386 H112 Z" />
+            android:pathData="M94,150 H166 L278,318 V150 H382 V410 H310 L198,242 V410 H94 Z" />
         <path
             android:fillColor="#E86437"
-            android:pathData="M389,78 A48,48 0,1 1,389,174 A48,48 0,1 1,389,78 Z" />
+            android:pathData="M371,102 A48,48 0,1 1,371,198 A48,48 0,1 1,371,102 Z" />
     </group>
 </vector>
