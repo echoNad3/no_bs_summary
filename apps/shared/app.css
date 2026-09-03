@@ -240,7 +240,7 @@ button:disabled {
 .settings-status {
   color: var(--color-text-muted);
   font-size: var(--fs-meta);
-  line-height: 1.35;
+  line-height: 1.4;
 }
 
 .status {
@@ -407,6 +407,11 @@ dialog::backdrop {
   gap: var(--space-4);
 }
 
+.settings-fields > .field-group > label {
+  font-size: var(--fs-meta);
+  line-height: 1.35;
+}
+
 .password-control {
   position: relative;
 }
@@ -427,10 +432,17 @@ dialog::backdrop {
 .settings-section {
   padding: var(--space-4);
   display: grid;
-  gap: 10px;
+  gap: var(--space-3);
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-control);
+}
+
+.settings-section h3,
+.resource-actions .resource-link {
+  font-size: var(--fs-label);
+  font-weight: var(--fw-bold);
+  line-height: 1.25;
 }
 
 .section-heading {
@@ -440,9 +452,24 @@ dialog::backdrop {
   gap: var(--space-3);
 }
 
+.section-copy {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.connection-section {
+  gap: 0;
+}
+
+.connection-section .small-button {
+  flex: 0 0 auto;
+}
+
 .build-label {
   color: var(--color-text-subtle);
-  font-size: var(--fs-caption);
+  font-size: var(--fs-meta);
+  line-height: 1.4;
   text-align: right;
 }
 
@@ -459,6 +486,7 @@ dialog::backdrop {
   gap: var(--space-3);
   color: var(--color-text-muted);
   font-size: var(--fs-meta);
+  line-height: 1.4;
 }
 
 .quota-row strong {
@@ -469,9 +497,10 @@ dialog::backdrop {
 
 .update-progress {
   display: grid;
-  gap: 7px;
+  gap: var(--space-2);
   color: var(--color-text-muted);
   font-size: var(--fs-meta);
+  line-height: 1.4;
 }
 
 .update-progress > span {
@@ -511,7 +540,7 @@ dialog::backdrop {
 
 .resource-actions .resource-link {
   width: 100%;
-  min-height: 54px;
+  min-height: calc(var(--tap) + var(--space-2));
   padding-inline: var(--space-4);
   justify-content: flex-start;
   background: transparent;

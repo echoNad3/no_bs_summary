@@ -14,7 +14,7 @@ describe('generation quota', () => {
       day: '2026-08-23',
       month: '2026-08',
       userKey: 'a'.repeat(64),
-      dailyLimit: 300,
+      dailyLimit: 100,
       userLimit: 5,
       globalLimit: 50,
       dailyResetsAt: '2026-08-24T00:00:00.000Z',
@@ -22,13 +22,13 @@ describe('generation quota', () => {
     });
 
     const status = makeGenerationQuotaStatus(12, 3, 12, request);
-    expect(status.daily).toMatchObject({ used: 12, limit: 300, remaining: 288 });
+    expect(status.daily).toMatchObject({ used: 12, limit: 100, remaining: 88 });
     expect(status.free.user).toMatchObject({ used: 3, limit: 5, remaining: 2 });
     expect(status.free.shared).toMatchObject({ used: 12, limit: 50, remaining: 38 });
     expect(blockedReason(status, 'free')).toBeUndefined();
     expect(blockedReason(makeGenerationQuotaStatus(12, 5, 12, request), 'free')).toBe('user');
     expect(blockedReason(makeGenerationQuotaStatus(12, 2, 50, request), 'free')).toBe('global');
-    expect(blockedReason(makeGenerationQuotaStatus(300, 2, 12, request), 'owner')).toBe('daily');
+    expect(blockedReason(makeGenerationQuotaStatus(100, 2, 12, request), 'owner')).toBe('daily');
   });
 
   it('groups rotating IPv6 addresses by /64 but keeps IPv4 addresses distinct', () => {

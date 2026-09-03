@@ -147,8 +147,8 @@ try {
         access: 'owner',
         dailyGeneration: {
           used: 0,
-          limit: 300,
-          remaining: 300,
+          limit: 100,
+          remaining: 100,
           resetsAt: '2026-08-30T00:00:00.000Z',
         },
         freeGeneration: {
@@ -191,7 +191,7 @@ try {
   await pwaPage.locator('#text-size').selectOption('large');
   assert.equal(await pwaPage.locator('html').getAttribute('data-text-size'), 'large');
   await pwaPage.locator('#test-connection').click();
-  await waitForText(pwaPage.locator('#connection-status'), 'Connected · 300/300 daily remaining');
+  await waitForText(pwaPage.locator('#connection-status'), 'Connected · 100/100 daily remaining');
   assert.equal(await pwaPage.locator('#connection-status').getAttribute('data-state'), 'success');
   await waitForText(pwaPage.locator('#free-user-usage'), '5/5 left');
   await waitForText(pwaPage.locator('#free-shared-usage'), '50/50 left');
@@ -302,8 +302,8 @@ try {
         access: 'owner',
         dailyGeneration: {
           used: 4,
-          limit: 300,
-          remaining: 296,
+          limit: 100,
+          remaining: 96,
           resetsAt: '2026-08-09T00:00:00.000Z',
         },
         freeGeneration: {
@@ -363,7 +363,7 @@ try {
   await sidePanelPage.locator('#test-connection').click();
   await waitForText(
     sidePanelPage.locator('#connection-status'),
-    'Connected · 296/300 daily remaining',
+    'Connected · 96/100 daily remaining',
   );
   assert.equal(
     await sidePanelPage.locator('#connection-status').getAttribute('data-state'),
@@ -728,8 +728,18 @@ async function assertSettingsPolish(page, expectPhoneWidth = false) {
     const close = dialog.querySelector('#close-settings')?.getBoundingClientRect();
     const resources = dialog.querySelector('.resource-actions');
     const secondLink = dialog.querySelector('.resource-actions .resource-link:nth-child(2)');
+    const resourceLinks = [...dialog.querySelectorAll('.resource-actions .resource-link')];
+    const connection = dialog.querySelector('.connection-section');
+    const connectionTitle = connection?.querySelector('h3');
+    const connectionStatus = connection?.querySelector('.settings-status');
+    const fieldLabel = dialog.querySelector('label[for="password"]');
+    const quotaRow = dialog.querySelector('.quota-row');
+    const buildLabel = dialog.querySelector('.build-label');
     const resourceStyle = resources ? getComputedStyle(resources) : undefined;
     const secondStyle = secondLink ? getComputedStyle(secondLink) : undefined;
+    const connectionBox = connection?.getBoundingClientRect();
+    const connectionTitleBox = connectionTitle?.getBoundingClientRect();
+    const connectionStatusBox = connectionStatus?.getBoundingClientRect();
     return {
       viewportWidth: document.documentElement.clientWidth,
       viewportHeight: document.documentElement.clientHeight,
@@ -743,6 +753,18 @@ async function assertSettingsPolish(page, expectPhoneWidth = false) {
       resourceGap: resourceStyle?.rowGap,
       resourceBorder: resourceStyle?.borderTopWidth,
       divider: secondStyle?.borderTopWidth,
+      connectionHeight: connectionBox?.height,
+      connectionCopyGap:
+        connectionTitleBox && connectionStatusBox
+          ? connectionStatusBox.top - connectionTitleBox.bottom
+          : undefined,
+      fieldLabelSize: fieldLabel ? getComputedStyle(fieldLabel).fontSize : undefined,
+      statusSize: connectionStatus ? getComputedStyle(connectionStatus).fontSize : undefined,
+      quotaSize: quotaRow ? getComputedStyle(quotaRow).fontSize : undefined,
+      buildSize: buildLabel ? getComputedStyle(buildLabel).fontSize : undefined,
+      headingSize: connectionTitle ? getComputedStyle(connectionTitle).fontSize : undefined,
+      resourceSize: secondLink ? getComputedStyle(secondLink).fontSize : undefined,
+      resourceOrder: resourceLinks.map((link) => link.textContent.trim()),
     };
   });
   assert.ok(
@@ -765,6 +787,17 @@ async function assertSettingsPolish(page, expectPhoneWidth = false) {
   assert.equal(geometry.resourceGap, '0px');
   assert.equal(geometry.resourceBorder, '1px');
   assert.equal(geometry.divider, '1px');
+  assert.ok(geometry.connectionHeight <= 110, JSON.stringify(geometry));
+  assert.ok(geometry.connectionCopyGap <= 9, JSON.stringify(geometry));
+  assert.equal(geometry.fieldLabelSize, geometry.statusSize);
+  assert.equal(geometry.statusSize, geometry.quotaSize);
+  if (geometry.buildSize !== undefined) assert.equal(geometry.statusSize, geometry.buildSize);
+  assert.equal(geometry.headingSize, geometry.resourceSize);
+  assert.deepEqual(geometry.resourceOrder, [
+    'Chrome extension',
+    'GitHub repo',
+    'TranscriptAPI billing',
+  ]);
 }
 
 async function assertHeaderControlsAligned(page) {
@@ -859,10 +892,9 @@ async function assertBrandArtworkCentered(page) {
     const context = canvas.getContext('2d', { willReadFrequently: true });
     context.drawImage(image, 0, 0);
     const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
-    let left = canvas.width;
-    let top = canvas.height;
-    let right = -1;
-    let bottom = -1;
+    let foregroundPixels = 0;
+    let sumX = 0;
+    let sumY = 0;
     for (let y = 0; y < canvas.height; y += 1) {
       for (let x = 0; x < canvas.width; x += 1) {
         const offset = (y * canvas.width + x) * 4;
@@ -871,17 +903,18 @@ async function assertBrandArtworkCentered(page) {
         const blue = pixels[offset + 2];
         const alpha = pixels[offset + 3];
         if (alpha < 128 || (red < 150 && green < 80 && blue < 80)) continue;
-        left = Math.min(left, x);
-        top = Math.min(top, y);
-        right = Math.max(right, x);
-        bottom = Math.max(bottom, y);
+        foregroundPixels += 1;
+        sumX += x;
+        sumY += y;
       }
     }
     return {
-      x: (left + right) / 2 - canvas.width / 2,
-      y: (top + bottom) / 2 - canvas.height / 2,
+      foregroundPixels,
+      x: sumX / foregroundPixels - (canvas.width - 1) / 2,
+      y: sumY / foregroundPixels - (canvas.height - 1) / 2,
     };
   });
+  assert.ok(centerOffset.foregroundPixels > 0, JSON.stringify(centerOffset));
   assert.ok(Math.abs(centerOffset.x) <= 1.5, JSON.stringify(centerOffset));
   assert.ok(Math.abs(centerOffset.y) <= 1.5, JSON.stringify(centerOffset));
 }

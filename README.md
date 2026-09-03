@@ -49,7 +49,7 @@ Change the server password with `npx.cmd wrangler secret put APP_PASSWORD` on Wi
 `npx wrangler secret put APP_PASSWORD` on other shells. Enter the same password in app Settings.
 
 Paid generation attempts are reserved atomically by the `GENERATION_QUOTA` Durable Object. The
-defaults are 300 total attempts per UTC day, five passwordless attempts per network per UTC month,
+defaults are 100 total attempts per UTC day, five passwordless attempts per network per UTC month,
 and 50 passwordless attempts shared per UTC month. Change them in `wrangler.jsonc`. Cached summaries
 do not consume any limit.
 

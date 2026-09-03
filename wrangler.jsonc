@@ -31,7 +31,7 @@
   "vars": {
     "GEMINI_MODEL": "gemini-3.1-flash-lite",
     "END_TO_END_TIMEOUT_MS": "60000",
-    "DAILY_SUMMARY_LIMIT": "300",
+    "DAILY_SUMMARY_LIMIT": "100",
     "FREE_USER_MONTHLY_LIMIT": "5",
     "FREE_GLOBAL_MONTHLY_LIMIT": "50",
   },

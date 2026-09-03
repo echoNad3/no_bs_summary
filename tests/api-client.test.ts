@@ -128,8 +128,8 @@ describe('browser API client', () => {
           access: 'owner',
           dailyGeneration: {
             used: 4,
-            limit: 300,
-            remaining: 296,
+            limit: 100,
+            remaining: 96,
             resetsAt: '2026-08-09T00:00:00.000Z',
           },
           freeGeneration: {
@@ -156,7 +156,7 @@ describe('browser API client', () => {
       checkBackend('https://app.example/', { password: 'shared secret' }),
     ).resolves.toMatchObject({
       access: 'owner',
-      dailyGeneration: { remaining: 296 },
+      dailyGeneration: { remaining: 96 },
       freeGeneration: { user: { remaining: 4 }, shared: { remaining: 42 } },
     });
     expect(fetchMock).toHaveBeenCalledWith(
@@ -174,7 +174,7 @@ describe('browser API client', () => {
       access: 'owner',
       dailyGeneration: {
         used: 4,
-        limit: 300,
+        limit: 100,
         remaining: 296,
         resetsAt: '2026-08-09T00:00:00.000Z',
       },

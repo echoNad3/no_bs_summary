@@ -41,7 +41,7 @@ try {
   assert.equal(ownerResponse.status, 200);
   const owner = await ownerResponse.json();
   assert.equal(owner.access, 'owner');
-  assertCounter(owner.dailyGeneration, { used: 0, limit: 300, remaining: 300 });
+  assertCounter(owner.dailyGeneration, { used: 0, limit: 100, remaining: 100 });
 
   const pageResponse = await worker.fetch('/');
   assert.equal(pageResponse.status, 200);

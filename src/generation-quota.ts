@@ -3,7 +3,7 @@ import { DurableObject } from 'cloudflare:workers';
 const QUOTA_OBJECT_NAME = 'generation-quota';
 const QUOTA_API_ORIGIN = 'https://generation-quota.internal';
 
-export const DEFAULT_DAILY_SUMMARY_LIMIT = 300;
+export const DEFAULT_DAILY_SUMMARY_LIMIT = 100;
 export const DEFAULT_FREE_USER_MONTHLY_LIMIT = 5;
 export const DEFAULT_FREE_GLOBAL_MONTHLY_LIMIT = 50;
 

@@ -58,6 +58,8 @@ describe('local MVP manifests', () => {
     expect(sharedCss).toContain('border-radius: var(--radius-card)');
     expect(sharedCss).toContain('env(safe-area-inset-top, 0px)');
     expect(sharedCss).toContain('420px');
+    expect(sharedCss).toContain('.section-copy');
+    expect(sharedCss).toContain('.connection-section');
     expect(sharedCss).toContain('.resource-actions .resource-link + .resource-link');
     expect(pwaCss).toContain("@import '../../shared/theme.css'");
     expect(pwaCss).toContain('width: min(100%, 736px)');
@@ -78,7 +80,7 @@ describe('local MVP manifests', () => {
     expect(manifest).toMatchObject({
       manifest_version: 3,
       name: 'No BS Summary',
-      version: '0.7.3',
+      version: '0.7.4',
       minimum_chrome_version: '114',
       permissions: ['sidePanel', 'storage'],
       background: { service_worker: 'background.js', type: 'module' },
@@ -175,7 +177,7 @@ describe('local MVP manifests', () => {
 
   it('precaches the built JS and CSS needed for a first offline launch', async () => {
     const worker = await fs.readFile('apps/pwa/public/sw.js', 'utf8');
-    expect(worker).toContain("const CACHE = 'nbs-shell-v14'");
+    expect(worker).toContain("const CACHE = 'nbs-shell-v15'");
     expect(worker).toContain("event.data?.type === 'SKIP_WAITING'");
     expect(worker).toContain('/\\.(?:css|js)$/u');
     expect(worker).toContain("'/icons/icon-192.svg'");
@@ -227,10 +229,16 @@ describe('local MVP manifests', () => {
     );
     expect(pwa).toContain('https://github.com/echoNad3/no_bs_summary');
     expect(pwa).toContain('https://transcriptapi.com/billing');
+    expect(pwa.indexOf('>Chrome extension')).toBeLessThan(pwa.indexOf('>GitHub repo'));
+    expect(pwa.indexOf('>GitHub repo')).toBeLessThan(pwa.indexOf('>TranscriptAPI billing'));
     expect(extension).not.toContain('id="lock-video"');
     expect(extension).toContain('class="manual-link-field"');
     expect(extension).toContain(
       'https://chromewebstore.google.com/detail/no-bs-summary/fnphiadakmbpimdclfohfpbbliejhnmc',
+    );
+    expect(extension.indexOf('>Chrome extension')).toBeLessThan(extension.indexOf('>GitHub repo'));
+    expect(extension.indexOf('>GitHub repo')).toBeLessThan(
+      extension.indexOf('>TranscriptAPI billing'),
     );
   });
 
@@ -246,12 +254,12 @@ describe('local MVP manifests', () => {
       expect(asset).toContain('#e86437');
       expect(asset).not.toContain('#ff8a61');
       expect(asset).not.toContain('#f5f7fa');
-      expect(asset).toContain('transform="translate(-18 24)"');
+      expect(asset).toContain('transform="translate(-11 11)"');
     }
     expect(splash).toContain('#F1EEE7');
     expect(splash).toContain('#E86437');
-    expect(splash).toContain('android:translateX="64"');
-    expect(splash).toContain('android:translateY="64"');
+    expect(splash).toContain('M101,137 H173 L285,305');
+    expect(splash).toContain('M378,89 A48,48');
   });
 });
 
