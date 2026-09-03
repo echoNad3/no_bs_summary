@@ -205,6 +205,46 @@ describe('rate limiter', () => {
 });
 
 describe('worker request handling', () => {
+  it('returns cacheable video metadata without consuming summary credits', async () => {
+    const generationQuota = new FakeGenerationQuota();
+    const metadataFetcher = vi.fn().mockResolvedValue(Response.json({ title: 'Actual title' }));
+    const extensionOrigin = `chrome-extension://${'a'.repeat(32)}`;
+    const result = await handleRequest(
+      new Request('https://app.example.workers.dev/api/video-metadata?id=dQw4w9WgXcQ', {
+        headers: { origin: extensionOrigin },
+      }),
+      makeEnv(),
+      { generationQuota, metadataFetcher },
+    );
+
+    expect(result.status).toBe(200);
+    expect(await result.json()).toEqual({ title: 'Actual title' });
+    expect(result.headers.get('cache-control')).toBe('public, max-age=86400');
+    expect(result.headers.get('access-control-allow-origin')).toBe(extensionOrigin);
+    expect(result.headers.get('vary')).toBe('Origin');
+    expect(generationQuota.consumeCalls).toBe(0);
+  });
+
+  it('validates and separately rate-limits video metadata requests', async () => {
+    const metadataFetcher = vi.fn().mockResolvedValue(Response.json({ title: 'Actual title' }));
+    const metadataRateLimiter = new SlidingWindowRateLimiter(1);
+    const deps = { metadataFetcher, metadataRateLimiter, now: () => 1_000_000 };
+    const invalid = await handleRequest(
+      new Request('https://app.example.workers.dev/api/video-metadata?id=invalid'),
+      makeEnv(),
+      { metadataFetcher, metadataRateLimiter: new SlidingWindowRateLimiter(1) },
+    );
+    expect(invalid.status).toBe(400);
+
+    const request = () =>
+      new Request('https://app.example.workers.dev/api/video-metadata?id=dQw4w9WgXcQ');
+    expect((await handleRequest(request(), makeEnv(), deps)).status).toBe(200);
+    const blocked = await handleRequest(request(), makeEnv(), deps);
+    expect(blocked.status).toBe(429);
+    expect(blocked.headers.get('retry-after')).toBe('60');
+    expect(await blocked.json()).toMatchObject({ error: { code: 'RATE_LIMITED' } });
+  });
+
   it('serves health without a password and rejects unknown API routes', async () => {
     const env = makeEnv();
     const health = await handleRequest(

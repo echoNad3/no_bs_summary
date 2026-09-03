@@ -3,7 +3,8 @@
 
 .app-shell {
   width: min(100%, 736px);
-  padding: calc(22px + env(safe-area-inset-top)) 14px calc(20px + env(safe-area-inset-bottom));
+  padding: calc(22px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right))
+    calc(20px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left));
 }
 
 .video-preview {
@@ -32,4 +33,11 @@
   line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  .app-shell {
+    padding-right: calc(10px + env(safe-area-inset-right));
+    padding-left: calc(10px + env(safe-area-inset-left));
+  }
 }

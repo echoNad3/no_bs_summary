@@ -357,8 +357,17 @@ button:disabled {
 }
 
 dialog {
-  width: min(calc(100% - 28px), 350px);
-  max-height: calc(100dvh - 28px);
+  --dialog-top: max(12px, env(safe-area-inset-top, 0px));
+  --dialog-right: max(12px, env(safe-area-inset-right, 0px));
+  --dialog-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+  --dialog-left: max(12px, env(safe-area-inset-left, 0px));
+
+  position: fixed;
+  inset: var(--dialog-top) var(--dialog-right) var(--dialog-bottom) var(--dialog-left);
+  width: min(calc(100vw - var(--dialog-left) - var(--dialog-right)), 420px);
+  max-width: none;
+  max-height: calc(100dvh - var(--dialog-top) - var(--dialog-bottom));
+  margin: auto;
   padding: 0;
   overflow: auto;
   overscroll-behavior: contain;
@@ -377,7 +386,8 @@ dialog::backdrop {
   position: sticky;
   top: 0;
   z-index: 1;
-  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+  min-height: 68px;
+  padding: 10px var(--space-4) 10px var(--space-5);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -392,9 +402,9 @@ dialog::backdrop {
 }
 
 .settings-fields {
-  padding: var(--space-4);
+  padding: var(--space-5);
   display: grid;
-  gap: var(--space-3);
+  gap: var(--space-4);
 }
 
 .password-control {
@@ -415,9 +425,9 @@ dialog::backdrop {
 }
 
 .settings-section {
-  padding: var(--space-3);
+  padding: var(--space-4);
   display: grid;
-  gap: var(--space-3);
+  gap: 10px;
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-control);
@@ -492,13 +502,26 @@ dialog::backdrop {
 
 .resource-actions {
   display: grid;
-  gap: var(--space-2);
+  gap: 0;
+  overflow: hidden;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
 }
 
-.resource-link {
+.resource-actions .resource-link {
   width: 100%;
+  min-height: 54px;
+  padding-inline: var(--space-4);
   justify-content: flex-start;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
   text-align: left;
+}
+
+.resource-actions .resource-link + .resource-link {
+  border-top: 1px solid var(--color-border);
 }
 
 .resource-link .resource-icon {
@@ -561,6 +584,14 @@ a:active {
   .submit-actions > *,
   .error-actions > * {
     width: 100%;
+  }
+
+  .dialog-heading {
+    padding-left: var(--space-4);
+  }
+
+  .settings-fields {
+    padding: var(--space-4);
   }
 }
 

@@ -13,6 +13,7 @@ const youtubeUrl = 'https://www.youtube.com/watch?v=EwMSGdE2bOQ';
 const secondYoutubeUrl = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
 const productionApiUrl = 'https://no-bs-summary.echonad3.workers.dev/api/summarize';
 const productionStatusUrl = 'https://no-bs-summary.echonad3.workers.dev/api/status';
+const productionMetadataUrl = 'https://no-bs-summary.echonad3.workers.dev/api/video-metadata';
 let baseUrl = '';
 let localApiUrl = '';
 let localStatusUrl = '';
@@ -203,12 +204,14 @@ try {
     true,
   );
   await waitForText(pwaPage.locator('#android-update-status'), 'APK available.');
+  await assertSettingsPolish(pwaPage, true);
   await pwaPage.locator('#close-settings').click();
   await assertHeaderControlsAligned(pwaPage);
   await assertBrandArtworkCentered(pwaPage);
   await assertNoHorizontalOverflow(pwaPage);
   await pwaPage.locator('#url').fill(youtubeUrl);
   await pwaPage.locator('#video-thumbnail').waitFor({ state: 'visible' });
+  await waitForText(pwaPage.locator('#preview-title'), 'PyroLIVE Metadata');
   await installLoadingRecorder(pwaPage);
   const pwaResponsePromise = waitForSummaryResponse(pwaPage);
   await pwaPage.locator('#submit').click();
@@ -320,6 +323,16 @@ try {
       }),
     });
   });
+  await context.route(`${productionMetadataUrl}?*`, async (route) => {
+    const videoId = new URL(route.request().url()).searchParams.get('id');
+    const title = videoId === 'dQw4w9WgXcQ' ? 'Rick Astley Metadata' : 'PyroLIVE Metadata';
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify({ title }),
+    });
+  });
 
   const youtubePage = await context.newPage();
   await youtubePage.goto(youtubeUrl);
@@ -405,6 +418,9 @@ try {
   assert.ok(buttonWidth > formWidth * 0.8);
   await sidePanelPage.setViewportSize({ width: 320, height: 800 });
   await assertNoHorizontalOverflow(sidePanelPage);
+  await sidePanelPage.locator('#settings-button').click();
+  await assertSettingsPolish(sidePanelPage, true);
+  await sidePanelPage.locator('#close-settings').click();
   assert.deepEqual(extensionPayload, pwaPayload);
   assert.deepEqual(extensionOutput, pwaOutput);
   report.checks.loadingState = true;
@@ -447,6 +463,9 @@ try {
   await youtubePage.bringToFront();
   await waitForText(detectedTitle, 'No YouTube video detected');
   await urlInput.waitFor({ state: 'visible' });
+  await urlInput.fill(secondYoutubeUrl);
+  await waitForValue(titleInput, 'Rick Astley Metadata');
+  report.checks.manualLinkTitleLookup = true;
   await urlInput.fill('https://example.com');
   await submit.click();
   await waitForText(status, 'Not a YouTube link: "https://example.com"');
@@ -558,6 +577,13 @@ if (failure) throw failure;
 function createStaticServer(root) {
   return createServer(async (request, response) => {
     const url = new URL(request.url ?? '/', 'http://localhost');
+    if (url.pathname === '/api/video-metadata') {
+      const videoId = url.searchParams.get('id');
+      const title = videoId === 'dQw4w9WgXcQ' ? 'Rick Astley Metadata' : 'PyroLIVE Metadata';
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify({ title }));
+      return;
+    }
     const requested =
       url.pathname === '/' || url.pathname === '/share' ? 'index.html' : url.pathname.slice(1);
     const resolved = path.resolve(root, requested);
@@ -694,6 +720,51 @@ async function assertNoHorizontalOverflow(page) {
     widths.content <= widths.viewport,
     `Horizontal overflow: ${JSON.stringify(widths)} at ${page.url()}`,
   );
+}
+
+async function assertSettingsPolish(page, expectPhoneWidth = false) {
+  const geometry = await page.locator('#settings-dialog').evaluate((dialog) => {
+    const box = dialog.getBoundingClientRect();
+    const close = dialog.querySelector('#close-settings')?.getBoundingClientRect();
+    const resources = dialog.querySelector('.resource-actions');
+    const secondLink = dialog.querySelector('.resource-actions .resource-link:nth-child(2)');
+    const resourceStyle = resources ? getComputedStyle(resources) : undefined;
+    const secondStyle = secondLink ? getComputedStyle(secondLink) : undefined;
+    return {
+      viewportWidth: document.documentElement.clientWidth,
+      viewportHeight: document.documentElement.clientHeight,
+      left: box.left,
+      right: box.right,
+      top: box.top,
+      bottom: box.bottom,
+      width: box.width,
+      closeTop: close?.top,
+      closeRight: close?.right,
+      resourceGap: resourceStyle?.rowGap,
+      resourceBorder: resourceStyle?.borderTopWidth,
+      divider: secondStyle?.borderTopWidth,
+    };
+  });
+  assert.ok(
+    geometry.left >= 11 && geometry.right <= geometry.viewportWidth - 11,
+    JSON.stringify(geometry),
+  );
+  assert.ok(
+    geometry.top >= 11 && geometry.bottom <= geometry.viewportHeight - 11,
+    JSON.stringify(geometry),
+  );
+  assert.ok(geometry.width <= 421, JSON.stringify(geometry));
+  if (expectPhoneWidth) {
+    assert.ok(
+      geometry.width >= Math.min(420, geometry.viewportWidth - 26),
+      JSON.stringify(geometry),
+    );
+  }
+  assert.ok(geometry.closeTop >= geometry.top, JSON.stringify(geometry));
+  assert.ok(geometry.closeRight <= geometry.right, JSON.stringify(geometry));
+  assert.equal(geometry.resourceGap, '0px');
+  assert.equal(geometry.resourceBorder, '1px');
+  assert.equal(geometry.divider, '1px');
 }
 
 async function assertHeaderControlsAligned(page) {

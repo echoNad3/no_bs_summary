@@ -6,7 +6,12 @@ import {
   type SavedSummary,
 } from '../../shared/client-state.js';
 import { renderDetailedSummary } from '../../shared/render-summary.js';
-import { firstYouTubeUrl, youtubeThumbnailUrl } from '../../shared/youtube-input.js';
+import {
+  extractVideoId,
+  firstYouTubeUrl,
+  youtubeThumbnailUrl,
+} from '../../shared/youtube-input.js';
+import { LatestVideoTitleLookup } from '../../shared/video-title.js';
 import { getYouTubeTabContext } from './tab-context.js';
 import {
   DEFAULT_BACKEND_URL,
@@ -58,6 +63,7 @@ let refreshVersion = 0;
 let manualOverride = false;
 let lastFailure: Error | undefined;
 let savedSummary: SavedSummary | undefined;
+const videoTitleLookup = new LatestVideoTitleLookup(DEFAULT_BACKEND_URL);
 
 form.addEventListener('submit', (event) => {
   event.preventDefault();
@@ -75,6 +81,7 @@ urlInput.addEventListener('input', () => {
     : 'Paste a link below';
   videoContext.dataset.detected = 'false';
   updateThumbnail(urlInput.value);
+  requestVideoTitle(urlInput.value);
   showControlsForNewVideo();
 });
 
@@ -143,6 +150,7 @@ async function fillFromActiveTab(): Promise<void> {
 
   const context = getYouTubeTabContext(tab);
   if (!context) {
+    videoTitleLookup.cancel();
     clearDetectedVideo();
     return;
   }
@@ -157,6 +165,8 @@ async function fillFromActiveTab(): Promise<void> {
   detectedTitle.textContent = context.title ?? 'YouTube video';
   videoContext.dataset.detected = 'true';
   updateThumbnail(context.url);
+  if (context.title) videoTitleLookup.cancel();
+  else requestVideoTitle(context.url);
   if (changedVideo && savedSummary?.response.videoId === context.videoId) {
     restoreSummary(savedSummary);
   } else if (!changedVideo && renderedSummary) {
@@ -190,7 +200,9 @@ async function submitSummary(): Promise<void> {
       signal: controller.signal,
     });
     if (activeRequest !== controller) return;
-    renderResult(response, input);
+    const resolvedTitle =
+      videoIdFrom(urlInput.value) === response.videoId ? titleInput.value.trim() : '';
+    renderResult(response, { ...input, title: resolvedTitle || input.title });
     if (renderedSummary) {
       savedSummary = { ...renderedSummary, savedAt: new Date().toISOString() };
       await saveLastSummary(savedSummary);
@@ -349,6 +361,27 @@ function updateThumbnail(url: string): void {
   }
   videoThumbnail.src = thumbnail;
   videoThumbnail.hidden = false;
+}
+
+function requestVideoTitle(url: string): void {
+  videoTitleLookup.request(url, (title, videoId) => {
+    if (videoIdFrom(urlInput.value) !== videoId) return;
+    titleInput.value = title;
+    detectedTitle.textContent = title;
+    if (renderedSummary?.response.videoId === videoId) {
+      renderedSummary.title = title;
+      savedSummary = { ...renderedSummary, savedAt: new Date().toISOString() };
+      void saveLastSummary(savedSummary);
+    }
+  });
+}
+
+function videoIdFrom(url: string): string | undefined {
+  try {
+    return extractVideoId(url);
+  } catch {
+    return undefined;
+  }
 }
 
 function applyTextSize(size: ReturnType<typeof parseTextSize>): void {

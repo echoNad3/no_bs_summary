@@ -3,6 +3,10 @@
 const VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
 const YOUTUBE_HOSTS = new Set(['youtube.com', 'm.youtube.com', 'music.youtube.com']);
 
+export function isVideoId(value: string): boolean {
+  return VIDEO_ID_PATTERN.test(value);
+}
+
 export function extractVideoId(rawUrl: string): string {
   const trimmed = rawUrl.trim();
 
@@ -37,7 +41,7 @@ export function extractVideoId(rawUrl: string): string {
     throw new Error(`Not a YouTube link: "${trimmed}"`);
   }
 
-  if (!candidate || !VIDEO_ID_PATTERN.test(candidate)) {
+  if (!candidate || !isVideoId(candidate)) {
     throw new Error(`Could not find a valid video ID in this link: "${trimmed}"`);
   }
 

@@ -10,7 +10,12 @@ import {
   type TextSize,
 } from '../../shared/client-state.js';
 import { renderDetailedSummary } from '../../shared/render-summary.js';
-import { firstYouTubeUrl, youtubeThumbnailUrl } from '../../shared/youtube-input.js';
+import {
+  extractVideoId,
+  firstYouTubeUrl,
+  youtubeThumbnailUrl,
+} from '../../shared/youtube-input.js';
+import { LatestVideoTitleLookup } from '../../shared/video-title.js';
 import { isDownloadedBuildInstallable, nextDisplayedDownloadProgress } from './app-update-logic.js';
 import { AppUpdater, type AppUpdateState } from './app-updater.js';
 import { fetchLatestApk, readCachedLatestApk, type LatestApk } from './apk-version.js';
@@ -84,6 +89,8 @@ let updaterUnsupported = false;
 let lastVersionCheckAt = 0;
 let serviceWorkerRegistration: ServiceWorkerRegistration | undefined;
 let lastServiceWorkerCheckAt = 0;
+let titleVideoId: string | undefined;
+const videoTitleLookup = new LatestVideoTitleLookup('');
 
 const savedPassword = loadSavedPassword();
 passwordInput.value = savedPassword;
@@ -98,6 +105,7 @@ if (shared.wasShared && window.location.search) {
   window.history.replaceState(null, '', window.location.pathname);
 }
 if (!shared.wasShared) restoreLastSummary();
+if (titleInput.value.trim()) titleVideoId = videoIdFrom(urlInput.value);
 updateVideoPreview();
 updateAndroidUpdateUi();
 void hideLaunchScreen();
@@ -107,10 +115,20 @@ form.addEventListener('submit', (event) => {
   void submitSummary();
 });
 
-for (const input of [urlInput, titleInput]) {
-  input.addEventListener('input', handleSummaryInputChanged);
-  input.addEventListener('input', updateVideoPreview);
-}
+urlInput.addEventListener('input', () => {
+  handleSummaryInputChanged();
+  const videoId = videoIdFrom(urlInput.value);
+  if (videoId !== titleVideoId) {
+    titleInput.value = '';
+    titleVideoId = undefined;
+  }
+  updateVideoPreview();
+});
+titleInput.addEventListener('input', () => {
+  handleSummaryInputChanged();
+  titleVideoId = titleInput.value.trim() ? videoIdFrom(urlInput.value) : undefined;
+  updateVideoPreview();
+});
 
 urlInput.addEventListener('paste', (event) => useYouTubeUrlFromPaste(event, urlInput));
 togglePasswordButton.addEventListener('click', togglePasswordVisibility);
@@ -177,7 +195,9 @@ async function submitSummary(): Promise<void> {
     const response = await summarizeVideo('', input, { password, signal: controller.signal });
     if (activeRequest !== controller) return;
     if (settingsDialog.open) settingsDialog.close();
-    renderResult(response, input);
+    const resolvedTitle =
+      videoIdFrom(urlInput.value) === response.videoId ? titleInput.value.trim() : '';
+    renderResult(response, { ...input, title: resolvedTitle || input.title });
     saveLastSummary(renderedSummary);
     setStatus('Summary ready.', 'success');
   } catch (error) {
@@ -364,15 +384,42 @@ function applyTextSize(size: TextSize): void {
 }
 
 function updateVideoPreview(): void {
+  const videoId = videoIdFrom(urlInput.value);
   const thumbnail = youtubeThumbnailUrl(urlInput.value);
-  if (!thumbnail) {
+  if (!videoId || !thumbnail) {
+    videoTitleLookup.cancel();
     videoPreview.hidden = true;
     videoThumbnail.removeAttribute('src');
     return;
   }
   videoThumbnail.src = thumbnail;
-  previewTitle.textContent = titleInput.value.trim() || 'YouTube video';
+  const currentTitle = titleVideoId === videoId ? titleInput.value.trim() : '';
+  previewTitle.textContent = currentTitle || 'YouTube video';
   videoPreview.hidden = false;
+  if (currentTitle) {
+    videoTitleLookup.cancel();
+    return;
+  }
+  videoTitleLookup.request(urlInput.value, applyResolvedVideoTitle);
+}
+
+function applyResolvedVideoTitle(title: string, videoId: string): void {
+  if (videoIdFrom(urlInput.value) !== videoId) return;
+  titleInput.value = title;
+  titleVideoId = videoId;
+  previewTitle.textContent = title;
+  if (renderedSummary?.response.videoId === videoId) {
+    renderedSummary.title = title;
+    saveLastSummary(renderedSummary);
+  }
+}
+
+function videoIdFrom(url: string): string | undefined {
+  try {
+    return extractVideoId(url);
+  } catch {
+    return undefined;
+  }
 }
 
 async function refreshAndroidUpdateInfo(force = false): Promise<void> {

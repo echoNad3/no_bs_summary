@@ -20,10 +20,12 @@ import { MemoryTranscriptStore } from './transcript/store.js';
 import { GEMINI_PROMPT_VERSION, GeminiSummaryProvider } from './summary/gemini.js';
 import { TranscriptApiProvider } from './transcript/transcriptapi.js';
 import { DEFAULT_END_TO_END_TIMEOUT_MS } from './config.js';
+import { fetchYouTubeVideoMetadata } from './video-metadata.js';
 
 const MAX_BODY_BYTES = 16 * 1024;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX_REQUESTS = 20;
+const METADATA_RATE_LIMIT_MAX_REQUESTS = 60;
 const RATE_LIMIT_MAX_TRACKED_CLIENTS = 5_000;
 
 export interface AssetsFetcherLike {
@@ -50,6 +52,8 @@ export interface WorkerDeps {
   service?: Pick<SummaryService, 'summarize'>;
   generationQuota?: GenerationQuotaClient;
   rateLimiter?: SlidingWindowRateLimiter;
+  metadataRateLimiter?: SlidingWindowRateLimiter;
+  metadataFetcher?: typeof fetch;
   now?: () => number;
 }
 
@@ -58,10 +62,12 @@ export { GenerationQuota } from './generation-quota.js';
 export class SlidingWindowRateLimiter {
   private readonly log = new Map<string, number[]>();
 
+  constructor(private readonly maxRequests = RATE_LIMIT_MAX_REQUESTS) {}
+
   allow(client: string, now: number): boolean {
     const windowStart = now - RATE_LIMIT_WINDOW_MS;
     const recent = (this.log.get(client) ?? []).filter((at) => at > windowStart);
-    if (recent.length >= RATE_LIMIT_MAX_REQUESTS) {
+    if (recent.length >= this.maxRequests) {
       this.log.set(client, recent);
       return false;
     }
@@ -83,6 +89,7 @@ export class SlidingWindowRateLimiter {
 
 // Shared only for rate limits and duplicate-request collapse.
 const defaultRateLimiter = new SlidingWindowRateLimiter();
+const defaultMetadataRateLimiter = new SlidingWindowRateLimiter(METADATA_RATE_LIMIT_MAX_REQUESTS);
 let cachedService: { fingerprint: string; service: SummaryService } | undefined;
 
 export default {
@@ -183,6 +190,10 @@ async function routeRequest(
     );
   }
 
+  if (request.method === 'GET' && url.pathname === '/api/video-metadata') {
+    return videoMetadata(request, url, deps, now, corsHeaders);
+  }
+
   if (request.method === 'POST' && url.pathname === '/api/summarize') {
     return summarize(request, env, deps, now, corsHeaders);
   }
@@ -200,6 +211,39 @@ async function routeRequest(
   }
 
   return serveAsset(request, env);
+}
+
+async function videoMetadata(
+  request: Request,
+  url: URL,
+  deps: WorkerDeps,
+  now: () => number,
+  corsHeaders: Record<string, string>,
+): Promise<Response> {
+  const videoId = url.searchParams.get('id') ?? '';
+  const client = request.headers.get('cf-connecting-ip') ?? 'unknown';
+  const rateLimiter = deps.metadataRateLimiter ?? defaultMetadataRateLimiter;
+  const requestTime = now();
+  if (!rateLimiter.allow(client, requestTime)) {
+    const retryAfterSeconds = rateLimiter.retryAfterSeconds(client, requestTime);
+    return json(
+      429,
+      {
+        error: {
+          code: 'RATE_LIMITED',
+          message: `Too many title lookups. Try again in ${retryAfterSeconds} seconds.`,
+        },
+      },
+      { ...corsHeaders, 'Retry-After': String(retryAfterSeconds) },
+    );
+  }
+
+  const metadata = await fetchYouTubeVideoMetadata(videoId, deps.metadataFetcher);
+  return json(200, metadata, {
+    ...corsHeaders,
+    'Cache-Control': 'public, max-age=86400',
+    Vary: 'Origin',
+  });
 }
 
 async function summarize(

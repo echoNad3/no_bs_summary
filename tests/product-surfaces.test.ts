@@ -56,6 +56,9 @@ describe('local MVP manifests', () => {
     expect(theme).toContain('--tap: 48px');
     expect(sharedCss).toContain('width: min(100%, 460px)');
     expect(sharedCss).toContain('border-radius: var(--radius-card)');
+    expect(sharedCss).toContain('env(safe-area-inset-top, 0px)');
+    expect(sharedCss).toContain('420px');
+    expect(sharedCss).toContain('.resource-actions .resource-link + .resource-link');
     expect(pwaCss).toContain("@import '../../shared/theme.css'");
     expect(pwaCss).toContain('width: min(100%, 736px)');
     expect(extensionCss).toContain("@import '../../shared/theme.css'");
@@ -75,7 +78,7 @@ describe('local MVP manifests', () => {
     expect(manifest).toMatchObject({
       manifest_version: 3,
       name: 'No BS Summary',
-      version: '0.7.2',
+      version: '0.7.3',
       minimum_chrome_version: '114',
       permissions: ['sidePanel', 'storage'],
       background: { service_worker: 'background.js', type: 'module' },
@@ -172,7 +175,7 @@ describe('local MVP manifests', () => {
 
   it('precaches the built JS and CSS needed for a first offline launch', async () => {
     const worker = await fs.readFile('apps/pwa/public/sw.js', 'utf8');
-    expect(worker).toContain("const CACHE = 'nbs-shell-v13'");
+    expect(worker).toContain("const CACHE = 'nbs-shell-v14'");
     expect(worker).toContain("event.data?.type === 'SKIP_WAITING'");
     expect(worker).toContain('/\\.(?:css|js)$/u');
     expect(worker).toContain("'/icons/icon-192.svg'");

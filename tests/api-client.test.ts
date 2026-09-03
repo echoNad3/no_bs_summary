@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { checkBackend, summarizeVideo } from '../apps/shared/api-client.js';
+import { checkBackend, fetchVideoMetadata, summarizeVideo } from '../apps/shared/api-client.js';
 
 const validResponse = {
   verdict: 'WATCH',
@@ -20,6 +20,24 @@ afterEach(() => {
 });
 
 describe('browser API client', () => {
+  it('loads and validates a video title through the same backend', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ title: 'A real video title' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchVideoMetadata('https://app.example/', 'dQw4w9WgXcQ')).resolves.toEqual({
+      title: 'A real video title',
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://app.example/api/video-metadata?id=dQw4w9WgXcQ',
+      expect.objectContaining({ method: 'GET' }),
+    );
+
+    fetchMock.mockResolvedValueOnce(Response.json({ title: '' }));
+    await expect(fetchVideoMetadata('', 'dQw4w9WgXcQ')).rejects.toMatchObject({
+      code: 'INVALID_RESPONSE',
+    });
+  });
+
   it('normalizes the backend URL and sends the shared password', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify(validResponse), {

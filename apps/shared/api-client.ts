@@ -33,6 +33,10 @@ export interface FreeGenerationStatus {
   shared: GenerationUsageStatus;
 }
 
+export interface VideoMetadata {
+  title: string;
+}
+
 interface BackendStatusBase {
   status: 'ok';
   freeGeneration: FreeGenerationStatus;
@@ -65,6 +69,71 @@ export interface SummarizeOptions {
 }
 
 export const DEFAULT_SUMMARY_REQUEST_TIMEOUT_MS = 70_000;
+export const DEFAULT_METADATA_REQUEST_TIMEOUT_MS = 8_000;
+
+export async function fetchVideoMetadata(
+  apiBase: string,
+  videoId: string,
+  options: Pick<SummarizeOptions, 'signal' | 'timeoutMs'> = {},
+): Promise<VideoMetadata> {
+  const controller = new AbortController();
+  const timeout = globalThis.setTimeout(
+    () => controller.abort('timeout'),
+    options.timeoutMs ?? DEFAULT_METADATA_REQUEST_TIMEOUT_MS,
+  );
+  const cancelFromCaller = () => controller.abort(options.signal?.reason);
+  if (options.signal?.aborted) cancelFromCaller();
+  else options.signal?.addEventListener('abort', cancelFromCaller, { once: true });
+
+  try {
+    let response: Response;
+    try {
+      const normalizedBase = apiBase.replace(/\/+$/u, '');
+      const query = new URLSearchParams({ id: videoId });
+      response = await fetch(`${normalizedBase}/api/video-metadata?${query}`, {
+        method: 'GET',
+        signal: controller.signal,
+      });
+    } catch {
+      if (options.signal?.aborted) {
+        throw new ApiClientError('Title lookup cancelled.', 'REQUEST_CANCELLED');
+      }
+      if (controller.signal.aborted) {
+        throw new ApiClientError('The title lookup took too long.', 'REQUEST_TIMEOUT');
+      }
+      throw new ApiClientError('The video title is unavailable.', 'BACKEND_UNREACHABLE');
+    }
+
+    let payload: unknown;
+    try {
+      payload = await readJson(response);
+    } catch (error) {
+      if (options.signal?.aborted) {
+        throw new ApiClientError('Title lookup cancelled.', 'REQUEST_CANCELLED');
+      }
+      if (controller.signal.aborted) {
+        throw new ApiClientError('The title lookup took too long.', 'REQUEST_TIMEOUT');
+      }
+      throw error;
+    }
+    if (!response.ok) {
+      const error = asObject(asObject(payload)?.error);
+      throw new ApiClientError(
+        typeof error?.message === 'string' ? error.message : 'The video title is unavailable.',
+        typeof error?.code === 'string' ? error.code : 'REQUEST_FAILED',
+        response.status,
+        retryAfterSeconds(response),
+      );
+    }
+    if (!isVideoMetadata(payload)) {
+      throw new ApiClientError('The backend returned an invalid video title.', 'INVALID_RESPONSE');
+    }
+    return payload;
+  } finally {
+    globalThis.clearTimeout(timeout);
+    options.signal?.removeEventListener('abort', cancelFromCaller);
+  }
+}
 
 export async function summarizeVideo(
   apiBase: string,
@@ -225,6 +294,11 @@ export function isSummaryResult(value: unknown): value is SummaryResult {
     isNonnegativeInteger(retries?.transcript) &&
     isNonnegativeInteger(retries?.summary)
   );
+}
+
+function isVideoMetadata(value: unknown): value is VideoMetadata {
+  const candidate = asObject(value);
+  return isNonemptyString(candidate?.title) && candidate.title.length <= 200;
 }
 
 function isBackendStatus(value: unknown): value is BackendStatus {

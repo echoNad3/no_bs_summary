@@ -34,7 +34,7 @@ describe('extension manifest permissions', () => {
       action: { default_title: string; default_icon: Record<string, string> };
     };
     expect(manifest.name).toBe('No BS Summary');
-    expect(manifest.version).toBe('0.7.2');
+    expect(manifest.version).toBe('0.7.3');
     expect((manifest as { minimum_chrome_version?: string }).minimum_chrome_version).toBe('114');
     expect(manifest.host_permissions).toEqual(
       expect.arrayContaining([

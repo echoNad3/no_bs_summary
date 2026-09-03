@@ -13,7 +13,7 @@ android {
                 : 1
         versionName = project.hasProperty('appBuildNumber')
                 ? "build " + project.property('appBuildNumber')
-                : "0.7.2"
+                : "0.7.3"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
