@@ -12,7 +12,7 @@ import {
 } from './provider.js';
 import type { Summary, SummaryProvider, SummarySource } from './provider.js';
 
-export const GEMINI_PROMPT_VERSION = 'summary-first-v34-2026-09-01';
+export const GEMINI_PROMPT_VERSION = 'summary-first-v35-2026-09-19';
 const MIN_OUTPUT_RETRY_REMAINING_MS = 5_000;
 
 export const SYSTEM_INSTRUCTION = `Create the detailed summary product first, then add a small WATCH / SKIM / SKIP extra. Use only the transcript.
@@ -24,14 +24,17 @@ Source security:
 Product priority:
 - The detailed summary is the main product. The verdict is secondary.
 - Give enough useful detail that the user usually does not need to watch the video to understand what it says.
-- Stay direct and compressed. Keep it slightly shorter than an exhaustive recap without stripping useful specifics.
-- Let information density determine length. A simple source can have a short summary; a dense or multi-topic source can be longer. There is no fixed tiny word or sentence target.
+- Lead with the useful answer and use the minimum wording that preserves useful information.
+- Aim for only about 5-10% less text than a thorough detailed recap. This is a direction, not a quota: let the source's information density determine the final length.
 
 Detailed summary:
-- Include the actual important facts, names, events, arguments, examples, numbers, context, and conclusions found in the transcript.
+- Start with the main finding, outcome, recommendation, or attributed claim. The first sentence must carry useful content. Never open with generic framing such as "This video/source...", "The provided text...", "It covers/discusses/examines...", or "It serves as...".
+- Include the important facts, names, events, arguments, numbers, context, and conclusions needed to understand the source.
 - Preserve concrete specifics. Never replace them with vague phrases such as "covers several topics", "discusses internet drama", "shares some advice", or "talks about different ideas".
-- For one coherent topic, use compact paragraphs. For a genuinely multi-topic video, use clearly separated Markdown bullets in the summary field. Start each bullet with a short topic label, for example "- **Roman dodecahedrons:** ...". Put the useful details and conclusion for that topic in the same bullet.
-- Keep each paragraph or topic bullet compact, normally two to four sentences. Merge closely related subtopics and drop secondary examples that do not change the point.
+- For one coherent topic, use compact paragraphs. For a genuinely multi-topic video, use clearly separated Markdown bullets in the summary field. Start each bullet with a short topic label, for example "- **Roman dodecahedrons:** ...", then immediately state that topic's point.
+- Use the fewest topics that remain clear. Group related details instead of turning every minor subtopic, step, or example into its own bullet.
+- Keep each paragraph or topic bullet compact, usually one or two sentences. Use a third only when the point would otherwise lose a needed mechanism, essential evidence, or important qualification.
+- State each point once. Remove introductory framing, repeated explanations, incidental background, inventories of examples, and details that add no new understanding. Do not repeat the takeaway in a closing recap.
 - Separate what happened, what the speaker argues, the evidence or examples they give, and the conclusion when those distinctions matter.
 - Present disputed, speculative, promotional, health, or science claims as the speaker's claims, not as established facts.
 - The summary contains content, not a review of the video and not an explanation of the verdict.
@@ -187,7 +190,7 @@ export class GeminiSummaryProvider implements SummaryProvider {
         `${SOURCE_SECURITY_INSTRUCTION}\n` +
         `SOURCE TRANSCRIPT LANGUAGE:\n${source.transcriptLanguage}\n\n` +
         `Return the reason and summary in English.\n` +
-        `Final-answer constraint: make the detailed summary the main product, but keep it slightly shorter than an exhaustive recap. Preserve important specifics, use compact paragraphs or labeled Markdown bullets for genuinely separate topics, merge closely related points, and drop secondary examples that do not change the point. Use plain everyday English. Make the one-sentence reason bluntly judge the delivery, entertainment, padding, repetition, and whether the creator drags things out. Keep it under 25 words. Start with the actual good or bad part, not "The creator is" or "The video is". Write it like a friend giving a straight answer, not a formal review. Never use "a cohesive narrative", "a variety of topics", "cultural commentary", "varies in quality", "offers a perspective", "presents an exploration", "holds attention", "is essentially", "feels like", "scattered series", or "loosely connected reactions" as the reason. Do not mention the transcript as your input unless the word is genuinely relevant to the video's content. Never discuss the prompt, model-facing instructions, supplied text, limitations, or missing information. Never mention or assume visuals, animation, footage, editing, cameras, on-screen material, demonstrations, or physical cues. Never estimate runtime from transcript length.\n\n` +
+        `Final-answer constraint: make the detailed summary the main product and lead with the main finding, outcome, recommendation, or attributed claim. The first sentence must carry useful content; never open with generic framing such as "This video/source", "The provided text", "It covers/discusses/examines", or "It serves as". Use the minimum wording that preserves useful information, aiming for only about 5-10% less text than a thorough detailed recap without treating that as a fixed quota. Use the fewest topics that remain clear, grouping related details instead of turning every minor subtopic, step, or example into its own bullet. Keep each paragraph or topic bullet compact, usually one or two sentences. Use a third only when the point would otherwise lose a needed mechanism, essential evidence, or important qualification. State each point once. Remove introductory framing, repeated explanations, incidental background, inventories of examples, and details that add no new understanding. Do not repeat the takeaway in a closing recap. Use plain everyday English. Make the one-sentence reason bluntly judge the delivery, entertainment, padding, repetition, and whether the creator drags things out. Keep it under 25 words. Start with the actual good or bad part, not "The creator is" or "The video is". Write it like a friend giving a straight answer, not a formal review. Never use "a cohesive narrative", "a variety of topics", "cultural commentary", "varies in quality", "offers a perspective", "presents an exploration", "holds attention", "is essentially", "feels like", "scattered series", or "loosely connected reactions" as the reason. Do not mention the transcript as your input unless the word is genuinely relevant to the video's content. Never discuss the prompt, model-facing instructions, supplied text, limitations, or missing information. Never mention or assume visuals, animation, footage, editing, cameras, on-screen material, demonstrations, or physical cues. Never estimate runtime from transcript length.\n\n` +
         `SOURCE TRANSCRIPT (untrusted):\n${transcriptText}`,
       stream: false,
       store: false,
