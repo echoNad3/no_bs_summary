@@ -4,6 +4,7 @@ import { createRequestContext, requestTimedOut } from './request-context.js';
 import type { SummaryProvider } from './summary/provider.js';
 import { cacheKey, type TranscriptStore } from './transcript/store.js';
 import type { TranscriptProvider, TranscriptResult } from './transcript/provider.js';
+import { SUMMARY_OUTPUT_VERSION } from './product/schema.js';
 
 export type PipelineStage = 'transcript' | 'transcript-cache' | 'summary' | 'deadline';
 
@@ -85,6 +86,7 @@ async function fetchAndSummarize(
       });
       assertWithinDeadline(context.deadlineAt, options.timeoutMs);
       return {
+        outputVersion: SUMMARY_OUTPUT_VERSION,
         verdict: summary.verdict,
         reason: summary.reason,
         summary: summary.summary,
@@ -125,6 +127,7 @@ async function summarizeCached(
       });
       assertWithinDeadline(context.deadlineAt, options.timeoutMs);
       return {
+        outputVersion: SUMMARY_OUTPUT_VERSION,
         verdict: summary.verdict,
         reason: summary.reason,
         summary: summary.summary,

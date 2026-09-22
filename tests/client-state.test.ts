@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  isLegacySavedSummary,
   parseSavedSummary,
   parseTextSize,
   safeDiagnosticsText,
@@ -26,6 +27,25 @@ const saved = {
 describe('client quality-of-life state', () => {
   it('restores only structurally valid summaries matching their YouTube URL', () => {
     expect(parseSavedSummary(saved)).toEqual(saved);
+    expect(isLegacySavedSummary(parseSavedSummary(saved)!)).toBe(true);
+    const current = {
+      ...saved,
+      response: {
+        ...saved.response,
+        outputVersion: 2 as const,
+        summary: '- **Main point:** Useful detail.',
+      },
+    };
+    expect(parseSavedSummary(current)).toEqual(current);
+    expect(isLegacySavedSummary(parseSavedSummary(current)!)).toBe(false);
+    expect(
+      isLegacySavedSummary(
+        parseSavedSummary({
+          ...saved,
+          response: { ...saved.response, outputVersion: 1 as const },
+        })!,
+      ),
+    ).toBe(true);
     expect(parseSavedSummary({ ...saved, url: 'https://youtu.be/EwMSGdE2bOQ' })).toBeUndefined();
     expect(
       parseSavedSummary({ ...saved, response: { summary: 'missing fields' } }),

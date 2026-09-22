@@ -44,7 +44,7 @@ function service(
       summarize: vi.fn().mockResolvedValue({
         verdict: 'SKIP',
         reason: 'The useful part fits here.',
-        summary: 'One useful fact.',
+        summary: '- **Main point:** One useful fact.',
       }),
     } satisfies SummaryProvider);
   return {
@@ -71,6 +71,7 @@ describe('SummaryService', () => {
       language: 'en',
     });
     expect(result).toMatchObject({
+      outputVersion: 2,
       verdict: 'SKIP',
       videoId: 'dQw4w9WgXcQ',
       language: 'en',
@@ -163,13 +164,105 @@ describe('SummaryService', () => {
     releaseSummary({
       verdict: 'WATCH',
       reason: 'The delivery stays clear and entertaining throughout.',
-      summary: 'The song promises loyalty and says the singer will never abandon his partner.',
+      summary:
+        '- **Promise:** The song promises loyalty and says the singer will never abandon his partner.',
     });
 
     const [pwaResult, extensionResult] = await Promise.all([pwaRequest, extensionRequest]);
     expect(extensionResult).toEqual(pwaResult);
     expect(transcript.fetchTranscript).toHaveBeenCalledTimes(1);
     expect(summary.summarize).toHaveBeenCalledTimes(1);
+  });
+
+  it('regenerates past the summary cache, reuses captions, charges once, and replaces the saved result', async () => {
+    const summaryCache = new MemorySummaryCache();
+    const summary = {
+      name: 'gemini',
+      summarize: vi
+        .fn()
+        .mockResolvedValueOnce({
+          verdict: 'SKIM',
+          reason: 'Useful, but padded.',
+          summary: '- **Old answer:** The first saved result.',
+        })
+        .mockResolvedValueOnce({
+          verdict: 'WATCH',
+          reason: 'Clear and worth the time.',
+          summary: '- **Fresh answer:** The replacement result.',
+        }),
+    } satisfies SummaryProvider;
+    const { instance, transcript } = service({ summary, summaryCache });
+    const beforeGenerate = vi.fn().mockResolvedValue(undefined);
+    const input = { url: 'https://youtu.be/dQw4w9WgXcQ', language: 'en' };
+
+    const first = await instance.summarize(input, { beforeGenerate });
+    const cached = await instance.summarize(input, { beforeGenerate });
+    const fresh = await instance.summarize({ ...input, regenerate: true }, { beforeGenerate });
+    const replaced = await instance.summarize(input, { beforeGenerate });
+
+    expect(first.summary).toContain('Old answer');
+    expect(cached).toEqual(first);
+    expect(fresh.summary).toContain('Fresh answer');
+    expect(replaced).toEqual(fresh);
+    expect(summary.summarize).toHaveBeenCalledTimes(2);
+    expect(transcript.fetchTranscript).toHaveBeenCalledTimes(1);
+    expect(beforeGenerate).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the previous cached summary when regeneration fails', async () => {
+    const summaryCache = new MemorySummaryCache();
+    const summary = {
+      name: 'gemini',
+      summarize: vi
+        .fn()
+        .mockResolvedValueOnce({
+          verdict: 'WATCH',
+          reason: 'Clear and useful.',
+          summary: '- **Saved answer:** Keep this result.',
+        })
+        .mockRejectedValueOnce(new Error('provider failed')),
+    } satisfies SummaryProvider;
+    const { instance } = service({ summary, summaryCache });
+    const input = { url: 'https://youtu.be/dQw4w9WgXcQ', language: 'en' };
+    const saved = await instance.summarize(input);
+
+    await expect(instance.summarize({ ...input, regenerate: true })).rejects.toMatchObject({
+      code: 'SUMMARY_FAILED',
+    });
+    await expect(instance.summarize(input)).resolves.toEqual(saved);
+  });
+
+  it('coalesces simultaneous regeneration requests into one paid generation', async () => {
+    let release!: (value: { verdict: 'WATCH'; reason: string; summary: string }) => void;
+    const summary = {
+      name: 'gemini',
+      summarize: vi.fn().mockReturnValue(
+        new Promise<{ verdict: 'WATCH'; reason: string; summary: string }>((resolve) => {
+          release = resolve;
+        }),
+      ),
+    } satisfies SummaryProvider;
+    const { instance } = service({ summary });
+    const beforeFirst = vi.fn().mockResolvedValue(undefined);
+    const beforeSecond = vi.fn().mockResolvedValue(undefined);
+    const input = {
+      url: 'https://youtu.be/dQw4w9WgXcQ',
+      language: 'en',
+      regenerate: true,
+    };
+
+    const first = instance.summarize(input, { beforeGenerate: beforeFirst });
+    const second = instance.summarize(input, { beforeGenerate: beforeSecond });
+    release({
+      verdict: 'WATCH',
+      reason: 'Clear and useful.',
+      summary: '- **Fresh answer:** One regenerated result.',
+    });
+
+    await expect(Promise.all([first, second])).resolves.toHaveLength(2);
+    expect(summary.summarize).toHaveBeenCalledTimes(1);
+    expect(beforeFirst).toHaveBeenCalledTimes(1);
+    expect(beforeSecond).not.toHaveBeenCalled();
   });
 
   it('rejects bad URLs before calling a provider', async () => {
@@ -188,7 +281,11 @@ describe('SummaryService', () => {
     } satisfies TranscriptProvider;
     await expect(
       service({ transcript }).instance.summarize({ url: 'https://youtu.be/dQw4w9WgXcQ' }),
-    ).rejects.toMatchObject({ code: 'TRANSCRIPT_FAILED', statusCode: 502 });
+    ).rejects.toMatchObject({
+      code: 'TRANSCRIPT_FAILED',
+      statusCode: 502,
+      message: 'No captions are available for this video.',
+    });
 
     const summary = {
       name: 'gemini',
@@ -196,7 +293,11 @@ describe('SummaryService', () => {
     } satisfies SummaryProvider;
     await expect(
       service({ summary }).instance.summarize({ url: 'https://youtu.be/dQw4w9WgXcQ' }),
-    ).rejects.toMatchObject({ code: 'SUMMARY_FAILED', statusCode: 502 });
+    ).rejects.toMatchObject({
+      code: 'SUMMARY_FAILED',
+      statusCode: 502,
+      message: 'Could not create a valid short summary. Try again.',
+    });
   });
 
   it('returns a stable, useful public error when the provider deadline is reached', async () => {
@@ -223,7 +324,10 @@ describe('SummaryService', () => {
 
     await expect(
       service({ summaryCache }).instance.summarize({ url: 'https://youtu.be/dQw4w9WgXcQ' }),
-    ).resolves.toMatchObject({ verdict: 'SKIP', summary: 'One useful fact.' });
+    ).resolves.toMatchObject({
+      verdict: 'SKIP',
+      summary: '- **Main point:** One useful fact.',
+    });
     expect(warning).toHaveBeenCalledWith(expect.stringContaining('summary_cache_write_failed'));
     warning.mockRestore();
   });

@@ -15,9 +15,11 @@ const identity: SummaryCacheIdentity = {
 };
 
 const response: SummarizeResponse = {
+  outputVersion: 2,
   verdict: 'WATCH',
   reason: 'The host keeps a long list of topics funny and easy to follow.',
-  summary: 'Wizard Detective, Kane Pixels, and several Backrooms projects are the main topics.',
+  summary:
+    '- **Main topics:** Wizard Detective, Kane Pixels, and several Backrooms projects are covered.',
   videoId: 'EwMSGdE2bOQ',
   language: 'en',
   source: 'CACHED',
@@ -52,6 +54,18 @@ describe('Cloudflare summary cache', () => {
     await expect(cache.read(identity)).resolves.toEqual(response);
   });
 
+  it('reuses accepted caption-language variants without crossing language families', async () => {
+    for (const language of ['en-US', 'asr-en']) {
+      const cache = new KvSummaryCache(new FakeKv());
+      await cache.write(identity, { ...response, language });
+      await expect(cache.read(identity)).resolves.toMatchObject({ language });
+    }
+
+    const cache = new KvSummaryCache(new FakeKv());
+    await cache.write(identity, { ...response, language: 'de' });
+    await expect(cache.read(identity)).resolves.toBeUndefined();
+  });
+
   it('reads a matching legacy entry without sharing it across languages', async () => {
     const kv = new FakeKv();
     const { language: _language, ...legacyIdentity } = identity;
@@ -73,6 +87,12 @@ describe('Cloudflare summary cache', () => {
     kv.values.set(
       summaryCacheKey(identity),
       JSON.stringify({ identity: { ...identity, model: 'other' }, response }),
+    );
+    await expect(cache.read(identity)).resolves.toBeUndefined();
+
+    kv.values.set(
+      summaryCacheKey(identity),
+      JSON.stringify({ identity, response: { ...response, videoId: 'dQw4w9WgXcQ' } }),
     );
     await expect(cache.read(identity)).resolves.toBeUndefined();
   });

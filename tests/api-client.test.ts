@@ -4,9 +4,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { checkBackend, fetchVideoMetadata, summarizeVideo } from '../apps/shared/api-client.js';
 
 const validResponse = {
+  outputVersion: 2,
   verdict: 'WATCH',
   reason: 'It gets to the point.',
-  summary: 'Useful detail.',
+  summary: '- **Main point:** Useful detail.',
   videoId: 'dQw4w9WgXcQ',
   language: 'en',
   source: 'CACHED',
@@ -70,6 +71,48 @@ describe('browser API client', () => {
       url: 'https://youtu.be/dQw4w9WgXcQ',
       language: 'en',
     });
+  });
+
+  it('marks regeneration explicitly without sending the display-only title', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json(validResponse));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await summarizeVideo(
+      '',
+      {
+        url: 'https://youtu.be/dQw4w9WgXcQ',
+        title: 'Never send this title',
+        language: 'en',
+      },
+      { regenerate: true },
+    );
+
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      url: 'https://youtu.be/dQw4w9WgXcQ',
+      language: 'en',
+      regenerate: true,
+    });
+  });
+
+  it('rejects a current response with a stray paragraph or fourth point', async () => {
+    const malformed = {
+      ...validResponse,
+      summary: '- **One:** A.\n\n- **Two:** B.\n\n- **Three:** C.\n\n- **Four:** D.',
+    };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json(malformed)));
+
+    await expect(
+      summarizeVideo('', { url: 'https://youtu.be/dQw4w9WgXcQ', language: 'en' }),
+    ).rejects.toMatchObject({ code: 'INVALID_RESPONSE' });
+  });
+
+  it('rejects an unversioned network result while saved-state migration remains separate', async () => {
+    const { outputVersion: _outputVersion, ...legacyResponse } = validResponse;
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json(legacyResponse)));
+
+    await expect(
+      summarizeVideo('', { url: 'https://youtu.be/dQw4w9WgXcQ', language: 'en' }),
+    ).rejects.toMatchObject({ code: 'INVALID_RESPONSE' });
   });
 
   it('distinguishes a caller cancellation from a network failure', async () => {

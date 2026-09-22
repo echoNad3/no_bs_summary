@@ -14,6 +14,7 @@ const videoTitle = 'The honest guide to building useful small software';
 const userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'nbs-store-assets-'));
 
 const previewResponse = {
+  outputVersion: 2,
   verdict: 'WATCH',
   reason: 'Clear, practical advice with concrete trade-offs and almost no padding.',
   summary:

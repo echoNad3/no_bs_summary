@@ -1,4 +1,7 @@
+import { countDisplayWords, parseCurrentSummaryPoints } from './summary-format.js';
+
 export type Verdict = 'WATCH' | 'SKIM' | 'SKIP';
+export const CURRENT_SUMMARY_OUTPUT_VERSION = 2 as const;
 
 export interface SummarizeInput {
   url: string;
@@ -7,6 +10,7 @@ export interface SummarizeInput {
 }
 
 export interface SummaryResult {
+  outputVersion: typeof CURRENT_SUMMARY_OUTPUT_VERSION;
   verdict: Verdict;
   reason: string;
   summary: string;
@@ -20,6 +24,12 @@ export interface SummaryResult {
   };
   retries: { transcript: number; summary: number };
 }
+
+export type StoredSummaryResult = SummaryResult | LegacySummaryResult;
+
+export type LegacySummaryResult = Omit<SummaryResult, 'outputVersion'> & {
+  outputVersion?: 1 | undefined;
+};
 
 export interface GenerationUsageStatus {
   used: number;
@@ -66,6 +76,8 @@ export interface SummarizeOptions {
   password?: string;
   /** Client-side ceiling; keeps a 10-second transport buffer above the backend deadline. */
   timeoutMs?: number;
+  /** Requests fresh model output while retaining the normal cache identity. */
+  regenerate?: boolean;
 }
 
 export const DEFAULT_SUMMARY_REQUEST_TIMEOUT_MS = 70_000;
@@ -160,7 +172,11 @@ export async function summarizeVideo(
         // Titles are presentation-only. Keeping them out of the shared backend
         // prevents the first caller from poisoning a cached summary with a
         // misleading or instruction-like title.
-        body: JSON.stringify({ url: input.url, language: input.language }),
+        body: JSON.stringify({
+          url: input.url,
+          language: input.language,
+          ...(options.regenerate ? { regenerate: true } : {}),
+        }),
         signal: controller.signal,
       });
     } catch {
@@ -274,10 +290,21 @@ async function readJson(response: Response): Promise<unknown> {
 }
 
 export function isSummaryResult(value: unknown): value is SummaryResult {
+  return isSummaryResultShape(value, false);
+}
+
+export function isStoredSummaryResult(value: unknown): value is StoredSummaryResult {
+  return isSummaryResultShape(value, true);
+}
+
+function isSummaryResultShape(value: unknown, allowLegacy: boolean): value is StoredSummaryResult {
   const candidate = asObject(value);
   const timing = asObject(candidate?.timing);
   const retries = asObject(candidate?.retries);
   return (
+    (candidate?.outputVersion === CURRENT_SUMMARY_OUTPUT_VERSION ||
+      (allowLegacy &&
+        (candidate?.outputVersion === 1 || candidate?.outputVersion === undefined))) &&
     (candidate?.verdict === 'WATCH' ||
       candidate?.verdict === 'SKIM' ||
       candidate?.verdict === 'SKIP') &&
@@ -292,7 +319,30 @@ export function isSummaryResult(value: unknown): value is SummaryResult {
     isOptionalNonnegativeInteger(timing?.transcriptMs) &&
     isOptionalNonnegativeInteger(timing?.totalMs) &&
     isNonnegativeInteger(retries?.transcript) &&
-    isNonnegativeInteger(retries?.summary)
+    isNonnegativeInteger(retries?.summary) &&
+    currentSummaryIsValid(candidate)
+  );
+}
+
+function currentSummaryIsValid(candidate: Record<string, unknown> | undefined): boolean {
+  if (candidate?.outputVersion !== CURRENT_SUMMARY_OUTPUT_VERSION) return true;
+  if (
+    typeof candidate.verdict !== 'string' ||
+    typeof candidate.reason !== 'string' ||
+    typeof candidate.summary !== 'string'
+  ) {
+    return false;
+  }
+  const points = parseCurrentSummaryPoints(candidate.summary);
+  if (!points || countDisplayWords(candidate.reason) > 20) return false;
+  return (
+    countDisplayWords(
+      [
+        candidate.verdict,
+        candidate.reason,
+        ...points.flatMap(({ label, body }) => [label, body]),
+      ].join(' '),
+    ) <= 200
   );
 }
 

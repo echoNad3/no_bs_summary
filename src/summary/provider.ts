@@ -2,8 +2,31 @@ import { z } from 'zod';
 import type { RequestContext } from '../request-context.js';
 
 export const REASON_CHARACTER_LIMIT = 1200;
-export const REASON_WORD_LIMIT = 24;
-export const SUMMARY_CHARACTER_LIMIT = 12000;
+export const REASON_WORD_LIMIT = 20;
+export const SUMMARY_CHARACTER_LIMIT = 3000;
+export const TOTAL_OUTPUT_WORD_LIMIT = 200;
+export const SUMMARY_POINT_LIMIT = 3;
+export const SUMMARY_LABEL_WORD_LIMIT = 8;
+
+export interface SummaryPoint {
+  label: string;
+  body: string;
+}
+
+const summaryPointSchema = z.object({
+  label: z
+    .string()
+    .trim()
+    .min(1)
+    .max(80)
+    .describe('A short plain-text label, normally two to five words, with no colon or Markdown.'),
+  body: z
+    .string()
+    .trim()
+    .min(1)
+    .max(SUMMARY_CHARACTER_LIMIT)
+    .describe('One compact plain-text explanation with no heading, bullet, list, or line break.'),
+});
 
 /** Shape sent to Gemini as JSON Schema. Cross-field rules are checked after parsing. */
 export const summaryResponseSchema = z.object({
@@ -16,16 +39,21 @@ export const summaryResponseSchema = z.object({
     .min(1)
     .max(REASON_CHARACTER_LIMIT)
     .describe(
-      'One blunt, natural sentence under 25 words judging the video’s delivery, entertainment, padding, repetition, or whether the creator drags things out. Start with the actual good or bad part, not “The creator is” or “The video is.” Write like a friend giving a straight answer, not a formal review. Avoid phrases such as “a cohesive narrative,” “a variety of topics,” “cultural commentary,” “varies in quality,” “offers a perspective,” “presents an exploration,” “holds attention,” “is essentially,” “feels like,” “scattered series,” or “loosely connected reactions.” Never mention visuals, animation, footage, editing, cameras, on-screen material, demonstrations, physical cues, or runtime.',
+      'One blunt, natural sentence of at most 20 words judging the video’s delivery, entertainment, padding, repetition, or whether the creator drags things out. Aim for 10-18 words. Start with the actual good or bad part, not “The creator is” or “The video is.” Write like a friend giving a straight answer, not a formal review. Avoid phrases such as “a cohesive narrative,” “a variety of topics,” “cultural commentary,” “varies in quality,” “offers a perspective,” “presents an exploration,” “holds attention,” “is essentially,” “feels like,” “scattered series,” or “loosely connected reactions.” Never mention visuals, animation, footage, editing, cameras, on-screen material, demonstrations, physical cues, or runtime.',
     ),
-  summary: z
-    .string()
-    .trim()
+  points: z
+    .array(summaryPointSchema)
     .min(1)
-    .max(SUMMARY_CHARACTER_LIMIT)
+    .max(SUMMARY_POINT_LIMIT)
     .describe(
-      'The detailed summary is the main product. Lead with the main finding, outcome, recommendation, or attributed claim. The first sentence must carry useful content; never open with generic framing such as “This video/source,” “The provided text,” “It covers/discusses/examines,” or “It serves as.” Use the minimum wording that preserves the important facts, names, events, arguments, numbers, context, and conclusions needed to understand it, aiming for only about 5-10% less text than a thorough detailed recap without treating that as a fixed quota. Use the fewest topics that remain clear, grouping related details instead of turning every minor subtopic, step, or example into its own bullet. Keep each paragraph or labeled Markdown topic bullet compact, usually one or two sentences; use a third only when the point would otherwise lose a needed mechanism, essential evidence, or important qualification. State each point once; remove introductory framing, repeated explanations, incidental background, inventories of examples, and details that add no new understanding. Do not repeat the takeaway in a closing recap. Attribute disputed claims, never invent details or unseen visuals, and do not repeat or review the verdict reason.',
+      'One to three main points. Use fewer when the source is simple. Each point needs a short label and a fuller body. Group related facts instead of creating extra points.',
     ),
+});
+
+const publicSummaryShape = z.object({
+  verdict: z.enum(['WATCH', 'SKIM', 'SKIP']),
+  reason: z.string().trim().min(1).max(REASON_CHARACTER_LIMIT),
+  summary: z.string().trim().min(1).max(SUMMARY_CHARACTER_LIMIT),
 });
 
 export function countSentences(text: string): number {
@@ -52,12 +80,9 @@ function sentenceSegments(text: string): string[] {
     .map((segment) => segment.replaceAll(marker, '.'));
 }
 
-export const summarySchema = summaryResponseSchema.superRefine((value, ctx) => {
+export const summarySchema = publicSummaryShape.superRefine((value, ctx) => {
   if (value.reason.trim() === '') {
     ctx.addIssue({ code: 'custom', path: ['reason'], message: 'reason must contain text' });
-  }
-  if (value.summary.trim() === '') {
-    ctx.addIssue({ code: 'custom', path: ['summary'], message: 'summary must contain text' });
   }
   if (countSentences(value.reason) > 1) {
     ctx.addIssue({
@@ -70,7 +95,7 @@ export const summarySchema = summaryResponseSchema.superRefine((value, ctx) => {
     ctx.addIssue({
       code: 'custom',
       path: ['reason'],
-      message: `reason must be under ${REASON_WORD_LIMIT + 1} words`,
+      message: `reason must be at most ${REASON_WORD_LIMIT} words`,
     });
   }
   if (value.reason.trim().toLowerCase() === value.summary.trim().toLowerCase()) {
@@ -80,11 +105,40 @@ export const summarySchema = summaryResponseSchema.superRefine((value, ctx) => {
       message: 'reason and summary must not be identical',
     });
   }
-  if (startsLikeAiCopy(value.reason) || startsLikeAiCopy(value.summary)) {
+  const points = parseCanonicalSummaryPoints(value.summary);
+  if (!points) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['summary'],
+      message: 'summary must contain one to three labeled points with no extra sections',
+    });
+    return;
+  }
+
+  const pointIssue = validateSummaryPoints(points);
+  if (pointIssue) {
+    ctx.addIssue({ code: 'custom', path: ['summary'], message: pointIssue });
+  }
+  if (countGeneratedWords(value.verdict, value.reason, points) > TOTAL_OUTPUT_WORD_LIMIT) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['summary'],
+      message: `verdict, reason, labels, and bodies must total at most ${TOTAL_OUTPUT_WORD_LIMIT} words`,
+    });
+  }
+  const pointText = points.map(({ label, body }) => `${label} ${body}`).join(' ');
+  if (startsLikeAiCopy(points[0]?.body ?? '') || startsLikeBadReason(value.reason)) {
     ctx.addIssue({
       code: 'custom',
       path: ['summary'],
       message: 'output must start with substance, not generic video-summary wording',
+    });
+  }
+  if (hasRepeatedWord(`${value.reason} ${pointText}`)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['summary'],
+      message: 'output must not repeat the same word back to back',
     });
   }
   if (containsVagueReason(value.reason)) {
@@ -101,14 +155,14 @@ export const summarySchema = summaryResponseSchema.superRefine((value, ctx) => {
       message: 'reason must not assume documentation or an article replaces structured teaching',
     });
   }
-  if (leaksPromptQuestion(`${value.reason} ${value.summary}`)) {
+  if (leaksPromptQuestion(`${value.reason} ${pointText}`)) {
     ctx.addIssue({
       code: 'custom',
       path: ['summary'],
       message: 'output must answer the task without repeating the prompt question',
     });
   }
-  if (containsModelLeakage(`${value.reason} ${value.summary}`)) {
+  if (containsModelLeakage(`${value.reason} ${pointText}`)) {
     ctx.addIssue({
       code: 'custom',
       path: ['reason'],
@@ -117,7 +171,7 @@ export const summarySchema = summaryResponseSchema.superRefine((value, ctx) => {
   }
   if (
     value.verdict === 'SKIP' &&
-    saysSomeSectionsAreWorthWatching(`${value.reason} ${value.summary}`)
+    saysSomeSectionsAreWorthWatching(`${value.reason} ${pointText}`)
   ) {
     ctx.addIssue({
       code: 'custom',
@@ -125,7 +179,7 @@ export const summarySchema = summaryResponseSchema.superRefine((value, ctx) => {
       message: 'verdict must be SKIM when the output says selected sections are worth watching',
     });
   }
-  if (repeatsReasonInSummary(value.reason, value.summary)) {
+  if (repeatsReasonInSummary(value.reason, pointText)) {
     ctx.addIssue({
       code: 'custom',
       path: ['summary'],
@@ -134,10 +188,65 @@ export const summarySchema = summaryResponseSchema.superRefine((value, ctx) => {
   }
 });
 
+const CANONICAL_POINT = /^- \*\*([^*\r\n]+):\*\* ([^\r\n]+)$/u;
+
+export function serializeSummaryPoints(points: SummaryPoint[]): string {
+  return points.map(({ label, body }) => `- **${label.trim()}:** ${body.trim()}`).join('\n\n');
+}
+
+export function parseCanonicalSummaryPoints(summary: string): SummaryPoint[] | undefined {
+  const sections = summary.trim().split(/\r?\n\s*\r?\n/gu);
+  if (sections.length < 1 || sections.length > SUMMARY_POINT_LIMIT) return undefined;
+  const points: SummaryPoint[] = [];
+  for (const section of sections) {
+    const match = CANONICAL_POINT.exec(section);
+    if (!match) return undefined;
+    points.push({ label: match[1]!.trim(), body: match[2]!.trim() });
+  }
+  return points;
+}
+
+export function countGeneratedWords(
+  verdict: 'WATCH' | 'SKIM' | 'SKIP',
+  reason: string,
+  points: SummaryPoint[],
+): number {
+  return countWords(
+    [verdict, reason, ...points.flatMap(({ label, body }) => [label, body])].join(' '),
+  );
+}
+
+export function validateSummaryPoints(points: SummaryPoint[]): string | undefined {
+  if (points.length < 1 || points.length > SUMMARY_POINT_LIMIT) {
+    return `summary must contain one to ${SUMMARY_POINT_LIMIT} points`;
+  }
+  for (const point of points) {
+    if (!point.label.trim() || !point.body.trim()) return 'every point needs a label and body';
+    if (countWords(point.label) > SUMMARY_LABEL_WORD_LIMIT) {
+      return `point labels must use at most ${SUMMARY_LABEL_WORD_LIMIT} words`;
+    }
+    if (/[:*\r\n]|^\s*(?:[-•#]|\d+[.)])/u.test(point.label)) {
+      return 'point labels must be short plain text without Markdown or colons';
+    }
+    if (/\r|\n|\*\*|^\s*(?:[-*•#]|\d+[.)]\s+)/u.test(point.body)) {
+      return 'point bodies must not contain headings, nested lists, or line breaks';
+    }
+  }
+  return undefined;
+}
+
 function startsLikeAiCopy(text: string): boolean {
   return /^(?:this is\b|(?:the|this)\s+(?:video|episode|content|segment|course|podcast|tutorial)\b)/iu.test(
     text.trim(),
   );
+}
+
+function startsLikeBadReason(text: string): boolean {
+  return /^(?:(?:the|this)\s+video|the\s+creator|this\s+is)\b/iu.test(text.trim());
+}
+
+function hasRepeatedWord(text: string): boolean {
+  return /\b([\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)*)\s+\1\b/iu.test(text);
 }
 
 function containsVagueReason(text: string): boolean {

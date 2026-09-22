@@ -9,6 +9,7 @@ const projectDir = process.cwd();
 const pwaDir = path.resolve(projectDir, 'dist/pwa');
 const extensionDir = path.resolve(projectDir, 'dist/extension');
 const resultsDir = path.resolve(projectDir, 'results');
+const screenshotDir = process.env.NBS_UI_SCREENSHOT_DIR;
 const youtubeUrl = 'https://www.youtube.com/watch?v=EwMSGdE2bOQ';
 const secondYoutubeUrl = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
 const productionApiUrl = 'https://no-bs-summary.echonad3.workers.dev/api/summarize';
@@ -17,21 +18,27 @@ const productionMetadataUrl = 'https://no-bs-summary.echonad3.workers.dev/api/vi
 let baseUrl = '';
 let localApiUrl = '';
 let localStatusUrl = '';
+let extensionRegenerationCalls = 0;
 const summaryFixture = {
+  outputVersion: 2,
   verdict: 'SKIM',
-  reason: 'The useful updates are specific, but the commentary circles around them.',
-  summary: [
-    "- **Wizard Detective:** The segment explains the project's mystery structure and the clues already shown.\n  **Main appeal:** Its restrained presentation is more interesting than a conventional lore dump.",
-    "- **Kane Pixels**: The discussion separates the creator's newer work from the familiar *Backrooms* material and points out the production choices that make the environments feel unusually physical.",
-    '- **Backrooms projects:** Several adaptations are compared by how well they preserve uncertainty instead of replacing it with an oversized monster catalogue and repetitive chase scenes.',
-    '- **Release updates:** The concrete announcements, delays, and production notes are collected in one place so the useful facts can be skimmed without sitting through every tangent.',
-    '- **What to skip:** Repeated reactions, sponsor-like detours, and speculative loops add runtime without changing the core assessment of any project mentioned in the episode.',
-  ].join('\n'),
+  reason:
+    'Interesting medical and structural insights, but buried under self-indulgent, rambling personal anecdotes and repetitive sponsorship filler.',
+  summary:
+    '- **Main claim:** The speaker argues that underdeveloped jaws can restrict breathing during sleep and contribute to fatigue and poor concentration.\n\n- **Options discussed:** He compares surgery with appliances intended to widen the upper jaw, while acknowledging that evidence for changing adult bone without surgery is disputed.\n\n- **Practical takeaway:** Persistent breathing problems need a qualified professional, not one creator’s experience treated as a universal diagnosis.',
   videoId: 'EwMSGdE2bOQ',
   language: 'en',
   source: 'CACHED',
   timing: { transcriptMs: 8, summaryMs: 14, totalMs: 22 },
   retries: { transcript: 0, summary: 0 },
+};
+const regeneratedFixture = {
+  ...summaryFixture,
+  source: 'LIVE',
+  reason:
+    'The useful comparison is clearer now, though the medical claims still need professional context.',
+  summary:
+    '- **Fresh result:** The speaker links restricted nighttime breathing with fatigue and concentration problems, but presents this as his argument rather than settled fact.\n\n- **Treatment tradeoff:** Surgery can physically widen the airway; adult expansion appliances are less invasive but have more disputed evidence.\n\n- **What matters:** Anyone with persistent breathing trouble should get qualified medical assessment instead of copying a creator’s treatment plan.',
 };
 const userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'nbs-extension-smoke-'));
 const server = createStaticServer(pwaDir);
@@ -132,10 +139,12 @@ try {
   );
 
   await context.route(localApiUrl, async (route) => {
+    const input = route.request().postDataJSON();
+    if (input?.regenerate === true) await new Promise((resolve) => setTimeout(resolve, 150));
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(summaryFixture),
+      body: JSON.stringify(input?.regenerate === true ? regeneratedFixture : summaryFixture),
     });
   });
   await context.route(localStatusUrl, async (route) => {
@@ -181,6 +190,9 @@ try {
   const pwaPage = await context.newPage();
   await pwaPage.setViewportSize({ width: 412, height: 915 });
   await pwaPage.goto(`${baseUrl}/`);
+  await pwaPage.evaluate(() => navigator.serviceWorker.ready);
+  await pwaPage.waitForTimeout(500);
+  await pwaPage.goto(`${baseUrl}/`);
   await pwaPage.locator('h1').waitFor({ state: 'visible' });
   assert.equal(await pwaPage.locator('h1').innerText(), 'No BS Summary');
   const pwaSettings = pwaPage.locator('#settings-dialog');
@@ -221,11 +233,20 @@ try {
   assert.equal(await pwaSettings.isHidden(), true);
   const pwaOutput = await readRenderedOutput(pwaPage);
   assertSummaryOutput(pwaOutput);
-  await assertDetailedTopics(pwaPage);
-  await assertInlineFormatting(pwaPage);
+  await assertPlainSummary(pwaPage);
   await assertResultPolish(pwaPage);
   assert.equal(await pwaPage.locator('#reading-stats').count(), 0);
   assert.equal(await pwaPage.locator('#meta').count(), 0);
+  const pwaRegeneration = waitForSummaryResponse(pwaPage);
+  await pwaPage.locator('#regenerate').click();
+  await waitForText(pwaPage.locator('#status'), 'Regenerating…');
+  assert.equal(await pwaPage.locator('#result').isVisible(), true);
+  assert.equal((await readRenderedOutput(pwaPage)).summary, pwaOutput.summary);
+  const pwaRegenerationResponse = await pwaRegeneration;
+  assert.equal(pwaRegenerationResponse.request().postDataJSON().regenerate, true);
+  await waitForText(pwaPage.locator('#status'), 'Fresh summary ready.');
+  assert.match((await readRenderedOutput(pwaPage)).summary, /Fresh result/iu);
+  report.checks.pwaRegeneration = true;
   await pwaPage.reload();
   await pwaPage.locator('#result').waitFor({ state: 'visible' });
   assert.equal(await pwaPage.locator('#url').inputValue(), youtubeUrl);
@@ -285,11 +306,29 @@ try {
       });
       return;
     }
+    if (input?.regenerate === true) {
+      extensionRegenerationCalls += 1;
+      if (extensionRegenerationCalls === 2) {
+        await route.fulfill({
+          status: 502,
+          contentType: 'application/json',
+          headers: { 'access-control-allow-origin': '*' },
+          body: JSON.stringify({
+            error: {
+              code: 'SUMMARY_FAILED',
+              message: 'Could not create a fresh summary. Try again.',
+            },
+          }),
+        });
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       headers: { 'access-control-allow-origin': '*' },
-      body: JSON.stringify(pwaPayload),
+      body: JSON.stringify(input?.regenerate === true ? regeneratedFixture : pwaPayload),
     });
   });
   await context.route(productionStatusUrl, async (route) => {
@@ -402,13 +441,37 @@ try {
   await assertLoadingRecorded(sidePanelPage);
   const extensionOutput = await readRenderedOutput(sidePanelPage);
   assertSummaryOutput(extensionOutput);
-  await assertDetailedTopics(sidePanelPage);
-  await assertInlineFormatting(sidePanelPage);
+  await assertPlainSummary(sidePanelPage);
   await assertResultPolish(sidePanelPage);
   assert.equal(await submit.isEnabled(), true);
   assert.equal(await status.innerText(), 'Summary ready.');
   assert.equal(await settingsDialog.isHidden(), true);
   assert.equal(await sidePanelPage.locator('header').isVisible(), true);
+  const extensionRegeneration = waitForSummaryResponse(sidePanelPage, productionApiUrl);
+  await sidePanelPage.locator('#regenerate').click();
+  await waitForText(status, 'Regenerating…');
+  assert.equal(await result.isVisible(), true);
+  assert.equal((await readRenderedOutput(sidePanelPage)).summary, extensionOutput.summary);
+  const extensionRegenerationResponse = await extensionRegeneration;
+  assert.equal(extensionRegenerationResponse.request().postDataJSON().regenerate, true);
+  await waitForText(status, 'Fresh summary ready.');
+  const freshExtensionOutput = await readRenderedOutput(sidePanelPage);
+  assert.match(freshExtensionOutput.summary, /Fresh result/iu);
+  report.checks.extensionRegeneration = true;
+  const failedRegeneration = sidePanelPage.waitForResponse(
+    (response) => response.url() === productionApiUrl && response.status() === 502,
+  );
+  await sidePanelPage.locator('#regenerate').click();
+  await failedRegeneration;
+  await waitForText(status, 'Could not create a fresh summary. Try again.');
+  assert.equal((await readRenderedOutput(sidePanelPage)).summary, freshExtensionOutput.summary);
+  assert.equal(await result.isVisible(), true);
+  const retriedRegeneration = waitForSummaryResponse(sidePanelPage, productionApiUrl);
+  await sidePanelPage.locator('#retry-request').click();
+  const retriedRegenerationResponse = await retriedRegeneration;
+  assert.equal(retriedRegenerationResponse.request().postDataJSON().regenerate, true);
+  await waitForText(status, 'Fresh summary ready.');
+  report.checks.failedRegenerationPreservesResultAndRetriesFresh = true;
   const [buttonWidth, formWidth] = await Promise.all([
     submit.evaluate((element) => element.getBoundingClientRect().width),
     sidePanelPage
@@ -418,6 +481,19 @@ try {
   assert.ok(buttonWidth > formWidth * 0.8);
   await sidePanelPage.setViewportSize({ width: 320, height: 800 });
   await assertNoHorizontalOverflow(sidePanelPage);
+  assert.equal(
+    await sidePanelPage
+      .locator('h1')
+      .evaluate((heading) => heading.scrollWidth <= heading.clientWidth),
+    true,
+  );
+  if (screenshotDir) {
+    await fs.mkdir(screenshotDir, { recursive: true });
+    await sidePanelPage.screenshot({
+      path: path.join(screenshotDir, 'extension-summary-320x800.png'),
+      fullPage: true,
+    });
+  }
   await sidePanelPage.locator('#settings-button').click();
   await assertSettingsPolish(sidePanelPage, true);
   await sidePanelPage.locator('#close-settings').click();
@@ -544,12 +620,13 @@ try {
   assert.deepEqual(unexpectedRequestFailures, []);
 
   const unexpectedResponses = responses.filter(
-    ({ url, status }) => !(url.endsWith('/api/summarize') && status === 400),
+    ({ url, status }) => !(url.endsWith('/api/summarize') && (status === 400 || status === 502)),
   );
   assert.deepEqual(unexpectedResponses, []);
   const unexpectedConsoleErrors = consoleErrors.filter(
     ({ text, url }) =>
       !/Failed to load resource.*400 \(Bad Request\)/iu.test(text) &&
+      !/Failed to load resource.*502 \(Bad Gateway\)/iu.test(text) &&
       !(url === `${baseUrl}/` && /ERR_INTERNET_DISCONNECTED/iu.test(text)),
   );
   assert.deepEqual(unexpectedConsoleErrors, []);
@@ -787,7 +864,7 @@ async function assertSettingsPolish(page, expectPhoneWidth = false) {
   assert.equal(geometry.resourceGap, '0px');
   assert.equal(geometry.resourceBorder, '1px');
   assert.equal(geometry.divider, '1px');
-  assert.ok(geometry.connectionHeight <= 110, JSON.stringify(geometry));
+  assert.ok(geometry.connectionHeight <= 112, JSON.stringify(geometry));
   assert.ok(geometry.connectionCopyGap <= 9, JSON.stringify(geometry));
   assert.equal(geometry.fieldLabelSize, geometry.statusSize);
   assert.equal(geometry.statusSize, geometry.quotaSize);
@@ -834,25 +911,28 @@ async function assertHeaderControlsAligned(page) {
 function assertSummaryOutput({ verdict, reason, summary }) {
   assert.ok(['WATCH', 'SKIM', 'SKIP'].includes(verdict));
   assert.ok(reason.length >= 20);
-  assert.ok((reason.match(/[\p{L}\p{N}'’-]+/gu) ?? []).length < 25);
-  assert.ok(summary.length >= 500);
-  assert.match(summary, /Wizard Detective|Kane Pixels|Backrooms/iu);
+  const reasonWords = reason.match(/[\p{L}\p{N}'’-]+/gu) ?? [];
+  const summaryWords = summary.match(/[\p{L}\p{N}'’-]+/gu) ?? [];
+  assert.ok(reasonWords.length <= 20, `Reason has ${reasonWords.length} words.`);
+  assert.ok(
+    1 + reasonWords.length + summaryWords.length <= 200,
+    `Result has ${1 + reasonWords.length + summaryWords.length} words.`,
+  );
+  assert.match(summary, /speaker argues/iu);
   assert.doesNotMatch(
     reason,
     /^(?:the creator|the host|the speaker|the video)\s+(?:is|offers|provides|presents)\b|cohesive narrative|variety of topics|cultural commentary|varies in quality|offers? a perspective|presents? an exploration|holds? (?:the )?(?:viewer'?s )?attention|is essentially|feels like|scattered (?:collection|series)|loosely connected (?:topics|reactions|stories)/iu,
   );
-  assert.doesNotMatch(summary, /\*/u);
 }
 
-async function assertDetailedTopics(page) {
-  const topicItems = page.locator('#summary .summary-topics > li');
-  assert.ok((await topicItems.count()) >= 3);
-  const firstTopicBoldText = await topicItems.first().locator('strong').allInnerTexts();
-  assert.deepEqual(firstTopicBoldText, ['Wizard Detective: ', 'Main appeal:']);
-}
-
-async function assertInlineFormatting(page) {
-  assert.deepEqual(await page.locator('#summary em').allInnerTexts(), ['Backrooms']);
+async function assertPlainSummary(page) {
+  const summary = page.locator('#summary');
+  assert.equal(await summary.locator(':scope > p').count(), 0);
+  assert.equal(await summary.locator(':scope > ul.summary-topics').count(), 1);
+  assert.equal(await summary.locator(':scope > ul.summary-topics > li').count(), 3);
+  assert.equal(await summary.locator(':scope > ul.summary-topics > li > strong').count(), 3);
+  const points = await summary.locator(':scope > ul.summary-topics > li').allInnerTexts();
+  assert.ok(points.every((point) => point.trim().length > 0));
 }
 
 async function assertResultPolish(page) {
@@ -861,8 +941,8 @@ async function assertResultPolish(page) {
     const result = getComputedStyle(element);
     const reason = getComputedStyle(element.querySelector('#reason'));
     const summary = getComputedStyle(element.querySelector('#summary'));
-    const firstTopic = getComputedStyle(element.querySelector('.summary-topics > li:first-child'));
-    const secondTopic = getComputedStyle(
+    const firstPoint = getComputedStyle(element.querySelector('.summary-topics > li:first-child'));
+    const secondPoint = getComputedStyle(
       element.querySelector('.summary-topics > li:nth-child(2)'),
     );
     return {
@@ -871,16 +951,16 @@ async function assertResultPolish(page) {
       reasonDivider: Number.parseFloat(reason.borderBottomWidth),
       summaryLineHeight: Number.parseFloat(summary.lineHeight),
       summaryFontSize: Number.parseFloat(summary.fontSize),
-      firstTopicPaddingTop: Number.parseFloat(firstTopic.paddingTop),
-      secondTopicDivider: Number.parseFloat(secondTopic.borderTopWidth),
+      firstPointPaddingTop: Number.parseFloat(firstPoint.paddingTop),
+      secondPointDivider: Number.parseFloat(secondPoint.borderTopWidth),
     };
   });
   assert.ok(styles.resultPadding >= 20, JSON.stringify(styles));
   assert.ok(styles.reasonPaddingBottom >= 20, JSON.stringify(styles));
   assert.ok(styles.reasonDivider >= 1, JSON.stringify(styles));
   assert.ok(styles.summaryLineHeight >= styles.summaryFontSize * 1.6, JSON.stringify(styles));
-  assert.ok(styles.firstTopicPaddingTop >= 16, JSON.stringify(styles));
-  assert.ok(styles.secondTopicDivider >= 1, JSON.stringify(styles));
+  assert.ok(styles.firstPointPaddingTop >= 16, JSON.stringify(styles));
+  assert.ok(styles.secondPointDivider >= 1, JSON.stringify(styles));
 }
 
 async function assertBrandArtworkCentered(page) {

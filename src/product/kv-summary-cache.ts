@@ -7,6 +7,7 @@ import {
 } from './summary-store.js';
 import type { SummaryCache, SummaryCacheIdentity } from './summary-store.js';
 import type { SummarizeResponse } from './schema.js';
+import { sameLanguageFamily } from '../transcript/provider.js';
 
 export interface KvNamespaceLike {
   get(key: string): Promise<string | null>;
@@ -36,7 +37,8 @@ export class KvSummaryCache implements SummaryCache {
           cached.identity.videoId === identity.videoId &&
           cached.identity.model === identity.model &&
           cached.identity.promptVersion === identity.promptVersion &&
-          cached.response.language.toLowerCase() === identity.language.toLowerCase()
+          cached.response.videoId === identity.videoId &&
+          sameLanguageFamily(cached.response.language, identity.language)
         ) {
           return cached.response;
         }
@@ -62,6 +64,7 @@ function currentEntryMatches(
     cached.identity.language.toLowerCase() === identity.language.toLowerCase() &&
     cached.identity.model === identity.model &&
     cached.identity.promptVersion === identity.promptVersion &&
-    cached.response.language.toLowerCase() === identity.language.toLowerCase()
+    cached.response.videoId === identity.videoId &&
+    sameLanguageFamily(cached.response.language, identity.language)
   );
 }

@@ -72,8 +72,10 @@ export class SummaryService {
     };
     const key = summaryCacheKey(identity);
 
-    const cached = await this.readSavedSummary(identity);
-    if (cached) return cached;
+    if (!parsed.data.regenerate) {
+      const cached = await this.readSavedSummary(identity);
+      if (cached) return cached;
+    }
 
     const inFlight = this.inFlight.get(key);
     if (inFlight) return inFlight;
@@ -152,10 +154,21 @@ function productErrorFromPipeline(error: PipelineError): ProductError {
     );
   }
   if (error.stage === 'transcript') {
-    return new ProductError(502, 'TRANSCRIPT_FAILED', error.message);
+    const noCaptions = /no captions|captions available/iu.test(error.message);
+    return new ProductError(
+      502,
+      'TRANSCRIPT_FAILED',
+      noCaptions
+        ? 'No captions are available for this video.'
+        : "Could not get this video's captions. Try again.",
+    );
   }
   if (error.stage === 'summary') {
-    return new ProductError(502, 'SUMMARY_FAILED', error.message);
+    return new ProductError(
+      502,
+      'SUMMARY_FAILED',
+      'Could not create a valid short summary. Try again.',
+    );
   }
   return new ProductError(503, 'TRANSCRIPT_CACHE_FAILED', error.message);
 }

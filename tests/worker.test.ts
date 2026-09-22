@@ -31,9 +31,11 @@ const identity: SummaryCacheIdentity = {
 };
 
 const response: SummarizeResponse = {
+  outputVersion: 2,
   verdict: 'WATCH',
   reason: 'The host keeps a long list of topics funny and easy to follow.',
-  summary: 'Wizard Detective, Kane Pixels, and several Backrooms projects are the main topics.',
+  summary:
+    '- **Main topics:** Wizard Detective, Kane Pixels, and several Backrooms projects are covered.',
   videoId: 'EwMSGdE2bOQ',
   language: 'en',
   source: 'CACHED',
@@ -70,7 +72,10 @@ function makeEnv(overrides: Partial<WorkerEnv> = {}): WorkerEnv {
   };
 }
 
-function summarizeRequest(headers: Record<string, string> = {}): Request {
+function summarizeRequest(
+  headers: Record<string, string> = {},
+  body: Record<string, unknown> = { url: 'https://youtu.be/dQw4w9WgXcQ' },
+): Request {
   return new Request('https://app.example.workers.dev/api/summarize', {
     method: 'POST',
     headers: {
@@ -78,7 +83,7 @@ function summarizeRequest(headers: Record<string, string> = {}): Request {
       'x-app-password': 'correct horse',
       ...headers,
     },
-    body: JSON.stringify({ url: 'https://youtu.be/dQw4w9WgXcQ' }),
+    body: JSON.stringify(body),
   });
 }
 
@@ -350,6 +355,23 @@ describe('worker request handling', () => {
       { url: 'https://youtu.be/dQw4w9WgXcQ' },
       expect.objectContaining({ beforeGenerate: expect.any(Function) }),
     );
+  });
+
+  it('passes the explicit regeneration flag into the quota-protected service call', async () => {
+    const service = generatingService();
+    const generationQuota = new FakeGenerationQuota();
+    const result = await handleRequest(
+      summarizeRequest({}, { url: 'https://youtu.be/dQw4w9WgXcQ', regenerate: true }),
+      makeEnv(),
+      { service, generationQuota },
+    );
+
+    expect(result.status).toBe(200);
+    expect(service.summarize).toHaveBeenCalledWith(
+      { url: 'https://youtu.be/dQw4w9WgXcQ', regenerate: true },
+      expect.objectContaining({ beforeGenerate: expect.any(Function) }),
+    );
+    expect(generationQuota.consumeCalls).toBe(1);
   });
 
   it('blocks owner and free generation at the atomic daily ceiling', async () => {

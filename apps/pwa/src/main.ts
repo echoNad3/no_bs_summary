@@ -1,8 +1,14 @@
 import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
-import { ApiClientError, checkBackend, summarizeVideo } from '../../shared/api-client.js';
-import type { SummarizeInput, SummaryResult } from '../../shared/api-client.js';
 import {
+  ApiClientError,
+  CURRENT_SUMMARY_OUTPUT_VERSION,
+  checkBackend,
+  summarizeVideo,
+} from '../../shared/api-client.js';
+import type { StoredSummaryResult, SummarizeInput } from '../../shared/api-client.js';
+import {
+  isLegacySavedSummary,
   parseSavedSummary,
   parseTextSize,
   safeDiagnosticsText,
@@ -26,13 +32,14 @@ import './styles.css';
 const PASSWORD_STORAGE_KEY = 'nbs-app-password';
 const LAST_SUMMARY_STORAGE_KEY = 'nbs-last-summary';
 const TEXT_SIZE_STORAGE_KEY = 'nbs-text-size';
+const RELOAD_DRAFT_STORAGE_KEY = 'nbs-reload-draft';
 const APK_DOWNLOAD_URL =
   'https://github.com/echoNad3/no_bs_summary/releases/latest/download/app-debug.apk';
 const UPDATE_CHECK_INTERVAL_MS = 5 * 60 * 1_000;
 const MIN_UPDATE_CHECK_GAP_MS = 30 * 1_000;
 
 interface RenderedSummary {
-  response: SummaryResult;
+  response: StoredSummaryResult;
   title?: string;
   url: string;
 }
@@ -51,6 +58,9 @@ const settingsButton = requiredElement<HTMLButtonElement>('settings-button');
 const closeSettingsButton = requiredElement<HTMLButtonElement>('close-settings');
 const saveSettingsButton = requiredElement<HTMLButtonElement>('save-settings');
 const submitButton = requiredElement<HTMLButtonElement>('submit');
+const regenerateButton = requiredElement<HTMLButtonElement>('regenerate');
+const regenerateLabel = requiredElement<HTMLSpanElement>('regenerate-label');
+const summaryVersionNote = requiredElement<HTMLParagraphElement>('summary-version-note');
 const status = requiredElement<HTMLParagraphElement>('status');
 const result = requiredElement<HTMLElement>('result');
 const cancelButton = requiredElement<HTMLButtonElement>('cancel-request');
@@ -75,8 +85,10 @@ const appUpdateProgressFill = requiredElement<HTMLElement>('app-update-progress-
 const appUpdateProgressValue = requiredElement<HTMLElement>('app-update-progress-value');
 
 let activeRequest: AbortController | undefined;
+let activeRequestKind: 'generate' | 'regenerate' | undefined;
 let renderedSummary: RenderedSummary | undefined;
 let lastFailure: Error | undefined;
+let lastAttemptWasRegeneration = false;
 let latestApk: LatestApk | null = readCachedLatestApk();
 let installedBuild: number | null = null;
 let appUpdateState: AppUpdateUiState = { status: 'checking', progress: 0 };
@@ -89,6 +101,7 @@ let updaterUnsupported = false;
 let lastVersionCheckAt = 0;
 let serviceWorkerRegistration: ServiceWorkerRegistration | undefined;
 let lastServiceWorkerCheckAt = 0;
+let pendingWebReload = false;
 let titleVideoId: string | undefined;
 const videoTitleLookup = new LatestVideoTitleLookup('');
 
@@ -105,6 +118,7 @@ if (shared.wasShared && window.location.search) {
   window.history.replaceState(null, '', window.location.pathname);
 }
 if (!shared.wasShared) restoreLastSummary();
+restoreReloadDraft();
 if (titleInput.value.trim()) titleVideoId = videoIdFrom(urlInput.value);
 updateVideoPreview();
 updateAndroidUpdateUi();
@@ -133,7 +147,8 @@ titleInput.addEventListener('input', () => {
 urlInput.addEventListener('paste', (event) => useYouTubeUrlFromPaste(event, urlInput));
 togglePasswordButton.addEventListener('click', togglePasswordVisibility);
 cancelButton.addEventListener('click', cancelFromButton);
-retryButton.addEventListener('click', () => void submitSummary());
+regenerateButton.addEventListener('click', () => void submitSummary(true));
+retryButton.addEventListener('click', () => void submitSummary(lastAttemptWasRegeneration));
 diagnosticsButton.addEventListener('click', () => void copyDiagnostics());
 testConnectionButton.addEventListener('click', () => void testConnection());
 appUpdateAction.addEventListener('click', () => void handleAppUpdateAction());
@@ -168,38 +183,50 @@ document.addEventListener('visibilitychange', () => {
 });
 updateConnectivity();
 
-async function submitSummary(): Promise<void> {
-  if (activeRequest || !form.reportValidity()) return;
+async function submitSummary(regenerate = false): Promise<void> {
+  if (activeRequest || (!regenerate && !form.reportValidity())) return;
+  const previous = regenerate ? renderedSummary : undefined;
+  if (regenerate && !previous) return;
   if (!navigator.onLine) {
     setStatus('Offline. Reconnect and retry.', 'error', 'offline');
     return;
   }
 
   const input: SummarizeInput = {
-    url: urlInput.value.trim(),
-    title: titleInput.value.trim() || undefined,
+    url: previous?.url ?? urlInput.value.trim(),
+    title: previous?.title ?? (titleInput.value.trim() || undefined),
     language: 'en',
   };
+  const expectedVideoId = previous?.response.videoId ?? videoIdFrom(input.url);
   const password = passwordInput.value.trim();
   const controller = new AbortController();
   activeRequest = controller;
+  activeRequestKind = regenerate ? 'regenerate' : 'generate';
+  lastAttemptWasRegeneration = regenerate;
   lastFailure = undefined;
   errorActions.hidden = true;
   diagnosticsButton.textContent = 'Copy diagnostics';
-  clearResult();
-  setBusy(true);
-  setStatus('Working…');
+  if (!regenerate) clearResult();
+  setBusy(true, regenerate);
+  setStatus(regenerate ? 'Regenerating…' : 'Working…');
   savePassword(password);
 
   try {
-    const response = await summarizeVideo('', input, { password, signal: controller.signal });
+    const response = await summarizeVideo('', input, {
+      password,
+      signal: controller.signal,
+      regenerate,
+    });
     if (activeRequest !== controller) return;
+    if (expectedVideoId && response.videoId !== expectedVideoId) {
+      throw new ApiClientError('The returned summary was for a different video. Try again.');
+    }
     if (settingsDialog.open) settingsDialog.close();
-    const resolvedTitle =
-      videoIdFrom(urlInput.value) === response.videoId ? titleInput.value.trim() : '';
+    const resolvedTitle = videoIdFrom(input.url) === response.videoId ? input.title?.trim() : '';
     renderResult(response, { ...input, title: resolvedTitle || input.title });
     saveLastSummary(renderedSummary);
-    setStatus('Summary ready.', 'success');
+    setStatus(regenerate ? 'Fresh summary ready.' : 'Summary ready.', 'success');
+    void refreshBackendStatus();
   } catch (error) {
     if (activeRequest !== controller) return;
     if (error instanceof ApiClientError && error.code === 'REQUEST_CANCELLED') return;
@@ -216,7 +243,9 @@ async function submitSummary(): Promise<void> {
   } finally {
     if (activeRequest === controller) {
       activeRequest = undefined;
-      setBusy(false);
+      activeRequestKind = undefined;
+      setBusy(false, regenerate);
+      reloadWebAppWhenSafe();
     }
   }
 }
@@ -233,13 +262,17 @@ function cancelActiveRequest(): void {
   if (!activeRequest) return;
   activeRequest.abort();
   activeRequest = undefined;
-  setBusy(false);
+  const wasRegenerating = activeRequestKind === 'regenerate';
+  activeRequestKind = undefined;
+  setBusy(false, wasRegenerating);
+  reloadWebAppWhenSafe();
 }
 
 function cancelFromButton(): void {
   if (!activeRequest) return;
+  const wasRegenerating = activeRequestKind === 'regenerate';
   cancelActiveRequest();
-  setStatus('Cancelled.');
+  setStatus(wasRegenerating ? 'Regeneration cancelled. Previous summary kept.' : 'Cancelled.');
 }
 
 function loadSavedPassword(): string {
@@ -267,7 +300,7 @@ function togglePasswordVisibility(): void {
 }
 
 function renderResult(
-  response: SummaryResult,
+  response: StoredSummaryResult,
   input: SummarizeInput,
   behavior: { focus?: boolean } = { focus: true },
 ): void {
@@ -277,6 +310,11 @@ function renderResult(
   verdict.dataset.verdict = response.verdict;
   requiredElement<HTMLParagraphElement>('reason').textContent = response.reason;
   renderDetailedSummary(requiredElement<HTMLElement>('summary'), response.summary);
+  const legacy = response.outputVersion !== CURRENT_SUMMARY_OUTPUT_VERSION;
+  summaryVersionNote.hidden = !legacy;
+  summaryVersionNote.textContent = legacy
+    ? 'Saved summary from an older version. Regenerate it for the new format.'
+    : '';
   result.hidden = false;
   if (behavior.focus !== false) {
     result.focus({ preventScroll: true });
@@ -358,6 +396,9 @@ function restoreLastSummary(): void {
       { url: saved.url, title: saved.title, language: saved.response.language },
       { focus: false },
     );
+    if (isLegacySavedSummary(saved)) {
+      setStatus('Saved summary from an older version. Use Regenerate to replace it.');
+    }
   } catch {
     // Ignore corrupt or unavailable saved state.
   }
@@ -642,6 +683,7 @@ function updateAndroidUpdateUi(): void {
 function updateConnectivity(): void {
   const online = navigator.onLine;
   submitButton.disabled = Boolean(activeRequest) || !online;
+  regenerateButton.disabled = Boolean(activeRequest) || !online;
   if (!online) {
     cancelActiveRequest();
     setStatus('Offline. Summaries need a connection.', 'error', 'offline');
@@ -650,9 +692,11 @@ function updateConnectivity(): void {
   }
 }
 
-function setBusy(busy: boolean): void {
+function setBusy(busy: boolean, regenerating = false): void {
   submitButton.disabled = busy || !navigator.onLine;
-  submitButton.textContent = busy ? 'Working…' : 'Cut the BS';
+  submitButton.textContent = busy && !regenerating ? 'Working…' : 'Cut the BS';
+  regenerateButton.disabled = busy || !navigator.onLine;
+  regenerateLabel.textContent = busy && regenerating ? 'Regenerating…' : 'Regenerate';
   cancelButton.hidden = !busy;
   form.setAttribute('aria-busy', String(busy));
 }
@@ -690,6 +734,10 @@ async function registerServiceWorker(): Promise<void> {
   try {
     const registration = await navigator.serviceWorker.register('/sw.js');
     serviceWorkerRegistration = registration;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      pendingWebReload = true;
+      reloadWebAppWhenSafe();
+    });
     registration.waiting?.postMessage({ type: 'SKIP_WAITING' });
     registration.addEventListener('updatefound', () => {
       const installing = registration.installing;
@@ -710,6 +758,37 @@ async function registerServiceWorker(): Promise<void> {
     window.setInterval(checkWhenVisible, UPDATE_CHECK_INTERVAL_MS);
   } catch {
     // The online app still works when service worker registration is blocked.
+  }
+}
+
+function reloadWebAppWhenSafe(): void {
+  if (!pendingWebReload || activeRequest) return;
+  pendingWebReload = false;
+  try {
+    sessionStorage.setItem(
+      RELOAD_DRAFT_STORAGE_KEY,
+      JSON.stringify({ url: urlInput.value, title: titleInput.value }),
+    );
+  } catch {
+    // Reloading is still safe; saved summaries live in local storage.
+  }
+  window.location.reload();
+}
+
+function restoreReloadDraft(): void {
+  try {
+    const raw = sessionStorage.getItem(RELOAD_DRAFT_STORAGE_KEY);
+    sessionStorage.removeItem(RELOAD_DRAFT_STORAGE_KEY);
+    if (!raw) return;
+    const draft = JSON.parse(raw) as { url?: unknown; title?: unknown };
+    if (typeof draft.url !== 'string' || typeof draft.title !== 'string') return;
+    urlInput.value = draft.url;
+    titleInput.value = draft.title;
+    if (renderedSummary && videoIdFrom(draft.url) !== renderedSummary.response.videoId) {
+      clearResult();
+    }
+  } catch {
+    // Draft restoration is optional.
   }
 }
 

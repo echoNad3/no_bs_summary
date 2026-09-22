@@ -80,7 +80,7 @@ describe('local MVP manifests', () => {
     expect(manifest).toMatchObject({
       manifest_version: 3,
       name: 'No BS Summary',
-      version: '0.7.4',
+      version: '0.8.0',
       minimum_chrome_version: '114',
       permissions: ['sidePanel', 'storage'],
       background: { service_worker: 'background.js', type: 'module' },
@@ -157,6 +157,26 @@ describe('local MVP manifests', () => {
     );
   });
 
+  it('folds a legacy empty parent heading into its nested topics', () => {
+    expect(
+      parseSummaryBlocks(
+        '- **Potential Structural Fixes:**\n - **Surgical Procedures:** One option.\n\n - **Orthotropics:** Another option.\n\n- **Immediate Changes:** Sleep on your side.',
+      ),
+    ).toEqual([
+      {
+        kind: 'topic',
+        label: 'Potential Structural Fixes — Surgical Procedures',
+        body: 'One option.',
+      },
+      {
+        kind: 'topic',
+        label: 'Potential Structural Fixes — Orthotropics',
+        body: 'Another option.',
+      },
+      { kind: 'topic', label: 'Immediate Changes', body: 'Sleep on your side.' },
+    ]);
+  });
+
   it('parses safe inline emphasis without leaking Markdown markers', () => {
     expect(
       parseInlineMarkdown('Marvel cast *Noah Jupe* in **Secret Wars**, not \\*Fantastic Four\\*.'),
@@ -177,7 +197,7 @@ describe('local MVP manifests', () => {
 
   it('precaches the built JS and CSS needed for a first offline launch', async () => {
     const worker = await fs.readFile('apps/pwa/public/sw.js', 'utf8');
-    expect(worker).toContain("const CACHE = 'nbs-shell-v15'");
+    expect(worker).toContain("const CACHE = 'nbs-shell-v18'");
     expect(worker).toContain("event.data?.type === 'SKIP_WAITING'");
     expect(worker).toContain('/\\.(?:css|js)$/u');
     expect(worker).toContain("'/icons/icon-192.svg'");
@@ -204,6 +224,9 @@ describe('local MVP manifests', () => {
       expect(html).toContain('id="video-thumbnail"');
       expect(html).toContain('class="control-icon"');
       expect(html).toContain('id="settings-button"');
+      expect(html).toContain('id="regenerate" class="regenerate-button"');
+      expect(html).toContain('id="regenerate-label"');
+      expect(html).not.toContain('Uses a generation from your limit.');
       expect(html).toContain('>GitHub repo');
       expect(html).not.toContain('id="help-button"');
       expect(html).not.toContain('id="language"');

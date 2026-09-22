@@ -356,6 +356,41 @@ button:disabled {
   font-style: italic;
 }
 
+.summary-version-note {
+  margin-top: var(--space-4);
+  color: var(--color-text-muted);
+  font-size: var(--fs-meta);
+  line-height: 1.4;
+}
+
+.regenerate-actions {
+  margin-top: var(--space-5);
+  display: flex;
+  justify-content: center;
+}
+
+.regenerate-button {
+  min-height: var(--tap);
+  padding: 0 var(--space-3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-control);
+  font-size: var(--fs-meta);
+  font-weight: var(--fw-bold);
+  line-height: 1.15;
+  cursor: pointer;
+}
+
+.regenerate-icon {
+  width: 16px;
+  height: 16px;
+}
+
 dialog {
   --dialog-top: max(12px, env(safe-area-inset-top, 0px));
   --dialog-right: max(12px, env(safe-area-inset-right, 0px));
@@ -601,6 +636,11 @@ a:active {
   .primary-button:hover {
     background: var(--color-accent-strong);
     border-color: var(--color-accent-strong);
+  }
+
+  .regenerate-button:hover {
+    color: var(--color-text);
+    background: var(--color-surface-hover);
   }
 }
 

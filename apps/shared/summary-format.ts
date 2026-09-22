@@ -6,6 +6,39 @@ export type SummaryInlinePart = {
 };
 
 const TOPIC_LINE = /^(?:[-*•]\s+)\*\*([^*]+?)\*\*\s*:?\s*(.*)$/u;
+const CURRENT_TOPIC_LINE = /^- \*\*([^*\r\n]+):\*\* ([^\r\n]+)$/u;
+
+export interface CurrentSummaryPoint {
+  label: string;
+  body: string;
+}
+
+export function parseCurrentSummaryPoints(summary: string): CurrentSummaryPoint[] | undefined {
+  const sections = summary.trim().split(/\r?\n\s*\r?\n/gu);
+  if (sections.length < 1 || sections.length > 3) return undefined;
+  const points: CurrentSummaryPoint[] = [];
+  for (const section of sections) {
+    const match = CURRENT_TOPIC_LINE.exec(section);
+    if (!match) return undefined;
+    const label = match[1]!.trim();
+    const body = match[2]!.trim();
+    if (
+      !label ||
+      !body ||
+      countDisplayWords(label) > 8 ||
+      /[:*\r\n]|^\s*(?:[-•#]|\d+[.)])/u.test(label) ||
+      /\*\*|^\s*(?:[-*•#]|\d+[.)]\s+)/u.test(body)
+    ) {
+      return undefined;
+    }
+    points.push({ label, body });
+  }
+  return points;
+}
+
+export function countDisplayWords(text: string): number {
+  return text.match(/[\p{L}\p{N}'’-]+/gu)?.length ?? 0;
+}
 
 export function parseSummaryBlocks(summary: string): SummaryBlock[] {
   const trimmed = summary.trim();
@@ -13,12 +46,14 @@ export function parseSummaryBlocks(summary: string): SummaryBlock[] {
 
   const blocks: SummaryBlock[] = [];
   let active: SummaryBlock | undefined;
+  let pendingParent: string | undefined;
   const flush = () => {
     if (!active) return;
     if (active.kind === 'topic') {
       active.label = active.label.replace(/:\s*$/u, '').trim();
       active.body = active.body.trim();
-      if (active.label) blocks.push(active);
+      if (active.label && active.body) blocks.push(active);
+      else if (active.label) pendingParent = active.label;
     } else {
       active.text = active.text.trim();
       if (active.text) blocks.push(active);
@@ -36,16 +71,24 @@ export function parseSummaryBlocks(summary: string): SummaryBlock[] {
     const topic = TOPIC_LINE.exec(line);
     if (topic) {
       flush();
+      const nested = /^\s/u.test(rawLine);
+      if (!nested) pendingParent = undefined;
+      const label = topic[1]!.trim();
       active = {
         kind: 'topic',
-        label: topic[1]!.trim(),
+        label: nested && pendingParent ? `${pendingParent} — ${label}` : label,
         body: topic[2]!.trim(),
       };
       continue;
     }
 
     if (!active) {
-      active = { kind: 'paragraph', text: line };
+      if (pendingParent) {
+        active = { kind: 'topic', label: pendingParent, body: line };
+        pendingParent = undefined;
+      } else {
+        active = { kind: 'paragraph', text: line };
+      }
     } else if (active.kind === 'topic') {
       active.body = joinLine(active.body, line);
     } else {

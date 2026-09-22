@@ -1,6 +1,12 @@
-import { ApiClientError, checkBackend, summarizeVideo } from '../../shared/api-client.js';
-import type { SummarizeInput, SummaryResult } from '../../shared/api-client.js';
 import {
+  ApiClientError,
+  CURRENT_SUMMARY_OUTPUT_VERSION,
+  checkBackend,
+  summarizeVideo,
+} from '../../shared/api-client.js';
+import type { StoredSummaryResult, SummarizeInput } from '../../shared/api-client.js';
+import {
+  isLegacySavedSummary,
   parseTextSize,
   safeDiagnosticsText,
   type SavedSummary,
@@ -23,7 +29,7 @@ import {
 import './styles.css';
 
 interface RenderedSummary {
-  response: SummaryResult;
+  response: StoredSummaryResult;
   title?: string;
   url: string;
 }
@@ -34,6 +40,9 @@ const titleInput = requiredElement<HTMLInputElement>('title');
 const passwordInput = requiredElement<HTMLInputElement>('password');
 const togglePasswordButton = requiredElement<HTMLButtonElement>('toggle-password');
 const submitButton = requiredElement<HTMLButtonElement>('submit');
+const regenerateButton = requiredElement<HTMLButtonElement>('regenerate');
+const regenerateLabel = requiredElement<HTMLSpanElement>('regenerate-label');
+const summaryVersionNote = requiredElement<HTMLParagraphElement>('summary-version-note');
 const status = requiredElement<HTMLParagraphElement>('status');
 const result = requiredElement<HTMLElement>('result');
 const videoContext = requiredElement<HTMLElement>('video-context');
@@ -58,10 +67,12 @@ let detectedUrl: string | undefined;
 let detectedVideoId: string | undefined;
 let activeTabId: number | undefined;
 let activeRequest: AbortController | undefined;
+let activeRequestKind: 'generate' | 'regenerate' | undefined;
 let renderedSummary: RenderedSummary | undefined;
 let refreshVersion = 0;
 let manualOverride = false;
 let lastFailure: Error | undefined;
+let lastAttemptWasRegeneration = false;
 let savedSummary: SavedSummary | undefined;
 const videoTitleLookup = new LatestVideoTitleLookup(DEFAULT_BACKEND_URL);
 
@@ -92,7 +103,8 @@ urlInput.addEventListener('paste', (event) => {
 togglePasswordButton.addEventListener('click', togglePasswordVisibility);
 
 cancelButton.addEventListener('click', cancelFromButton);
-retryButton.addEventListener('click', () => void submitSummary());
+regenerateButton.addEventListener('click', () => void submitSummary(true));
+retryButton.addEventListener('click', () => void submitSummary(lastAttemptWasRegeneration));
 diagnosticsButton.addEventListener('click', () => void copyDiagnostics());
 testConnectionButton.addEventListener('click', () => void testConnection());
 
@@ -175,39 +187,48 @@ async function fillFromActiveTab(): Promise<void> {
   }
 }
 
-async function submitSummary(): Promise<void> {
-  if (activeRequest || !form.reportValidity()) return;
+async function submitSummary(regenerate = false): Promise<void> {
+  if (activeRequest || (!regenerate && !form.reportValidity())) return;
+  const previous = regenerate ? renderedSummary : undefined;
+  if (regenerate && !previous) return;
 
   const input: SummarizeInput = {
-    url: urlInput.value.trim(),
-    title: titleInput.value.trim() || undefined,
+    url: previous?.url ?? urlInput.value.trim(),
+    title: previous?.title ?? (titleInput.value.trim() || undefined),
     language: 'en',
   };
+  const expectedVideoId = previous?.response.videoId ?? videoIdFrom(input.url);
   const password = passwordInput.value.trim();
   const controller = new AbortController();
   activeRequest = controller;
+  activeRequestKind = regenerate ? 'regenerate' : 'generate';
+  lastAttemptWasRegeneration = regenerate;
   lastFailure = undefined;
   errorActions.hidden = true;
   diagnosticsButton.textContent = 'Copy diagnostics';
-  clearResult();
-  setBusy(true);
-  setStatus('Working…');
+  if (!regenerate) clearResult();
+  setBusy(true, regenerate);
+  setStatus(regenerate ? 'Regenerating…' : 'Working…');
   await saveSettings({ password, textSize: parseTextSize(textSizeInput.value) });
 
   try {
     const response = await summarizeVideo(DEFAULT_BACKEND_URL, input, {
       password,
       signal: controller.signal,
+      regenerate,
     });
     if (activeRequest !== controller) return;
-    const resolvedTitle =
-      videoIdFrom(urlInput.value) === response.videoId ? titleInput.value.trim() : '';
+    if (expectedVideoId && response.videoId !== expectedVideoId) {
+      throw new ApiClientError('The returned summary was for a different video. Try again.');
+    }
+    const resolvedTitle = videoIdFrom(input.url) === response.videoId ? input.title?.trim() : '';
     renderResult(response, { ...input, title: resolvedTitle || input.title });
     if (renderedSummary) {
       savedSummary = { ...renderedSummary, savedAt: new Date().toISOString() };
       await saveLastSummary(savedSummary);
     }
-    setStatus('Summary ready.', 'success');
+    setStatus(regenerate ? 'Fresh summary ready.' : 'Summary ready.', 'success');
+    void refreshBackendStatus();
     if (settingsDialog.open) settingsDialog.close();
   } catch (error) {
     if (activeRequest !== controller) return;
@@ -225,13 +246,14 @@ async function submitSummary(): Promise<void> {
   } finally {
     if (activeRequest === controller) {
       activeRequest = undefined;
-      setBusy(false);
+      activeRequestKind = undefined;
+      setBusy(false, regenerate);
     }
   }
 }
 
 function renderResult(
-  response: SummaryResult,
+  response: StoredSummaryResult,
   input: SummarizeInput,
   behavior: { focus?: boolean } = { focus: true },
 ): void {
@@ -241,6 +263,11 @@ function renderResult(
   verdict.dataset.verdict = response.verdict;
   requiredElement<HTMLParagraphElement>('reason').textContent = response.reason;
   renderDetailedSummary(requiredElement<HTMLElement>('summary'), response.summary);
+  const legacy = response.outputVersion !== CURRENT_SUMMARY_OUTPUT_VERSION;
+  summaryVersionNote.hidden = !legacy;
+  summaryVersionNote.textContent = legacy
+    ? 'Saved summary from an older version. Regenerate it for the new format.'
+    : '';
   result.hidden = false;
   if (behavior.focus !== false) {
     result.focus({ preventScroll: true });
@@ -248,9 +275,11 @@ function renderResult(
   }
 }
 
-function setBusy(busy: boolean): void {
+function setBusy(busy: boolean, regenerating = false): void {
   submitButton.disabled = busy;
-  submitButton.textContent = busy ? 'Working…' : 'Cut the BS';
+  submitButton.textContent = busy && !regenerating ? 'Working…' : 'Cut the BS';
+  regenerateButton.disabled = busy;
+  regenerateLabel.textContent = busy && regenerating ? 'Regenerating…' : 'Regenerate';
   cancelButton.hidden = !busy;
   form.setAttribute('aria-busy', String(busy));
 }
@@ -288,13 +317,16 @@ function cancelActiveRequest(): void {
   if (!activeRequest) return;
   activeRequest.abort();
   activeRequest = undefined;
-  setBusy(false);
+  const wasRegenerating = activeRequestKind === 'regenerate';
+  activeRequestKind = undefined;
+  setBusy(false, wasRegenerating);
 }
 
 function cancelFromButton(): void {
   if (!activeRequest) return;
+  const wasRegenerating = activeRequestKind === 'regenerate';
   cancelActiveRequest();
-  setStatus('Cancelled.');
+  setStatus(wasRegenerating ? 'Regeneration cancelled. Previous summary kept.' : 'Cancelled.');
 }
 
 function clearResult(): void {
@@ -349,6 +381,9 @@ function restoreSummary(saved: SavedSummary): void {
   const url = detectedUrl ?? saved.url;
   const title = titleInput.value.trim() || saved.title;
   renderResult(saved.response, { url, title, language: saved.response.language }, { focus: false });
+  if (isLegacySavedSummary(saved)) {
+    setStatus('Saved summary from an older version. Use Regenerate to replace it.');
+  }
   if (settingsDialog.open) settingsDialog.close();
 }
 

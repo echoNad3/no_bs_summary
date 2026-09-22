@@ -1,10 +1,15 @@
-import { isSummaryResult, type ApiClientError, type SummaryResult } from './api-client.js';
+import {
+  CURRENT_SUMMARY_OUTPUT_VERSION,
+  isStoredSummaryResult,
+  type ApiClientError,
+  type StoredSummaryResult,
+} from './api-client.js';
 import { extractVideoId } from './youtube-input.js';
 
 export type TextSize = 'normal' | 'large' | 'extra-large';
 
 export interface SavedSummary {
-  response: SummaryResult;
+  response: StoredSummaryResult;
   title?: string;
   url: string;
   savedAt: string;
@@ -17,7 +22,7 @@ export function parseSavedSummary(value: unknown): SavedSummary | undefined {
     typeof candidate.url !== 'string' ||
     typeof candidate.savedAt !== 'string' ||
     (candidate.title !== undefined && typeof candidate.title !== 'string') ||
-    !isSummaryResult(candidate.response)
+    !isStoredSummaryResult(candidate.response)
   ) {
     return undefined;
   }
@@ -27,6 +32,10 @@ export function parseSavedSummary(value: unknown): SavedSummary | undefined {
     return undefined;
   }
   return candidate as SavedSummary;
+}
+
+export function isLegacySavedSummary(summary: SavedSummary): boolean {
+  return summary.response.outputVersion !== CURRENT_SUMMARY_OUTPUT_VERSION;
 }
 
 export function parseTextSize(value: unknown): TextSize {
