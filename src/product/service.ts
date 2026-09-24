@@ -158,7 +158,7 @@ export class SummaryService {
       return await withinDeadline(this.options.summaryCache.read(identity), context, 2_000);
     } catch (error) {
       if (requestTimedOut(error, context)) {
-        if (requestDeadlineReached(context)) throw deadlineProductError();
+        if (requestDeadlineReached(context, error)) throw deadlineProductError();
         throw new ProductError(
           503,
           'SUMMARY_CACHE_FAILED',
@@ -184,7 +184,7 @@ export class SummaryService {
         await withinDeadline(requestOptions.beforeGenerate(), context, 5_000);
       } catch (error) {
         if (requestTimedOut(error, context)) {
-          if (requestDeadlineReached(context)) throw deadlineProductError();
+          if (requestDeadlineReached(context, error)) throw deadlineProductError();
           throw new ProductError(
             503,
             'QUOTA_UNAVAILABLE',

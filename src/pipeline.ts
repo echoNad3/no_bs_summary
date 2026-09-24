@@ -64,7 +64,7 @@ export async function runSummaryPipeline(
         2_000,
       );
     } catch (error) {
-      if (requestDeadlineReached(context)) throw deadlineError(options.timeoutMs);
+      if (requestDeadlineReached(context, error)) throw deadlineError(options.timeoutMs);
       if (requestTimedOut(error, context)) {
         throw new PipelineError(
           'transcript-cache-timeout',
@@ -102,7 +102,7 @@ async function fetchAndSummarize(
       stage.dispose();
     }
   } catch (error) {
-    if (requestDeadlineReached(context)) throw deadlineError(options.timeoutMs);
+    if (requestDeadlineReached(context, error)) throw deadlineError(options.timeoutMs);
     if (requestTimedOut(error, context)) {
       throw new PipelineError('transcript-timeout', 'Captions did not arrive in time.', error);
     }
@@ -115,7 +115,7 @@ async function fetchAndSummarize(
   try {
     await withinDeadline(options.transcriptCache.write(transcriptKey, transcript), context, 250);
   } catch (error) {
-    if (requestDeadlineReached(context)) throw deadlineError(options.timeoutMs);
+    if (requestDeadlineReached(context, error)) throw deadlineError(options.timeoutMs);
     // The captions are already in memory. A failed cache write must not waste
     // the quota reservation or prevent a valid summary from being generated.
     console.warn(
@@ -157,7 +157,7 @@ async function fetchAndSummarize(
     };
   } catch (error) {
     if (error instanceof PipelineError) throw error;
-    if (requestDeadlineReached(context)) throw deadlineError(options.timeoutMs);
+    if (requestDeadlineReached(context, error)) throw deadlineError(options.timeoutMs);
     if (requestTimedOut(error, context) || isProviderTimeout(error)) {
       throw new PipelineError(
         'summary-timeout',
@@ -197,7 +197,7 @@ async function summarizeCached(
     };
   } catch (error) {
     if (error instanceof PipelineError) throw error;
-    if (requestDeadlineReached(context)) throw deadlineError(options.timeoutMs);
+    if (requestDeadlineReached(context, error)) throw deadlineError(options.timeoutMs);
     if (requestTimedOut(error, context) || isProviderTimeout(error)) {
       throw new PipelineError(
         'summary-timeout',

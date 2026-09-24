@@ -14,6 +14,13 @@ export interface RequestContext {
 
 export type RetryStage = 'transcript' | 'summary';
 
+class DeadlineAbortError extends Error {
+  constructor(readonly deadlineAt: number) {
+    super('The request deadline was reached.');
+    this.name = 'AbortError';
+  }
+}
+
 export function recordRetry(context: RequestContext, stage: RetryStage): void {
   if (stage === 'transcript') context.transcriptRetries += 1;
   else context.summaryRetries += 1;
@@ -40,8 +47,12 @@ export function requestTimedOut(error: unknown, context: RequestContext): boolea
   return requestDeadlineReached(context) || (error instanceof Error && error.name === 'AbortError');
 }
 
-export function requestDeadlineReached(context: RequestContext): boolean {
-  return context.signal.aborted || Date.now() >= context.deadlineAt;
+export function requestDeadlineReached(context: RequestContext, error?: unknown): boolean {
+  return (
+    context.signal.aborted ||
+    Date.now() >= context.deadlineAt ||
+    (error instanceof DeadlineAbortError && error.deadlineAt === context.deadlineAt)
+  );
 }
 
 /** Settle even if a storage binding or provider ignores its abort signal. */
@@ -50,9 +61,11 @@ export function withinDeadline<T>(
   context: RequestContext,
   maxStageMs = Number.POSITIVE_INFINITY,
 ): Promise<T> {
-  const remaining = Math.min(context.deadlineAt - Date.now(), maxStageMs);
+  const now = Date.now();
+  const effectiveDeadlineAt = Math.min(context.deadlineAt, now + maxStageMs);
+  const remaining = effectiveDeadlineAt - now;
   if (context.signal.aborted || remaining <= 0) {
-    return Promise.reject(new DOMException('The request deadline was reached.', 'AbortError'));
+    return Promise.reject(new DeadlineAbortError(effectiveDeadlineAt));
   }
   return new Promise<T>((resolve, reject) => {
     let settled = false;
@@ -63,8 +76,7 @@ export function withinDeadline<T>(
       context.signal.removeEventListener('abort', onAbort);
       callback();
     };
-    const onAbort = () =>
-      finish(() => reject(new DOMException('The request deadline was reached.', 'AbortError')));
+    const onAbort = () => finish(() => reject(new DeadlineAbortError(effectiveDeadlineAt)));
     const timer = setTimeout(onAbort, remaining);
     context.signal.addEventListener('abort', onAbort, { once: true });
     operation.then(
