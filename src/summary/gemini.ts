@@ -1,6 +1,7 @@
 import { ApiError, GoogleGenAI } from '@google/genai';
 import { z } from 'zod';
 import { sleepWithinDeadline } from '../http.js';
+import { withinDeadline } from '../request-context.js';
 import { recordRetry } from '../request-context.js';
 import type { RequestContext } from '../request-context.js';
 import {
@@ -15,6 +16,8 @@ import type { Summary, SummaryProvider, SummarySource } from './provider.js';
 
 export const GEMINI_PROMPT_VERSION = 'three-points-v39-2026-09-22';
 const MIN_OUTPUT_RETRY_REMAINING_MS = 5_000;
+const MIN_MODEL_RETRY_REMAINING_MS = 8_000;
+const MODEL_ATTEMPT_TIMEOUT_MS = 20_000;
 const MAX_OUTPUT_TOKENS = 650;
 
 export const SYSTEM_INSTRUCTION = `Create a short, blunt summary first, then add a small WATCH / SKIM / SKIP judgment. Use only the transcript.
@@ -98,6 +101,7 @@ export type GeminiCreateFn = (
   options: GeminiCreateOptions,
 ) => Promise<{
   output_text?: string | undefined;
+  status?: string | undefined;
   usage?:
     | {
         total_input_tokens?: number | undefined;
@@ -126,7 +130,13 @@ function realCreateFn(apiKey: string): GeminiCreateFn {
 function isTransient(error: unknown): boolean {
   const status = httpStatus(error);
   return (
-    status === 408 || status === 429 || (status !== undefined && status >= 500 && status < 600)
+    status === 408 ||
+    status === 429 ||
+    (status !== undefined && status >= 500 && status < 600) ||
+    (error instanceof Error &&
+      (/(?:Connection|Timeout)Error$/u.test(error.name) ||
+        error.name === 'AbortError' ||
+        error.name === 'RequestAbortedError'))
   );
 }
 
@@ -212,30 +222,41 @@ export class GeminiSummaryProvider implements SummaryProvider {
         schema: buildResponseJsonSchema(),
       },
     };
-    const options: GeminiCreateOptions = {
-      fetchOptions: { signal: ctx.signal },
-      maxRetries: 0,
+    const createAttempt = (input: GeminiCreateParams) => {
+      if (ctx.signal.aborted || Date.now() >= ctx.deadlineAt) {
+        return Promise.reject(new DOMException('The request deadline was reached.', 'AbortError'));
+      }
+      const deadlineAt = Math.min(ctx.deadlineAt, Date.now() + MODEL_ATTEMPT_TIMEOUT_MS);
+      const signal = AbortSignal.any([
+        ctx.signal,
+        AbortSignal.timeout(Math.max(1, deadlineAt - Date.now())),
+      ]);
+      const options: GeminiCreateOptions = { fetchOptions: { signal }, maxRetries: 0 };
+      return withinDeadline(this.create(input, options), { ...ctx, signal, deadlineAt });
     };
 
     let interaction: Awaited<ReturnType<GeminiCreateFn>>;
     let usedRetry = false;
     try {
-      interaction = await this.create(params, options);
+      interaction = await createAttempt(params);
     } catch (firstError) {
+      ctx.providerStatus = httpStatus(firstError);
       const retryDelayMs = retryDelay(firstError);
       if (
         !isTransient(firstError) ||
         ctx.signal.aborted ||
-        Date.now() + retryDelayMs >= ctx.deadlineAt
+        Date.now() + retryDelayMs + MIN_MODEL_RETRY_REMAINING_MS >= ctx.deadlineAt
       ) {
         throw firstError;
       }
       await sleepWithinDeadline(retryDelayMs, ctx.signal);
       recordRetry(ctx, 'summary');
+      ctx.retryReason = 'transport';
       usedRetry = true;
       try {
-        interaction = await this.create(params, options);
+        interaction = await createAttempt(params);
       } catch (secondError) {
+        ctx.providerStatus = httpStatus(secondError) ?? ctx.providerStatus;
         const firstMessage = firstError instanceof Error ? firstError.message : String(firstError);
         const secondMessage =
           secondError instanceof Error ? secondError.message : String(secondError);
@@ -249,7 +270,10 @@ export class GeminiSummaryProvider implements SummaryProvider {
     }
 
     try {
-      return parseInteraction(interaction);
+      const parsed = parseInteraction(interaction);
+      ctx.modelStatus = interaction.status;
+      ctx.modelTokens = parsed.usage?.totalTokens;
+      return parsed;
     } catch (error) {
       if (
         !(error instanceof SummaryValidationError) ||
@@ -261,6 +285,7 @@ export class GeminiSummaryProvider implements SummaryProvider {
       }
 
       recordRetry(ctx, 'summary');
+      ctx.retryReason = 'repair';
       const repairParams = interaction.output_text?.trim()
         ? {
             ...params,
@@ -272,9 +297,11 @@ export class GeminiSummaryProvider implements SummaryProvider {
             ),
           }
         : params;
-      const repairedInteraction = await this.create(repairParams, options);
+      const repairedInteraction = await createAttempt(repairParams);
       const repaired = parseInteraction(repairedInteraction);
       const usage = combineUsage(error.usage, repaired.usage);
+      ctx.modelStatus = repairedInteraction.status;
+      ctx.modelTokens = usage?.totalTokens;
       return usage ? { ...repaired, usage } : repaired;
     }
   }

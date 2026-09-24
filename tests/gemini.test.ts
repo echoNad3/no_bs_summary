@@ -587,8 +587,23 @@ describe('GeminiSummaryProvider', () => {
       .fn()
       .mockRejectedValue(new ApiError({ message: 'server error', status: 500 }));
     const context = ctx(-1);
-    await expect(provider(create).summarize('t', context)).rejects.toThrow('server error');
-    expect(create).toHaveBeenCalledTimes(1);
+    await expect(provider(create).summarize('t', context)).rejects.toThrow('deadline');
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('settles and retries once when the model ignores an attempt timeout', async () => {
+    vi.useFakeTimers();
+    const create = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise(() => undefined))
+      .mockResolvedValueOnce({ output_text: VALID_OUTPUT });
+    const context = ctx(50_000);
+    const pending = provider(create).summarize('t', context);
+    await vi.advanceTimersByTimeAsync(20_000);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await expect(pending).resolves.toMatchObject({ verdict: 'SKIP' });
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(context.retryReason).toBe('transport');
   });
 
   it('preserves both failure messages when the one retry also fails', async () => {

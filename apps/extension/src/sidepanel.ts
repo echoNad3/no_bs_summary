@@ -1,6 +1,7 @@
 import {
   ApiClientError,
   CURRENT_SUMMARY_OUTPUT_VERSION,
+  DEFAULT_SUMMARY_REQUEST_TIMEOUT_MS,
   checkBackend,
   summarizeVideo,
 } from '../../shared/api-client.js';
@@ -74,6 +75,9 @@ let manualOverride = false;
 let lastFailure: Error | undefined;
 let lastAttemptWasRegeneration = false;
 let savedSummary: SavedSummary | undefined;
+let requestWatchdog: ReturnType<typeof setTimeout> | undefined;
+let waitHint: ReturnType<typeof setTimeout> | undefined;
+let requestStartedAt = 0;
 const videoTitleLookup = new LatestVideoTitleLookup(DEFAULT_BACKEND_URL);
 
 form.addEventListener('submit', (event) => {
@@ -209,7 +213,16 @@ async function submitSummary(regenerate = false): Promise<void> {
   if (!regenerate) clearResult();
   setBusy(true, regenerate);
   setStatus(regenerate ? 'Regenerating…' : 'Working…');
-  await saveSettings({ password, textSize: parseTextSize(textSizeInput.value) });
+  requestStartedAt = Date.now();
+  const requestDeadlineAt = requestStartedAt + DEFAULT_SUMMARY_REQUEST_TIMEOUT_MS + 1_000;
+  requestWatchdog = setTimeout(
+    () => expireRequest(controller),
+    Math.max(0, requestDeadlineAt - Date.now()),
+  );
+  waitHint = setTimeout(() => {
+    if (activeRequest === controller) setStatus('Still waiting for the summary service…');
+  }, 15_000);
+  void saveSettings({ password, textSize: parseTextSize(textSizeInput.value) });
 
   try {
     const response = await summarizeVideo(DEFAULT_BACKEND_URL, input, {
@@ -225,7 +238,7 @@ async function submitSummary(regenerate = false): Promise<void> {
     renderResult(response, { ...input, title: resolvedTitle || input.title });
     if (renderedSummary) {
       savedSummary = { ...renderedSummary, savedAt: new Date().toISOString() };
-      await saveLastSummary(savedSummary);
+      void saveLastSummary(savedSummary);
     }
     setStatus(regenerate ? 'Fresh summary ready.' : 'Summary ready.', 'success');
     void refreshBackendStatus();
@@ -245,6 +258,7 @@ async function submitSummary(regenerate = false): Promise<void> {
     }
   } finally {
     if (activeRequest === controller) {
+      clearRequestTimers();
       activeRequest = undefined;
       activeRequestKind = undefined;
       setBusy(false, regenerate);
@@ -315,12 +329,38 @@ function showControlsForNewVideo(): void {
 
 function cancelActiveRequest(): void {
   if (!activeRequest) return;
+  clearRequestTimers();
   activeRequest.abort();
   activeRequest = undefined;
   const wasRegenerating = activeRequestKind === 'regenerate';
   activeRequestKind = undefined;
   setBusy(false, wasRegenerating);
 }
+
+function clearRequestTimers(): void {
+  if (requestWatchdog) clearTimeout(requestWatchdog);
+  if (waitHint) clearTimeout(waitHint);
+  requestWatchdog = undefined;
+  waitHint = undefined;
+}
+
+function expireRequest(controller: AbortController): void {
+  if (activeRequest !== controller) return;
+  cancelActiveRequest();
+  lastFailure = new ApiClientError('The summary took too long. Try again.', 'REQUEST_TIMEOUT');
+  setStatus(lastFailure.message, 'error');
+  errorActions.hidden = false;
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (
+    document.visibilityState === 'visible' &&
+    activeRequest &&
+    Date.now() - requestStartedAt > DEFAULT_SUMMARY_REQUEST_TIMEOUT_MS + 1_000
+  ) {
+    expireRequest(activeRequest);
+  }
+});
 
 function cancelFromButton(): void {
   if (!activeRequest) return;
@@ -336,7 +376,7 @@ function clearResult(): void {
 
 async function testConnection(): Promise<void> {
   const password = passwordInput.value.trim();
-  await saveSettings({ password, textSize: parseTextSize(textSizeInput.value) });
+  void saveSettings({ password, textSize: parseTextSize(textSizeInput.value) });
   await refreshBackendStatus();
 }
 

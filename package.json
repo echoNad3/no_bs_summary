@@ -1,6 +1,6 @@
 {
   "name": "no-bs-summary",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "private": true,
   "description": "Blunt YouTube summaries from existing captions.",
   "type": "module",
@@ -23,6 +23,7 @@
     "store:assets": "node scripts/generate-store-assets.mjs",
     "build": "npm run build:pwa && npm run build:extension",
     "smoke:extension": "node scripts/extension-smoke.mjs",
+    "smoke:extension-storage": "node scripts/extension-storage-smoke.mjs",
     "smoke:update": "node scripts/web-update-smoke.mjs",
     "smoke:a11y": "node scripts/accessibility-smoke.mjs",
     "smoke:worker": "node scripts/worker-runtime-smoke.mjs",

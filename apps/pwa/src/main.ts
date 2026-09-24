@@ -85,6 +85,7 @@ const appUpdateProgressFill = requiredElement<HTMLElement>('app-update-progress-
 const appUpdateProgressValue = requiredElement<HTMLElement>('app-update-progress-value');
 
 let activeRequest: AbortController | undefined;
+let summaryWaitHint: ReturnType<typeof setTimeout> | undefined;
 let activeRequestKind: 'generate' | 'regenerate' | undefined;
 let renderedSummary: RenderedSummary | undefined;
 let lastFailure: Error | undefined;
@@ -209,6 +210,9 @@ async function submitSummary(regenerate = false): Promise<void> {
   if (!regenerate) clearResult();
   setBusy(true, regenerate);
   setStatus(regenerate ? 'Regenerating…' : 'Working…');
+  summaryWaitHint = setTimeout(() => {
+    if (activeRequest === controller) setStatus('Still waiting for the summary service…');
+  }, 15_000);
   savePassword(password);
 
   try {
@@ -242,6 +246,7 @@ async function submitSummary(regenerate = false): Promise<void> {
     }
   } finally {
     if (activeRequest === controller) {
+      clearSummaryWaitHint();
       activeRequest = undefined;
       activeRequestKind = undefined;
       setBusy(false, regenerate);
@@ -260,12 +265,18 @@ function handleSummaryInputChanged(): void {
 
 function cancelActiveRequest(): void {
   if (!activeRequest) return;
+  clearSummaryWaitHint();
   activeRequest.abort();
   activeRequest = undefined;
   const wasRegenerating = activeRequestKind === 'regenerate';
   activeRequestKind = undefined;
   setBusy(false, wasRegenerating);
   reloadWebAppWhenSafe();
+}
+
+function clearSummaryWaitHint(): void {
+  if (summaryWaitHint) clearTimeout(summaryWaitHint);
+  summaryWaitHint = undefined;
 }
 
 function cancelFromButton(): void {

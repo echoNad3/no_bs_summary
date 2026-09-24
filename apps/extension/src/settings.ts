@@ -12,6 +12,11 @@ export const DEFAULT_BACKEND_URL = 'https://no-bs-summary.echonad3.workers.dev';
 const STORAGE_KEY = 'nbs-settings';
 const PASSWORD_KEY = 'nbs-app-password';
 const LAST_SUMMARY_KEY = 'nbs-last-summary';
+const STORAGE_READ_TIMEOUT_MS = 2_000;
+let settingsRevision = 0;
+let latestSettings: ExtensionSettings | undefined;
+let summaryRevision = 0;
+let latestSummary: SavedSummary | undefined;
 
 export interface ExtensionSettings {
   password: string;
@@ -51,19 +56,16 @@ export async function loadSettings(): Promise<ExtensionSettings> {
   const localPassword = typeof local === 'string' ? local : undefined;
   const legacyPassword = typeof legacy?.password === 'string' ? legacy.password : '';
   const password = localPassword ?? legacyPassword;
-  let passwordStoredLocally = localPassword !== undefined;
-
   const localArea = localStorageArea();
-  if (!passwordStoredLocally && legacyPassword && localArea) {
-    try {
-      await localArea.set({ [PASSWORD_KEY]: legacyPassword });
-      passwordStoredLocally = true;
-    } catch {
-      // Keep the synced copy until a later migration succeeds.
-    }
-  }
-  if (legacy && 'password' in legacy && passwordStoredLocally) {
-    await syncStorage()
+  if (localPassword === undefined && legacyPassword && localArea) {
+    void localArea
+      .set({ [PASSWORD_KEY]: legacyPassword })
+      .then(() =>
+        syncStorage()?.set({ [STORAGE_KEY]: { textSize: parseTextSize(legacy?.textSize) } }),
+      )
+      .catch(() => undefined);
+  } else if (legacy && 'password' in legacy) {
+    void syncStorage()
       ?.set({ [STORAGE_KEY]: { textSize: parseTextSize(legacy.textSize) } })
       .catch(() => undefined);
   }
@@ -75,37 +77,57 @@ export async function loadLastSummary(): Promise<SavedSummary | undefined> {
   try {
     const storage = localStorageArea();
     if (!storage) return undefined;
-    const stored = await storage.get(LAST_SUMMARY_KEY);
-    return parseSavedSummary(stored[LAST_SUMMARY_KEY]);
+    return parseSavedSummary(await readStorageValue(storage, LAST_SUMMARY_KEY));
   } catch {
     return undefined;
   }
 }
 
 export async function saveLastSummary(summary: SavedSummary): Promise<void> {
+  const revision = ++summaryRevision;
+  latestSummary = summary;
   try {
     await localStorageArea()?.set({ [LAST_SUMMARY_KEY]: summary });
   } catch {
     // Restoring the last result is optional when local storage is unavailable.
+  } finally {
+    if (revision !== summaryRevision && latestSummary) void saveLastSummary(latestSummary);
   }
 }
 
 export async function saveSettings(settings: ExtensionSettings): Promise<void> {
+  const revision = ++settingsRevision;
+  latestSettings = settings;
   const local = localStorageArea();
-  await Promise.all([
-    syncStorage()
-      ?.set({ [STORAGE_KEY]: { textSize: settings.textSize } })
-      .catch(() => undefined),
-    settings.password
-      ? local?.set({ [PASSWORD_KEY]: settings.password }).catch(() => undefined)
-      : local?.remove(PASSWORD_KEY).catch(() => undefined),
-  ]);
+  try {
+    await Promise.all([
+      syncStorage()
+        ?.set({ [STORAGE_KEY]: { textSize: settings.textSize } })
+        .catch(() => undefined),
+      settings.password
+        ? local?.set({ [PASSWORD_KEY]: settings.password }).catch(() => undefined)
+        : local?.remove(PASSWORD_KEY).catch(() => undefined),
+    ]);
+  } finally {
+    // An older Chrome write may finish after a newer one. Restore the latest value.
+    if (revision !== settingsRevision && latestSettings) void saveSettings(latestSettings);
+  }
 }
 
 async function readStorageValue(storage: StorageArea | undefined, key: string): Promise<unknown> {
+  if (!storage) return undefined;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
-    return storage ? (await storage.get(key))[key] : undefined;
+    const items = await Promise.race([
+      storage.get(key),
+      new Promise<Record<string, unknown>>((resolve) => {
+        timeout = setTimeout(() => resolve({}), STORAGE_READ_TIMEOUT_MS);
+      }),
+    ]);
+    return items[key];
   } catch {
     return undefined;
+  } finally {
+    if (timeout) clearTimeout(timeout);
   }
 }

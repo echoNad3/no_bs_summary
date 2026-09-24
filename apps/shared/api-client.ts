@@ -23,6 +23,7 @@ export interface SummaryResult {
     totalMs?: number;
   };
   retries: { transcript: number; summary: number };
+  delivery?: { summaryCacheHit: boolean; requestMs: number };
 }
 
 export type StoredSummaryResult = SummaryResult | LegacySummaryResult;
@@ -64,6 +65,7 @@ export class ApiClientError extends Error {
     readonly code = 'REQUEST_FAILED',
     readonly status?: number,
     readonly retryAfterSeconds?: number,
+    readonly requestId?: string,
   ) {
     super(message);
     this.name = 'ApiClientError';
@@ -102,10 +104,13 @@ export async function fetchVideoMetadata(
     try {
       const normalizedBase = apiBase.replace(/\/+$/u, '');
       const query = new URLSearchParams({ id: videoId });
-      response = await fetch(`${normalizedBase}/api/video-metadata?${query}`, {
-        method: 'GET',
-        signal: controller.signal,
-      });
+      response = await settleOnAbort(
+        fetch(`${normalizedBase}/api/video-metadata?${query}`, {
+          method: 'GET',
+          signal: controller.signal,
+        }),
+        controller.signal,
+      );
     } catch {
       if (options.signal?.aborted) {
         throw new ApiClientError('Title lookup cancelled.', 'REQUEST_CANCELLED');
@@ -118,7 +123,7 @@ export async function fetchVideoMetadata(
 
     let payload: unknown;
     try {
-      payload = await readJson(response);
+      payload = await settleOnAbort(readJson(response), controller.signal);
     } catch (error) {
       if (options.signal?.aborted) {
         throw new ApiClientError('Title lookup cancelled.', 'REQUEST_CANCELLED');
@@ -166,19 +171,22 @@ export async function summarizeVideo(
     let response: Response;
     try {
       const normalizedBase = apiBase.replace(/\/+$/u, '');
-      response = await fetch(`${normalizedBase}/api/summarize`, {
-        method: 'POST',
-        headers,
-        // Titles are presentation-only. Keeping them out of the shared backend
-        // prevents the first caller from poisoning a cached summary with a
-        // misleading or instruction-like title.
-        body: JSON.stringify({
-          url: input.url,
-          language: input.language,
-          ...(options.regenerate ? { regenerate: true } : {}),
+      response = await settleOnAbort(
+        fetch(`${normalizedBase}/api/summarize`, {
+          method: 'POST',
+          headers,
+          // Titles are presentation-only. Keeping them out of the shared backend
+          // prevents the first caller from poisoning a cached summary with a
+          // misleading or instruction-like title.
+          body: JSON.stringify({
+            url: input.url,
+            language: input.language,
+            ...(options.regenerate ? { regenerate: true } : {}),
+          }),
+          signal: controller.signal,
         }),
-        signal: controller.signal,
-      });
+        controller.signal,
+      );
     } catch {
       if (options.signal?.aborted) {
         throw new ApiClientError('Request cancelled.', 'REQUEST_CANCELLED');
@@ -194,7 +202,7 @@ export async function summarizeVideo(
 
     let payload: unknown;
     try {
-      payload = await readJson(response);
+      payload = await settleOnAbort(readJson(response), controller.signal);
     } catch (error) {
       if (options.signal?.aborted) {
         throw new ApiClientError('Request cancelled.', 'REQUEST_CANCELLED');
@@ -211,6 +219,7 @@ export async function summarizeVideo(
         typeof error?.code === 'string' ? error.code : 'REQUEST_FAILED',
         response.status,
         retryAfterSeconds(response),
+        response.headers.get('x-request-id') ?? undefined,
       );
     }
     if (!isSummaryResult(payload)) {
@@ -221,6 +230,25 @@ export async function summarizeVideo(
     globalThis.clearTimeout(timeout);
     options.signal?.removeEventListener('abort', cancelFromCaller);
   }
+}
+
+function settleOnAbort<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(new DOMException('Aborted', 'AbortError'));
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener('abort', onAbort);
+      callback();
+    };
+    const onAbort = () => finish(() => reject(new DOMException('Aborted', 'AbortError')));
+    signal.addEventListener('abort', onAbort, { once: true });
+    operation.then(
+      (value) => finish(() => resolve(value)),
+      (error: unknown) => finish(() => reject(error)),
+    );
+  });
 }
 
 export async function checkBackend(
@@ -239,11 +267,14 @@ export async function checkBackend(
     let response: Response;
     try {
       const normalizedBase = apiBase.replace(/\/+$/u, '');
-      response = await fetch(`${normalizedBase}/api/status`, {
-        method: 'GET',
-        headers,
-        signal: controller.signal,
-      });
+      response = await settleOnAbort(
+        fetch(`${normalizedBase}/api/status`, {
+          method: 'GET',
+          headers,
+          signal: controller.signal,
+        }),
+        controller.signal,
+      );
     } catch {
       if (controller.signal.aborted) {
         throw new ApiClientError('The connection test took too long.', 'REQUEST_TIMEOUT');
@@ -256,7 +287,7 @@ export async function checkBackend(
 
     let payload: unknown;
     try {
-      payload = await readJson(response);
+      payload = await settleOnAbort(readJson(response), controller.signal);
     } catch (error) {
       if (controller.signal.aborted) {
         throw new ApiClientError('The connection test took too long.', 'REQUEST_TIMEOUT');
@@ -301,6 +332,7 @@ function isSummaryResultShape(value: unknown, allowLegacy: boolean): value is St
   const candidate = asObject(value);
   const timing = asObject(candidate?.timing);
   const retries = asObject(candidate?.retries);
+  const delivery = asObject(candidate?.delivery);
   return (
     (candidate?.outputVersion === CURRENT_SUMMARY_OUTPUT_VERSION ||
       (allowLegacy &&
@@ -320,6 +352,9 @@ function isSummaryResultShape(value: unknown, allowLegacy: boolean): value is St
     isOptionalNonnegativeInteger(timing?.totalMs) &&
     isNonnegativeInteger(retries?.transcript) &&
     isNonnegativeInteger(retries?.summary) &&
+    (candidate?.delivery === undefined ||
+      (typeof delivery?.summaryCacheHit === 'boolean' &&
+        isNonnegativeInteger(delivery.requestMs))) &&
     currentSummaryIsValid(candidate)
   );
 }

@@ -36,6 +36,8 @@ jobs:
 
       - run: npm run smoke:extension
 
+      - run: npm run smoke:extension-storage
+
       # Boots workerd and catches invalid Worker entry-module exports that a dry run cannot.
       - run: npm run smoke:worker
 

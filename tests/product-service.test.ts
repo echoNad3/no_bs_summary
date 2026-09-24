@@ -5,6 +5,7 @@ import type { SummaryCache, SummaryCacheIdentity } from '../src/product/summary-
 import type { SummaryProvider } from '../src/summary/provider.js';
 import type { TranscriptProvider } from '../src/transcript/provider.js';
 import { MemoryTranscriptStore } from '../src/transcript/store.js';
+import type { TranscriptStore } from '../src/transcript/store.js';
 
 class MemorySummaryCache implements SummaryCache {
   private readonly entries = new Map<string, SummarizeResponse>();
@@ -23,6 +24,8 @@ function service(
     transcript?: TranscriptProvider;
     summary?: SummaryProvider;
     summaryCache?: SummaryCache;
+    cache?: TranscriptStore;
+    timeoutMs?: number;
   } = {},
 ) {
   const transcript: TranscriptProvider =
@@ -51,11 +54,11 @@ function service(
     instance: new SummaryService({
       transcriptProvider: transcript,
       summaryProvider: summary,
-      cache: new MemoryTranscriptStore(),
+      cache: overrides.cache ?? new MemoryTranscriptStore(),
       summaryCache: overrides.summaryCache ?? new MemorySummaryCache(),
       summaryModel: 'gemini-3.1-flash-lite',
       summaryPromptVersion: 'summary-first-test-v1',
-      timeoutMs: 15000,
+      timeoutMs: overrides.timeoutMs ?? 15000,
     }),
     transcript,
     summary,
@@ -300,7 +303,7 @@ describe('SummaryService', () => {
     });
   });
 
-  it('returns a stable, useful public error when the provider deadline is reached', async () => {
+  it('identifies a model attempt timeout without claiming the global deadline passed', async () => {
     const summary = {
       name: 'gemini',
       summarize: vi.fn().mockRejectedValue(new DOMException('aborted', 'AbortError')),
@@ -310,9 +313,41 @@ describe('SummaryService', () => {
       service({ summary }).instance.summarize({ url: 'https://youtu.be/dQw4w9WgXcQ' }),
     ).rejects.toMatchObject({
       statusCode: 504,
-      code: 'DEADLINE_EXCEEDED',
-      message: 'This video took too long to process. Try again.',
+      code: 'SUMMARY_TIMEOUT',
+      message: 'The summary service took too long. Try again.',
     } satisfies Partial<ProductError>);
+  });
+
+  it('stops waiting at the global deadline when a model ignores abort', async () => {
+    const summary = {
+      name: 'gemini',
+      summarize: vi.fn().mockImplementation(() => new Promise(() => undefined)),
+    } satisfies SummaryProvider;
+    const { instance } = service({ summary, timeoutMs: 30 });
+
+    await expect(instance.summarize({ url: 'https://youtu.be/dQw4w9WgXcQ' })).rejects.toMatchObject(
+      {
+        statusCode: 504,
+        code: 'DEADLINE_EXCEEDED',
+      } satisfies Partial<ProductError>,
+    );
+  });
+
+  it('identifies model rate limits through a pipeline failure', async () => {
+    const summary = {
+      name: 'gemini',
+      summarize: vi
+        .fn()
+        .mockRejectedValue(Object.assign(new Error('rate limited'), { statusCode: 429 })),
+    } satisfies SummaryProvider;
+    const { instance } = service({ summary });
+
+    await expect(instance.summarize({ url: 'https://youtu.be/dQw4w9WgXcQ' })).rejects.toMatchObject(
+      {
+        statusCode: 503,
+        code: 'MODEL_RATE_LIMITED',
+      } satisfies Partial<ProductError>,
+    );
   });
 
   it('returns completed paid work even when the optional cache write fails', async () => {
@@ -331,4 +366,60 @@ describe('SummaryService', () => {
     expect(warning).toHaveBeenCalledWith(expect.stringContaining('summary_cache_write_failed'));
     warning.mockRestore();
   });
+
+  it('continues from fetched captions when their cache write stalls', async () => {
+    const cache: TranscriptStore = {
+      read: async () => undefined,
+      write: () => new Promise(() => undefined),
+    };
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { instance, summary } = service({ cache });
+
+    await expect(
+      instance.summarize({ url: 'https://youtu.be/dQw4w9WgXcQ' }),
+    ).resolves.toMatchObject({
+      verdict: 'SKIP',
+    });
+    expect(summary.summarize).toHaveBeenCalledTimes(1);
+    expect(warning).toHaveBeenCalledWith(expect.stringContaining('transcript_cache_write_failed'));
+    warning.mockRestore();
+  });
+
+  it('bounds a stalled saved-summary read before reserving a generation', async () => {
+    const summaryCache: SummaryCache = {
+      read: () => new Promise(() => undefined),
+      write: vi.fn(),
+    };
+    const { instance, transcript } = service({ summaryCache });
+    // The real service uses a shorter cache-stage deadline than its overall budget.
+    const pending = instance.summarize({ url: 'https://youtu.be/dQw4w9WgXcQ' });
+    await expect(pending).rejects.toMatchObject({ code: 'SUMMARY_CACHE_FAILED' });
+    expect(transcript.fetchTranscript).not.toHaveBeenCalled();
+  }, 4_000);
+
+  it('does not start paid work after a quota reservation stalls', async () => {
+    const { instance, transcript } = service();
+    const pending = instance.summarize(
+      { url: 'https://youtu.be/dQw4w9WgXcQ' },
+      { beforeGenerate: () => new Promise(() => undefined) },
+    );
+    await expect(pending).rejects.toMatchObject({ code: 'QUOTA_UNAVAILABLE' });
+    expect(transcript.fetchTranscript).not.toHaveBeenCalled();
+  }, 7_000);
+
+  it('returns a completed summary when its persistent cache write stalls', async () => {
+    const summaryCache: SummaryCache = {
+      read: async () => undefined,
+      write: () => new Promise(() => undefined),
+    };
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { instance } = service({ summaryCache });
+    await expect(
+      instance.summarize({ url: 'https://youtu.be/dQw4w9WgXcQ' }),
+    ).resolves.toMatchObject({
+      verdict: 'SKIP',
+    });
+    expect(warning).toHaveBeenCalledWith(expect.stringContaining('summary_cache_write_failed'));
+    warning.mockRestore();
+  }, 3_000);
 });

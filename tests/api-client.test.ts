@@ -163,6 +163,45 @@ describe('browser API client', () => {
     await rejection;
   });
 
+  it('stops when the response body hangs after headers arrive', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => new Promise(() => undefined),
+      }),
+    );
+    const pending = summarizeVideo(
+      '',
+      { url: 'https://youtu.be/dQw4w9WgXcQ', language: 'en' },
+      { timeoutMs: 25 },
+    );
+    const rejection = expect(pending).rejects.toMatchObject({ code: 'REQUEST_TIMEOUT' });
+    await vi.advanceTimersByTimeAsync(25);
+    await rejection;
+  });
+
+  it('keeps the backend request ID on a safe public error', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(
+          Response.json(
+            { error: { code: 'MODEL_BUSY', message: 'The summary service is busy.' } },
+            { status: 503, headers: { 'x-request-id': 'test-request-id' } },
+          ),
+        ),
+    );
+    await expect(
+      summarizeVideo('', {
+        url: 'https://youtu.be/dQw4w9WgXcQ',
+        language: 'en',
+      }),
+    ).rejects.toMatchObject({ code: 'MODEL_BUSY', requestId: 'test-request-id' });
+  });
+
   it('tests the saved password and reads the backend generation budget', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(

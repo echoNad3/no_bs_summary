@@ -10,7 +10,7 @@ const pwaDir = path.join(projectDir, 'dist', 'pwa');
 const extensionDir = path.join(projectDir, 'dist', 'extension');
 const screenshotDir = process.env.NBS_UI_SCREENSHOT_DIR;
 const userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'nbs-a11y-'));
-const summaryFixture = {
+const defaultSummaryFixture = {
   outputVersion: 2,
   verdict: 'SKIM',
   reason:
@@ -23,6 +23,9 @@ const summaryFixture = {
   timing: { transcriptMs: 125, summaryMs: 250, totalMs: 375 },
   retries: { transcript: 0, summary: 0 },
 };
+const summaryFixture = process.env.NBS_SUMMARY_FIXTURE
+  ? JSON.parse(await fs.readFile(process.env.NBS_SUMMARY_FIXTURE, 'utf8')).body
+  : defaultSummaryFixture;
 const server = createStaticServer(pwaDir, summaryFixture);
 let browser;
 let pwaContext;
@@ -62,7 +65,7 @@ try {
   await assertAccessible(pwaPage, 'PWA settings dialog');
   await pwaPage.locator('#close-settings').click();
   await assertAccessible(pwaPage, 'Android PWA');
-  await pwaPage.locator('#url').fill('https://www.youtube.com/watch?v=lz6FLIgzFps');
+  await pwaPage.locator('#url').fill(`https://www.youtube.com/watch?v=${summaryFixture.videoId}`);
   await pwaPage.locator('#summary-form').evaluate((form) => form.requestSubmit());
   await pwaPage.locator('#result').waitFor({ state: 'visible' });
   for (const viewport of [
@@ -104,7 +107,7 @@ try {
     });
   });
   const youtubePage = await extensionContext.newPage();
-  await youtubePage.goto('https://www.youtube.com/watch?v=lz6FLIgzFps');
+  await youtubePage.goto(`https://www.youtube.com/watch?v=${summaryFixture.videoId}`);
   const extensionPage = await extensionContext.newPage();
   await extensionPage.setViewportSize({ width: 320, height: 800 });
   await extensionPage.goto(`chrome-extension://${extensionId}/sidepanel.html`);

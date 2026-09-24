@@ -44,7 +44,8 @@ export function parseTextSize(value: unknown): TextSize {
 
 export function safeDiagnosticsText(
   surface: 'PWA' | 'Chrome extension',
-  error: Error & Partial<Pick<ApiClientError, 'code' | 'status' | 'retryAfterSeconds'>>,
+  error: Error &
+    Partial<Pick<ApiClientError, 'code' | 'status' | 'retryAfterSeconds' | 'requestId'>>,
   online: boolean,
   userAgent: string,
 ): string {
@@ -56,6 +57,7 @@ export function safeDiagnosticsText(
     `Code: ${error.code ?? 'UNKNOWN'}`,
     `HTTP status: ${error.status ?? 'unknown'}`,
     `Retry after: ${error.retryAfterSeconds ?? 'unknown'}`,
+    `Request ID: ${error.requestId ?? 'unknown'}`,
     `Online: ${online}`,
     `Browser: ${userAgent}`,
   ].join('\n');

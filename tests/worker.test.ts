@@ -449,6 +449,8 @@ describe('worker request handling', () => {
     });
     expect(allowed.status).toBe(200);
     expect(allowed.headers.get('access-control-allow-origin')).toBe(extensionOrigin);
+    expect(allowed.headers.get('access-control-expose-headers')).toContain('X-Request-Id');
+    expect(allowed.headers.get('x-request-id')).toMatch(/^[0-9a-f-]{36}$/u);
 
     const sameOrigin = await handleRequest(
       summarizeRequest({ origin: 'https://app.example.workers.dev' }),

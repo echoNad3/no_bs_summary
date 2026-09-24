@@ -55,6 +55,8 @@ export interface WorkerDeps {
   metadataRateLimiter?: SlidingWindowRateLimiter;
   metadataFetcher?: typeof fetch;
   now?: () => number;
+  waitUntil?: (operation: Promise<unknown>) => void;
+  requestId?: string;
 }
 
 export { GenerationQuota } from './generation-quota.js';
@@ -93,8 +95,8 @@ const defaultMetadataRateLimiter = new SlidingWindowRateLimiter(METADATA_RATE_LI
 let cachedService: { fingerprint: string; service: SummaryService } | undefined;
 
 export default {
-  async fetch(request: Request, env: RuntimeEnv): Promise<Response> {
-    return handleRequest(request, env);
+  async fetch(request: Request, env: RuntimeEnv, ctx: ExecutionContext): Promise<Response> {
+    return handleRequest(request, env, { waitUntil: (operation) => ctx.waitUntil(operation) });
   },
 } satisfies ExportedHandler<RuntimeEnv>;
 
@@ -105,8 +107,14 @@ export async function handleRequest(
 ): Promise<Response> {
   const startedAt = Date.now();
   const now = deps.now ?? Date.now;
+  const requestId = crypto.randomUUID();
+  const requestDeps = { ...deps, requestId };
   try {
-    return await routeRequest(request, env, deps, now);
+    const response = await routeRequest(request, env, requestDeps, now);
+    if (new URL(request.url).pathname === '/api/summarize') {
+      response.headers.set('X-Request-Id', requestId);
+    }
+    return response;
   } catch (error) {
     const corsHeaders = corsHeadersFor(request, new URL(request.url)) ?? {};
     if (error instanceof ProductError) {
@@ -119,6 +127,10 @@ export async function handleRequest(
             status: error.statusCode,
             code: error.code,
             durationMs: Math.max(0, Date.now() - startedAt),
+            requestId,
+            model: env.GEMINI_MODEL ?? 'gemini-3.1-flash-lite',
+            promptVersion: GEMINI_PROMPT_VERSION,
+            ...error.diagnostics,
           }),
         );
       }
@@ -129,7 +141,7 @@ export async function handleRequest(
       return json(
         error.statusCode,
         { error: { code: error.code, message: error.message } },
-        { ...corsHeaders, ...retryHeaders },
+        { ...corsHeaders, ...retryHeaders, 'X-Request-Id': requestId },
       );
     }
     console.error(
@@ -138,12 +150,13 @@ export async function handleRequest(
         method: request.method,
         path: new URL(request.url).pathname,
         error: error instanceof Error ? error.name : 'UnknownError',
+        requestId,
       }),
     );
     return json(
       500,
       { error: { code: 'INTERNAL_ERROR', message: 'Unexpected server error.' } },
-      corsHeaders,
+      { ...corsHeaders, 'X-Request-Id': requestId },
     );
   }
 }
@@ -279,12 +292,38 @@ async function summarize(
   const service = deps.service ?? getService(env);
   const access: QuotaAccess = ownerAccess ? 'owner' : 'free';
   const requestOptions: SummaryRequestOptions = {
+    waitUntil: deps.waitUntil,
     beforeGenerate: async () => {
       await consumeGenerationQuota(request, env, deps, now(), access);
     },
+    onDiagnostic: (details) => {
+      diagnostic = details;
+    },
   };
+  let diagnostic: Parameters<NonNullable<SummaryRequestOptions['onDiagnostic']>>[0] | undefined;
+  const startedAt = Date.now();
   const result = await service.summarize(input, requestOptions);
-  return json(200, result, corsHeaders);
+  const requestMs = Math.max(0, Date.now() - startedAt);
+  if (diagnostic) {
+    console.info(
+      JSON.stringify({
+        event: 'summary_completed',
+        requestId: deps.requestId,
+        model: env.GEMINI_MODEL ?? 'gemini-3.1-flash-lite',
+        promptVersion: GEMINI_PROMPT_VERSION,
+        requestMs,
+        source: result.source,
+        ...diagnostic,
+      }),
+    );
+  }
+  return json(
+    200,
+    diagnostic
+      ? { ...result, delivery: { summaryCacheHit: diagnostic.summaryCacheHit, requestMs } }
+      : result,
+    corsHeaders,
+  );
 }
 
 async function readGenerationQuotaStatus(
@@ -405,6 +444,7 @@ function corsHeadersFor(request: Request, url: URL): Record<string, string> | un
     Vary: 'Origin',
     'Access-Control-Allow-Headers': 'Content-Type, X-App-Password',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Expose-Headers': 'X-Request-Id, Retry-After',
   };
 }
 
