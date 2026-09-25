@@ -1,6 +1,10 @@
 export interface RequestContext {
   signal: AbortSignal;
   deadlineAt: number;
+  stage?: string;
+  stageStartedAt?: number;
+  transcriptMs?: number;
+  modelAttempts: number;
   transcriptRetries: number;
   summaryRetries: number;
   retryReason?: 'transport' | 'repair';
@@ -36,11 +40,17 @@ export function createRequestContext(timeoutMs: number): {
     context: {
       signal: controller.signal,
       deadlineAt: Date.now() + timeoutMs,
+      modelAttempts: 0,
       transcriptRetries: 0,
       summaryRetries: 0,
     },
     dispose: () => clearTimeout(timer),
   };
+}
+
+export function markStage(context: RequestContext, stage: string): void {
+  context.stage = stage;
+  context.stageStartedAt = Date.now();
 }
 
 export function requestTimedOut(error: unknown, context: RequestContext): boolean {

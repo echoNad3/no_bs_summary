@@ -2,6 +2,7 @@ import type { TranscriptStore } from '../transcript/store.js';
 import { PipelineError, runSummaryPipeline } from '../pipeline.js';
 import {
   createRequestContext,
+  markStage,
   requestDeadlineReached,
   requestTimedOut,
   withinDeadline,
@@ -42,6 +43,7 @@ export interface SummaryRequestOptions {
     timing?: SummarizeResponse['timing'];
     retries?: SummarizeResponse['retries'];
     retryReason?: RequestContext['retryReason'];
+    modelAttempts?: number;
     providerStatus?: number;
     modelStatus?: string;
     modelTokens?: number;
@@ -54,7 +56,19 @@ export class ProductError extends Error {
     readonly code: string,
     message: string,
     readonly retryAfterSeconds?: number,
-    readonly diagnostics?: { stage?: string; providerStatus?: number; retryReason?: string },
+    readonly diagnostics?: {
+      stage?: string;
+      activeStage?: string;
+      stageMs?: number;
+      summaryCacheReadMs?: number;
+      quotaMs?: number;
+      transcriptMs?: number;
+      modelAttempts?: number;
+      transcriptRetries?: number;
+      summaryRetries?: number;
+      providerStatus?: number;
+      retryReason?: string;
+    },
   ) {
     super(message);
     this.name = 'ProductError';
@@ -97,6 +111,7 @@ export class SummaryService {
     const { context, dispose } = createRequestContext(this.options.timeoutMs);
     try {
       if (!parsed.data.regenerate) {
+        markStage(context, 'summary-cache-read');
         const cached = await this.readSavedSummary(identity, context);
         if (cached) {
           requestOptions.onDiagnostic?.({
@@ -109,6 +124,7 @@ export class SummaryService {
 
       const inFlight = this.inFlight.get(key);
       if (inFlight) {
+        markStage(context, 'joined-in-flight');
         try {
           const joined = await withinDeadline(inFlight, context);
           requestOptions.onDiagnostic?.({
@@ -136,6 +152,7 @@ export class SummaryService {
           timing: result.timing,
           retries: result.retries,
           retryReason: context.retryReason,
+          modelAttempts: context.modelAttempts,
           providerStatus: context.providerStatus,
           modelStatus: context.modelStatus,
           modelTokens: context.modelTokens,
@@ -144,6 +161,33 @@ export class SummaryService {
       } finally {
         if (this.inFlight.get(key) === pending) this.inFlight.delete(key);
       }
+    } catch (error) {
+      if (error instanceof ProductError && error.statusCode >= 500) {
+        throw new ProductError(
+          error.statusCode,
+          error.code,
+          error.message,
+          error.retryAfterSeconds,
+          {
+            ...error.diagnostics,
+            stage: error.diagnostics?.stage ?? context.stage,
+            activeStage: context.stage,
+            stageMs:
+              context.stageStartedAt === undefined
+                ? undefined
+                : Math.max(0, Date.now() - context.stageStartedAt),
+            summaryCacheReadMs: context.summaryCacheReadMs,
+            quotaMs: context.quotaMs,
+            transcriptMs: context.transcriptMs,
+            modelAttempts: context.modelAttempts,
+            transcriptRetries: context.transcriptRetries,
+            summaryRetries: context.summaryRetries,
+            providerStatus: error.diagnostics?.providerStatus ?? context.providerStatus,
+            retryReason: error.diagnostics?.retryReason ?? context.retryReason,
+          },
+        );
+      }
+      throw error;
     } finally {
       dispose();
     }
@@ -179,6 +223,7 @@ export class SummaryService {
     context: RequestContext,
   ): Promise<SummarizeResponse> {
     if (requestOptions.beforeGenerate) {
+      markStage(context, 'quota');
       const startedAt = Date.now();
       try {
         await withinDeadline(requestOptions.beforeGenerate(), context, 5_000);
@@ -199,6 +244,7 @@ export class SummaryService {
 
     let generated: SummarizeResponse;
     try {
+      markStage(context, 'pipeline');
       generated = await runSummaryPipeline(
         {
           videoId,
@@ -223,6 +269,7 @@ export class SummaryService {
 
     const write = this.options.summaryCache.write(identity, response);
     try {
+      markStage(context, 'summary-cache-write');
       await withinDeadline(write, context, 800);
       context.summaryCacheWriteStatus = 'saved';
     } catch (error) {

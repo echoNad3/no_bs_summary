@@ -232,6 +232,7 @@ export class GeminiSummaryProvider implements SummaryProvider {
         AbortSignal.timeout(Math.max(1, deadlineAt - Date.now())),
       ]);
       const options: GeminiCreateOptions = { fetchOptions: { signal }, maxRetries: 0 };
+      ctx.modelAttempts += 1;
       return withinDeadline(this.create(input, options), { ...ctx, signal, deadlineAt });
     };
 

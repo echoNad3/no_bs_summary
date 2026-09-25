@@ -8,6 +8,7 @@ function ctx(): RequestContext {
   return {
     signal: new AbortController().signal,
     deadlineAt: Date.now() + 15000,
+    modelAttempts: 0,
     transcriptRetries: 0,
     summaryRetries: 0,
   };

@@ -30,6 +30,7 @@ function ctx(remainingMs = 15000): RequestContext {
   return {
     signal: new AbortController().signal,
     deadlineAt: Date.now() + remainingMs,
+    modelAttempts: 0,
     transcriptRetries: 0,
     summaryRetries: 0,
   };

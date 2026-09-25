@@ -2,6 +2,7 @@ import { performance } from 'node:perf_hooks';
 import type { SummarizeResponse } from './product/schema.js';
 import {
   createRequestContext,
+  markStage,
   requestDeadlineReached,
   requestTimedOut,
   withinDeadline,
@@ -54,6 +55,7 @@ export async function runSummaryPipeline(
   try {
     const transcriptKey = cacheKey(options.transcriptProvider.name, input.videoId, input.language);
     let cached: TranscriptResult | undefined;
+    markStage(context, 'transcript-cache-read');
     try {
       cached = await withinDeadline(
         options.transcriptCache.read(transcriptKey, {
@@ -91,6 +93,7 @@ async function fetchAndSummarize(
   const startedAt = performance.now();
   let transcript: TranscriptResult;
   try {
+    markStage(context, 'transcript-fetch');
     const stage = stageContext(context, 15_000);
     try {
       transcript = await withinDeadline(
@@ -110,9 +113,11 @@ async function fetchAndSummarize(
   }
 
   const transcriptMs = elapsed(startedAt);
+  context.transcriptMs = transcriptMs;
   assertWithinDeadline(context.deadlineAt, options.timeoutMs);
 
   try {
+    markStage(context, 'transcript-cache-write');
     await withinDeadline(options.transcriptCache.write(transcriptKey, transcript), context, 250);
   } catch (error) {
     if (requestDeadlineReached(context, error)) throw deadlineError(options.timeoutMs);
@@ -130,6 +135,7 @@ async function fetchAndSummarize(
 
   const summaryStartedAt = performance.now();
   try {
+    markStage(context, 'model');
     const summary = await withinDeadline(
       options.summaryProvider.summarize(transcript.text, context, {
         transcriptLanguage: transcript.language,
@@ -177,6 +183,7 @@ async function summarizeCached(
 ): Promise<SummarizeResponse> {
   const startedAt = performance.now();
   try {
+    markStage(context, 'model');
     const summary = await withinDeadline(
       options.summaryProvider.summarize(transcript.text, context, {
         transcriptLanguage: transcript.language,

@@ -89,10 +89,12 @@ export class SlidingWindowRateLimiter {
   }
 }
 
-// Shared only for rate limits and duplicate-request collapse.
+// Keep only bounded counters and completed caption data across invocations.
 const defaultRateLimiter = new SlidingWindowRateLimiter();
 const defaultMetadataRateLimiter = new SlidingWindowRateLimiter(METADATA_RATE_LIMIT_MAX_REQUESTS);
-let cachedService: { fingerprint: string; service: SummaryService } | undefined;
+// Only completed, validated captions can outlive a request. A SummaryService
+// owns in-progress promises and must never be reused by another invocation.
+const transcriptCache = new MemoryTranscriptStore();
 
 export default {
   async fetch(request: Request, env: RuntimeEnv, ctx: ExecutionContext): Promise<Response> {
@@ -539,7 +541,7 @@ async function serveAsset(request: Request, env: WorkerEnv): Promise<Response> {
   return response;
 }
 
-function getService(env: WorkerEnv): SummaryService {
+export function getService(env: WorkerEnv): SummaryService {
   const geminiKey = env.GEMINI_API_KEY?.trim();
   const transcriptKey = env.TRANSCRIPTAPI_API_KEY?.trim();
   if (!geminiKey || !transcriptKey) {
@@ -551,22 +553,15 @@ function getService(env: WorkerEnv): SummaryService {
   }
   const model = env.GEMINI_MODEL?.trim() || 'gemini-3.1-flash-lite';
   const timeoutMs = configuredLimit(env.END_TO_END_TIMEOUT_MS) ?? DEFAULT_END_TO_END_TIMEOUT_MS;
-  const fingerprint = JSON.stringify([model, timeoutMs, geminiKey, transcriptKey]);
-  if (cachedService?.fingerprint !== fingerprint) {
-    cachedService = {
-      fingerprint,
-      service: new SummaryService({
-        transcriptProvider: new TranscriptApiProvider(transcriptKey),
-        summaryProvider: new GeminiSummaryProvider(geminiKey, model),
-        cache: new MemoryTranscriptStore(),
-        summaryCache: new KvSummaryCache(env.SUMMARIES),
-        summaryModel: model,
-        summaryPromptVersion: GEMINI_PROMPT_VERSION,
-        timeoutMs,
-      }),
-    };
-  }
-  return cachedService.service;
+  return new SummaryService({
+    transcriptProvider: new TranscriptApiProvider(transcriptKey),
+    summaryProvider: new GeminiSummaryProvider(geminiKey, model),
+    cache: transcriptCache,
+    summaryCache: new KvSummaryCache(env.SUMMARIES),
+    summaryModel: model,
+    summaryPromptVersion: GEMINI_PROMPT_VERSION,
+    timeoutMs,
+  });
 }
 
 function configuredLimit(value: string | undefined): number | undefined {

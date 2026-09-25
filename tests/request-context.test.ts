@@ -8,6 +8,7 @@ function context(deadlineAt: number): RequestContext {
   return {
     signal: new AbortController().signal,
     deadlineAt,
+    modelAttempts: 0,
     transcriptRetries: 0,
     summaryRetries: 0,
   };

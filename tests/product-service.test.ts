@@ -144,7 +144,7 @@ describe('SummaryService', () => {
     expect(summary.summarize).toHaveBeenCalledTimes(2);
   });
 
-  it('deduplicates simultaneous requests for one backend cache key', async () => {
+  it('deduplicates simultaneous calls on one service instance', async () => {
     let releaseSummary!: (value: { verdict: 'WATCH'; reason: string; summary: string }) => void;
     const pendingSummary = new Promise<{
       verdict: 'WATCH';
@@ -235,7 +235,7 @@ describe('SummaryService', () => {
     await expect(instance.summarize(input)).resolves.toEqual(saved);
   });
 
-  it('coalesces simultaneous regeneration requests into one paid generation', async () => {
+  it('coalesces simultaneous regeneration calls on one service instance', async () => {
     let release!: (value: { verdict: 'WATCH'; reason: string; summary: string }) => void;
     const summary = {
       name: 'gemini',
@@ -288,6 +288,7 @@ describe('SummaryService', () => {
       code: 'TRANSCRIPT_FAILED',
       statusCode: 502,
       message: 'No captions are available for this video.',
+      diagnostics: { stage: 'transcript', activeStage: 'transcript-fetch' },
     });
 
     const summary = {
@@ -300,6 +301,12 @@ describe('SummaryService', () => {
       code: 'SUMMARY_FAILED',
       statusCode: 502,
       message: 'Could not create a valid short summary. Try again.',
+      diagnostics: {
+        stage: 'summary',
+        activeStage: 'model',
+        transcriptMs: expect.any(Number),
+        modelAttempts: 0,
+      },
     });
   });
 
@@ -329,6 +336,7 @@ describe('SummaryService', () => {
       {
         statusCode: 504,
         code: 'DEADLINE_EXCEEDED',
+        diagnostics: { stage: 'deadline', activeStage: 'model', stageMs: expect.any(Number) },
       } satisfies Partial<ProductError>,
     );
   });
