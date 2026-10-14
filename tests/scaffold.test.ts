@@ -18,12 +18,16 @@ function output(summary: string, reason = 'Specific and useful without wasting t
 }
 
 function point(label: string, body: string): string {
-  return serializeSummaryPoints([{ label, body }]);
+  return serializeSummaryPoints([
+    { label, body },
+    { label: 'Mechanism', body: 'A supporting explanation.' },
+    { label: 'Outcome', body: 'An important conclusion.' },
+  ]);
 }
 
 describe('summary schema', () => {
-  it('accepts one, two, and three labeled points but rejects zero or four', () => {
-    for (const count of [1, 2, 3]) {
+  it('accepts three, four, and five labeled points but rejects fewer or six', () => {
+    for (const count of [3, 4, 5]) {
       const points = Array.from({ length: count }, (_, index) => ({
         label: `Point ${index + 1}`,
         body: `Useful detail ${index + 1}.`,
@@ -31,7 +35,7 @@ describe('summary schema', () => {
       expect(summarySchema.safeParse(output(serializeSummaryPoints(points))).success).toBe(true);
     }
     expect(summarySchema.safeParse(output('')).success).toBe(false);
-    const four = Array.from({ length: 4 }, (_, index) => ({
+    const four = Array.from({ length: 6 }, (_, index) => ({
       label: `Point ${index + 1}`,
       body: `Useful detail ${index + 1}.`,
     }));
@@ -45,25 +49,33 @@ describe('summary schema', () => {
     ).toBe(false);
   });
 
-  it('enforces 200 generated words including verdict, reason, labels, and bodies', () => {
-    const reason = 'Clear useful answer';
-    const label = 'Main point';
-    const fixedWords = countGeneratedWords('WATCH', reason, [{ label, body: '' }]);
-    const atLimitBody = Array.from(
-      { length: 200 - fixedWords },
-      (_, index) => `detail${index}`,
-    ).join(' ');
-    const atLimit = [{ label, body: atLimitBody }];
-    expect(countGeneratedWords('WATCH', reason, atLimit)).toBe(200);
-    expect(summarySchema.safeParse(output(serializeSummaryPoints(atLimit), reason)).success).toBe(
-      true,
-    );
-    const overLimit = [{ label, body: `${atLimitBody} extra` }];
-    expect(countGeneratedWords('WATCH', reason, overLimit)).toBe(201);
-    expect(summarySchema.safeParse(output(serializeSummaryPoints(overLimit), reason)).success).toBe(
-      false,
-    );
-  });
+  it.each([3, 4, 5])(
+    'enforces the complete visible word ceiling for %i paragraphs',
+    (paragraphs) => {
+      const reason = 'Clear useful answer';
+      const label = 'Main point';
+      const remaining = Array.from({ length: paragraphs - 1 }, (_, index) => ({
+        label: `Detail ${index}`,
+        body: `Result ${index}`,
+      }));
+      const limit = 70 * paragraphs;
+      const fixedWords = countGeneratedWords('WATCH', reason, [{ label, body: '' }, ...remaining]);
+      const atLimitBody = Array.from(
+        { length: limit - fixedWords },
+        (_, index) => `detail${index}`,
+      ).join(' ');
+      const atLimit = [{ label, body: atLimitBody }, ...remaining];
+      expect(countGeneratedWords('WATCH', reason, atLimit)).toBe(limit);
+      expect(summarySchema.safeParse(output(serializeSummaryPoints(atLimit), reason)).success).toBe(
+        true,
+      );
+      const overLimit = [{ label, body: `${atLimitBody} extra` }, ...remaining];
+      expect(countGeneratedWords('WATCH', reason, overLimit)).toBe(limit + 1);
+      expect(
+        summarySchema.safeParse(output(serializeSummaryPoints(overLimit), reason)).success,
+      ).toBe(false);
+    },
+  );
 
   it('allows a genuinely short result without padding', () => {
     const summary = point('Answer', 'No. The claimed shortcut does not work.');
@@ -88,6 +100,7 @@ describe('summary schema', () => {
     const points: SummaryPoint[] = [
       { label: "Creator's result", body: 'Ray reached 11.9% body fat on day 100.' },
       { label: 'What changed', body: 'Training, food, and recovery—not steroids—did the work.' },
+      { label: 'Conclusion', body: 'The measured result remained unchanged.' },
     ];
     expect(parseCanonicalSummaryPoints(serializeSummaryPoints(points))).toEqual(points);
   });

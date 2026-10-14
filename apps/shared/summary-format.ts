@@ -15,7 +15,7 @@ export interface CurrentSummaryPoint {
 
 export function parseCurrentSummaryPoints(summary: string): CurrentSummaryPoint[] | undefined {
   const sections = summary.trim().split(/\r?\n\s*\r?\n/gu);
-  if (sections.length < 1 || sections.length > 3) return undefined;
+  if (sections.length < 3 || sections.length > 5) return undefined;
   const points: CurrentSummaryPoint[] = [];
   for (const section of sections) {
     const match = CURRENT_TOPIC_LINE.exec(section);

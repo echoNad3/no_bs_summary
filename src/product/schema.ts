@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { summarySchema } from '../summary/provider.js';
 import { languageSchema } from '../transcript/provider.js';
 
-export const SUMMARY_OUTPUT_VERSION = 2 as const;
+export const SUMMARY_OUTPUT_VERSION = 3 as const;
 
 export const summarizeRequestSchema = z.object({
   url: z.string().trim().min(1).max(2048),

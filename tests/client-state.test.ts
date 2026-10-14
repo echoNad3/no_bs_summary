@@ -32,8 +32,9 @@ describe('client quality-of-life state', () => {
       ...saved,
       response: {
         ...saved.response,
-        outputVersion: 2 as const,
-        summary: '- **Main point:** Useful detail.',
+        outputVersion: 3 as const,
+        summary:
+          '- **Main point:** Useful detail.\n\n- **Supporting detail:** A concrete explanation supports the result.\n\n- **Outcome:** The source gives an important conclusion.',
       },
     };
     expect(parseSavedSummary(current)).toEqual(current);

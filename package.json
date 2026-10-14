@@ -1,6 +1,6 @@
 {
   "name": "no-bs-summary",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "private": true,
   "description": "Blunt YouTube summaries from existing captions.",
   "type": "module",

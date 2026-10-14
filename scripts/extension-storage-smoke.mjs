@@ -17,10 +17,11 @@ const html = readFileSync('apps/extension/sidepanel.html', 'utf8').replace(
   '',
 );
 const defaultResult = {
-  outputVersion: 2,
+  outputVersion: 3,
   verdict: 'SKIP',
   reason: 'The useful point is buried under repetition.',
-  summary: '- **Main point:** One useful fact.',
+  summary:
+    '- **Main point:** One useful fact.\n\n- **Supporting detail:** A concrete explanation supports the result.\n\n- **Outcome:** The source gives an important conclusion.',
   videoId: '8Yt_R9GnzLU',
   language: 'en',
   source: 'LIVE',

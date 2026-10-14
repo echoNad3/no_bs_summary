@@ -10,7 +10,7 @@ const resultsDir = path.resolve(projectDir, 'results');
 const firstUrl = 'https://www.youtube.com/watch?v=lz6FLIgzFps';
 const secondUrl = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
 const fixture = {
-  outputVersion: 2,
+  outputVersion: 3,
   verdict: 'SKIM',
   reason:
     'Interesting medical claims, but the speaker repeats himself and drags the useful comparison out.',

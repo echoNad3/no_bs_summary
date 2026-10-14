@@ -1,7 +1,7 @@
 import { countDisplayWords, parseCurrentSummaryPoints } from './summary-format.js';
 
 export type Verdict = 'WATCH' | 'SKIM' | 'SKIP';
-export const CURRENT_SUMMARY_OUTPUT_VERSION = 2 as const;
+export const CURRENT_SUMMARY_OUTPUT_VERSION = 3 as const;
 
 export interface SummarizeInput {
   url: string;
@@ -29,7 +29,7 @@ export interface SummaryResult {
 export type StoredSummaryResult = SummaryResult | LegacySummaryResult;
 
 export type LegacySummaryResult = Omit<SummaryResult, 'outputVersion'> & {
-  outputVersion?: 1 | undefined;
+  outputVersion?: 1 | 2 | undefined;
 };
 
 export interface GenerationUsageStatus {
@@ -336,7 +336,9 @@ function isSummaryResultShape(value: unknown, allowLegacy: boolean): value is St
   return (
     (candidate?.outputVersion === CURRENT_SUMMARY_OUTPUT_VERSION ||
       (allowLegacy &&
-        (candidate?.outputVersion === 1 || candidate?.outputVersion === undefined))) &&
+        (candidate?.outputVersion === 1 ||
+          candidate?.outputVersion === 2 ||
+          candidate?.outputVersion === undefined))) &&
     (candidate?.verdict === 'WATCH' ||
       candidate?.verdict === 'SKIM' ||
       candidate?.verdict === 'SKIP') &&
@@ -377,7 +379,8 @@ function currentSummaryIsValid(candidate: Record<string, unknown> | undefined): 
         candidate.reason,
         ...points.flatMap(({ label, body }) => [label, body]),
       ].join(' '),
-    ) <= 200
+    ) <=
+    70 * points.length
   );
 }
 

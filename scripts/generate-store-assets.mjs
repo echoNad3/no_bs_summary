@@ -14,13 +14,13 @@ const videoTitle = 'The honest guide to building useful small software';
 const userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'nbs-store-assets-'));
 
 const previewResponse = {
-  outputVersion: 2,
+  outputVersion: 3,
   verdict: 'WATCH',
   reason: 'Clear, practical advice with concrete trade-offs and almost no padding.',
   summary:
     '- **Why small tools win:** Focused software can solve one annoying problem well without accounts, dashboards, or a pile of settings. The speaker argues that fewer moving parts make a tool easier to understand, maintain, and trust.\n\n' +
     '- **What to build:** Start with the exact action a user wants to complete, keep the interface close to that action, and automate only the repetitive work. Add features only when real use exposes a repeated gap.\n\n' +
-    '- **Trade-offs:** A narrow tool serves fewer people, but it costs less to run and is less likely to break. The conclusion is to optimize for repeated usefulness instead of feature count.',
+    '- **Trade-offs:** A narrow tool serves fewer people, but it costs less to run and is less likely to break. The conclusion is to optimize for repeated usefulness instead of feature count.\n\n- **Supporting detail:** A concrete explanation supports the result.\n\n- **Outcome:** The source gives an important conclusion.',
   videoId: 'storePrev01',
   language: 'en',
   source: 'CACHED',

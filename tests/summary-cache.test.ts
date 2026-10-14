@@ -15,11 +15,11 @@ const identity: SummaryCacheIdentity = {
 };
 
 const response: SummarizeResponse = {
-  outputVersion: 2,
+  outputVersion: 3,
   verdict: 'WATCH',
   reason: 'The host keeps a long list of topics funny and easy to follow.',
   summary:
-    '- **Main topics:** Wizard Detective, Kane Pixels, and several Backrooms projects are covered.',
+    '- **Main topics:** Wizard Detective, Kane Pixels, and several Backrooms projects are covered.\n\n- **Supporting detail:** A concrete explanation supports the result.\n\n- **Outcome:** The source gives an important conclusion.',
   videoId: 'EwMSGdE2bOQ',
   language: 'en',
   source: 'CACHED',

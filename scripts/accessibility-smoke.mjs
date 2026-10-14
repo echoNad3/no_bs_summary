@@ -11,7 +11,7 @@ const extensionDir = path.join(projectDir, 'dist', 'extension');
 const screenshotDir = process.env.NBS_UI_SCREENSHOT_DIR;
 const userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'nbs-a11y-'));
 const defaultSummaryFixture = {
-  outputVersion: 2,
+  outputVersion: 3,
   verdict: 'SKIM',
   reason:
     'Interesting medical and structural insights, but buried under self-indulgent, rambling personal anecdotes and repetitive sponsorship filler.',
@@ -170,7 +170,7 @@ async function assertSummaryResult(page, label) {
     const emptyBlocks = [...element.querySelectorAll('#summary > *')].filter(
       (block) => !block.textContent?.trim(),
     ).length;
-    const wordCount = `${verdict} ${reason} ${summary}`.trim().split(/\s+/u).filter(Boolean).length;
+    const wordCount = `${verdict} ${reason} ${summary}`.match(/[\p{L}\p{N}'’-]+/gu)?.length ?? 0;
     return {
       wordCount,
       pointCount: points.length,
@@ -179,10 +179,12 @@ async function assertSummaryResult(page, label) {
       documentWidth: document.documentElement.scrollWidth,
     };
   });
-  if (result.wordCount > 200) {
-    throw new Error(`${label} rendered ${result.wordCount} words; expected at most 200.`);
+  if (result.wordCount > 70 * result.pointCount) {
+    throw new Error(
+      `${label} rendered ${result.wordCount} words; expected at most ${70 * result.pointCount}.`,
+    );
   }
-  if (result.pointCount < 1 || result.pointCount > 3 || result.emptyBlocks > 0) {
+  if (result.pointCount < 3 || result.pointCount > 5 || result.emptyBlocks > 0) {
     throw new Error(
       `${label} rendered ${result.pointCount} points and ${result.emptyBlocks} empty blocks.`,
     );

@@ -20,7 +20,7 @@ let localApiUrl = '';
 let localStatusUrl = '';
 let extensionRegenerationCalls = 0;
 const summaryFixture = {
-  outputVersion: 2,
+  outputVersion: 3,
   verdict: 'SKIM',
   reason:
     'Interesting medical and structural insights, but buried under self-indulgent, rambling personal anecdotes and repetitive sponsorship filler.',
@@ -915,7 +915,7 @@ function assertSummaryOutput({ verdict, reason, summary }) {
   const summaryWords = summary.match(/[\p{L}\p{N}'’-]+/gu) ?? [];
   assert.ok(reasonWords.length <= 20, `Reason has ${reasonWords.length} words.`);
   assert.ok(
-    1 + reasonWords.length + summaryWords.length <= 200,
+    1 + reasonWords.length + summaryWords.length <= 210,
     `Result has ${1 + reasonWords.length + summaryWords.length} words.`,
   );
   assert.match(summary, /speaker argues/iu);

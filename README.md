@@ -8,6 +8,7 @@ A phone-first YouTube summarizer with blunt `WATCH`, `SKIM`, or `SKIP` verdicts.
 
 - Accepts pasted links and Android shares from YouTube or ReVanced.
 - Uses existing captions; videos without captions are rejected.
+- Gives three to five paragraphs based on the main topics, keeping separate news stories represented.
 - Reopens completed summaries from the shared Cloudflare cache.
 - Allows five passwordless live-summary attempts per network each month, inside a shared monthly pool of 50.
 - Keeps provider keys and the shared password on the Worker.

@@ -3,9 +3,11 @@ import type { RequestContext } from '../request-context.js';
 
 export const REASON_CHARACTER_LIMIT = 1200;
 export const REASON_WORD_LIMIT = 20;
-export const SUMMARY_CHARACTER_LIMIT = 3000;
-export const TOTAL_OUTPUT_WORD_LIMIT = 200;
-export const SUMMARY_POINT_LIMIT = 3;
+export const SUMMARY_CHARACTER_LIMIT = 6000;
+export const WORDS_PER_POINT_LIMIT = 70;
+export const TOTAL_OUTPUT_WORD_LIMIT = 350;
+export const SUMMARY_POINT_MINIMUM = 3;
+export const SUMMARY_POINT_LIMIT = 5;
 export const SUMMARY_LABEL_WORD_LIMIT = 8;
 
 export interface SummaryPoint {
@@ -43,10 +45,10 @@ export const summaryResponseSchema = z.object({
     ),
   points: z
     .array(summaryPointSchema)
-    .min(1)
+    .min(SUMMARY_POINT_MINIMUM)
     .max(SUMMARY_POINT_LIMIT)
     .describe(
-      'One to three main points. Use fewer when the source is simple. Each point needs a short label and a fuller body. Group related facts instead of creating extra points.',
+      'Three to five labeled prose paragraphs. Cover every substantive topic, grouping related stories when there are more topics than paragraphs.',
     ),
 });
 
@@ -110,7 +112,7 @@ export const summarySchema = publicSummaryShape.superRefine((value, ctx) => {
     ctx.addIssue({
       code: 'custom',
       path: ['summary'],
-      message: 'summary must contain one to three labeled points with no extra sections',
+      message: 'summary must contain three to five labeled points with no extra sections',
     });
     return;
   }
@@ -119,11 +121,12 @@ export const summarySchema = publicSummaryShape.superRefine((value, ctx) => {
   if (pointIssue) {
     ctx.addIssue({ code: 'custom', path: ['summary'], message: pointIssue });
   }
-  if (countGeneratedWords(value.verdict, value.reason, points) > TOTAL_OUTPUT_WORD_LIMIT) {
+  const wordLimit = WORDS_PER_POINT_LIMIT * points.length;
+  if (countGeneratedWords(value.verdict, value.reason, points) > wordLimit) {
     ctx.addIssue({
       code: 'custom',
       path: ['summary'],
-      message: `verdict, reason, labels, and bodies must total at most ${TOTAL_OUTPUT_WORD_LIMIT} words`,
+      message: `verdict, reason, labels, and bodies must total at most ${wordLimit} words`,
     });
   }
   const pointText = points.map(({ label, body }) => `${label} ${body}`).join(' ');
@@ -196,7 +199,8 @@ export function serializeSummaryPoints(points: SummaryPoint[]): string {
 
 export function parseCanonicalSummaryPoints(summary: string): SummaryPoint[] | undefined {
   const sections = summary.trim().split(/\r?\n\s*\r?\n/gu);
-  if (sections.length < 1 || sections.length > SUMMARY_POINT_LIMIT) return undefined;
+  if (sections.length < SUMMARY_POINT_MINIMUM || sections.length > SUMMARY_POINT_LIMIT)
+    return undefined;
   const points: SummaryPoint[] = [];
   for (const section of sections) {
     const match = CANONICAL_POINT.exec(section);
@@ -217,8 +221,8 @@ export function countGeneratedWords(
 }
 
 export function validateSummaryPoints(points: SummaryPoint[]): string | undefined {
-  if (points.length < 1 || points.length > SUMMARY_POINT_LIMIT) {
-    return `summary must contain one to ${SUMMARY_POINT_LIMIT} points`;
+  if (points.length < SUMMARY_POINT_MINIMUM || points.length > SUMMARY_POINT_LIMIT) {
+    return `summary must contain three to ${SUMMARY_POINT_LIMIT} points`;
   }
   for (const point of points) {
     if (!point.label.trim() || !point.body.trim()) return 'every point needs a label and body';
@@ -235,7 +239,7 @@ export function validateSummaryPoints(points: SummaryPoint[]): string | undefine
   return undefined;
 }
 
-function startsLikeAiCopy(text: string): boolean {
+export function startsLikeAiCopy(text: string): boolean {
   return /^(?:this is\b|(?:the|this)\s+(?:video|episode|content|segment|course|podcast|tutorial)\b)/iu.test(
     text.trim(),
   );

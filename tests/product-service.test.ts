@@ -47,7 +47,8 @@ function service(
       summarize: vi.fn().mockResolvedValue({
         verdict: 'SKIP',
         reason: 'The useful part fits here.',
-        summary: '- **Main point:** One useful fact.',
+        summary:
+          '- **Main point:** One useful fact.\n\n- **Supporting detail:** A concrete explanation supports the result.\n\n- **Outcome:** The source gives an important conclusion.',
       }),
     } satisfies SummaryProvider);
   return {
@@ -74,7 +75,7 @@ describe('SummaryService', () => {
       language: 'en',
     });
     expect(result).toMatchObject({
-      outputVersion: 2,
+      outputVersion: 3,
       verdict: 'SKIP',
       videoId: 'dQw4w9WgXcQ',
       language: 'en',
@@ -168,7 +169,7 @@ describe('SummaryService', () => {
       verdict: 'WATCH',
       reason: 'The delivery stays clear and entertaining throughout.',
       summary:
-        '- **Promise:** The song promises loyalty and says the singer will never abandon his partner.',
+        '- **Promise:** The song promises loyalty and says the singer will never abandon his partner.\n\n- **Supporting detail:** A concrete explanation supports the result.\n\n- **Outcome:** The source gives an important conclusion.',
     });
 
     const [pwaResult, extensionResult] = await Promise.all([pwaRequest, extensionRequest]);
@@ -186,12 +187,14 @@ describe('SummaryService', () => {
         .mockResolvedValueOnce({
           verdict: 'SKIM',
           reason: 'Useful, but padded.',
-          summary: '- **Old answer:** The first saved result.',
+          summary:
+            '- **Old answer:** The first saved result.\n\n- **Supporting detail:** A concrete explanation supports the result.\n\n- **Outcome:** The source gives an important conclusion.',
         })
         .mockResolvedValueOnce({
           verdict: 'WATCH',
           reason: 'Clear and worth the time.',
-          summary: '- **Fresh answer:** The replacement result.',
+          summary:
+            '- **Fresh answer:** The replacement result.\n\n- **Supporting detail:** A concrete explanation supports the result.\n\n- **Outcome:** The source gives an important conclusion.',
         }),
     } satisfies SummaryProvider;
     const { instance, transcript } = service({ summary, summaryCache });
@@ -221,7 +224,8 @@ describe('SummaryService', () => {
         .mockResolvedValueOnce({
           verdict: 'WATCH',
           reason: 'Clear and useful.',
-          summary: '- **Saved answer:** Keep this result.',
+          summary:
+            '- **Saved answer:** Keep this result.\n\n- **Supporting detail:** A concrete explanation supports the result.\n\n- **Outcome:** The source gives an important conclusion.',
         })
         .mockRejectedValueOnce(new Error('provider failed')),
     } satisfies SummaryProvider;
@@ -259,7 +263,8 @@ describe('SummaryService', () => {
     release({
       verdict: 'WATCH',
       reason: 'Clear and useful.',
-      summary: '- **Fresh answer:** One regenerated result.',
+      summary:
+        '- **Fresh answer:** One regenerated result.\n\n- **Supporting detail:** A concrete explanation supports the result.\n\n- **Outcome:** The source gives an important conclusion.',
     });
 
     await expect(Promise.all([first, second])).resolves.toHaveLength(2);
@@ -369,7 +374,8 @@ describe('SummaryService', () => {
       service({ summaryCache }).instance.summarize({ url: 'https://youtu.be/dQw4w9WgXcQ' }),
     ).resolves.toMatchObject({
       verdict: 'SKIP',
-      summary: '- **Main point:** One useful fact.',
+      summary:
+        '- **Main point:** One useful fact.\n\n- **Supporting detail:** A concrete explanation supports the result.\n\n- **Outcome:** The source gives an important conclusion.',
     });
     expect(warning).toHaveBeenCalledWith(expect.stringContaining('summary_cache_write_failed'));
     warning.mockRestore();

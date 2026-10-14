@@ -4,10 +4,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { checkBackend, fetchVideoMetadata, summarizeVideo } from '../apps/shared/api-client.js';
 
 const validResponse = {
-  outputVersion: 2,
+  outputVersion: 3,
   verdict: 'WATCH',
   reason: 'It gets to the point.',
-  summary: '- **Main point:** Useful detail.',
+  summary:
+    '- **Main point:** Useful detail.\n\n- **Supporting detail:** A concrete explanation supports the result.\n\n- **Outcome:** The source gives an important conclusion.',
   videoId: 'dQw4w9WgXcQ',
   language: 'en',
   source: 'CACHED',
@@ -94,10 +95,11 @@ describe('browser API client', () => {
     });
   });
 
-  it('rejects a current response with a stray paragraph or fourth point', async () => {
+  it('rejects a current response with a stray paragraph or sixth point', async () => {
     const malformed = {
       ...validResponse,
-      summary: '- **One:** A.\n\n- **Two:** B.\n\n- **Three:** C.\n\n- **Four:** D.',
+      summary:
+        '- **One:** A.\n\n- **Two:** B.\n\n- **Three:** C.\n\n- **Four:** D.\n\n- **Five:** E.\n\n- **Six:** F.',
     };
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json(malformed)));
 

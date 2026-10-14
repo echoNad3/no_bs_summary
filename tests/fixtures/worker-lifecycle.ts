@@ -46,7 +46,8 @@ function service(): SummaryService {
       return {
         verdict: 'WATCH',
         reason: 'Useful and clear.',
-        summary: '- **Point:** A useful source.',
+        summary:
+          '- **Point:** A useful source.\n\n- **Supporting detail:** A concrete explanation supports the result.\n\n- **Outcome:** The source gives an important conclusion.',
       };
     },
   };
