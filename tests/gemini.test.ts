@@ -129,7 +129,7 @@ describe('GeminiSummaryProvider', () => {
   });
 
   it('makes a short plain-language summary the product and keeps the verdict secondary', () => {
-    expect(GEMINI_PROMPT_VERSION).toBe('coverage-v40-2026-10-14');
+    expect(GEMINI_PROMPT_VERSION).toBe('coverage-v41-2026-10-14');
     expect(SYSTEM_INSTRUCTION).toContain('The short summary is the main product');
     expect(SYSTEM_INSTRUCTION).toContain('The verdict is secondary');
     expect(SYSTEM_INSTRUCTION).toContain('at most 70 times the paragraph count');

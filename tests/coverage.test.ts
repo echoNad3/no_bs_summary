@@ -127,6 +127,16 @@ describe('source-backed coverage assembly', () => {
     expect(result.points[0]!.body.startsWith('Variables retain values')).toBe(true);
     expect(result.points.map((point) => point.body).join(' ')).toContain(value.topics[0]!.text);
   });
+  it('rejects a ride height reassigned to a fall while retaining explicitly sourced fall measurements', () => {
+    const value = plan();
+    value.topics[0]!.text = 'A man died after falling 200 feet.';
+    expect(() =>
+      assembleCoverage(value, [source + ' The ride reaches 200 feet in the air.']),
+    ).toThrow('fall distance not stated');
+    expect(assembleCoverage(value, [source + ' The man fell 200 feet.']).points[0]!.body).toBe(
+      value.topics[0]!.text,
+    );
+  });
   it('preserves the full source while bounding scan size for a long course', () => {
     const words = Array.from({ length: 50_000 }, (_, i) => `word${i}`);
     const blocks = sourceBlocks(words.join(' '));

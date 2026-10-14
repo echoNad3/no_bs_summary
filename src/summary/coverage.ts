@@ -111,6 +111,14 @@ export function assembleCoverage(raw: unknown, blocks: string[]): SummaryCandida
   const topics = new Map(value.topics.map((topic) => [topic.id, topic]));
   const passages = new Map(sourcePassages(blocks).map((passage) => [passage.id, passage]));
   const source = blocks.join(' ');
+  const fallMeasurement =
+    /\b(?:falling|fell|dropped|plunged)\s+(\d[\d,]*(?:\.\d+)?)\s*(feet|foot|ft|meters?|metres?)\b/giu;
+  const measuredFalls = new Set(
+    [...source.matchAll(fallMeasurement)].map(
+      (match) =>
+        `${match[1]!.replaceAll(',', '')}:${/^(?:feet|foot|ft)$/iu.test(match[2]!) ? 'ft' : 'm'}`,
+    ),
+  );
   const healthLesson =
     value.content_type === 'lesson' &&
     /\b(?:clinical|patients?|hormones?|puberty|neuroplasticity|treatment|diagnosis|oxytocin|vasopressin|supplements?)\b/iu.test(
@@ -127,6 +135,13 @@ export function assembleCoverage(raw: unknown, blocks: string[]): SummaryCandida
   }
   for (const topic of value.topics) {
     topic.text = [topic.text, topic.detail, topic.caveat].filter(Boolean).join(' ');
+    for (const measurement of topic.text.matchAll(fallMeasurement)) {
+      const key = `${measurement[1]!.replaceAll(',', '')}:${/^(?:feet|foot|ft)$/iu.test(measurement[2]!) ? 'ft' : 'm'}`;
+      if (!measuredFalls.has(key))
+        fail(
+          `Topic ${topic.id} asserts a measured fall distance not stated in the source. A ride's height is not the rider's fall distance; omit the unsupported distance.`,
+        );
+    }
     if (/\bformer president\b/iu.test(topic.text) && !/\bformer president\b/iu.test(source))
       fail(
         `Topic ${topic.id} adds "former president" even though this status is not in the source. Preserve the source's stated role.`,
