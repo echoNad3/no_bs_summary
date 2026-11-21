@@ -23,7 +23,7 @@ const responseSchema = z.object({
   transcript: z
     .array(
       z.object({
-        text: z.string().trim().min(1),
+        text: z.string(),
         start: z.number().finite().nonnegative(),
         duration: z.number().finite().nonnegative(),
       }),
@@ -41,15 +41,46 @@ export class TranscriptApiProvider implements TranscriptProvider {
 
   constructor(private readonly apiKey: string) {}
 
-  async fetchTranscript(
+  fetchTranscript(
     videoId: string,
     ctx: RequestContext,
     requestedLanguage = 'en',
   ): Promise<TranscriptResult> {
+    return this.fetchTrack(videoId, ctx, requestedLanguage);
+  }
+
+  fetchRawTranscript(videoId: string, ctx: RequestContext) {
+    return this.fetchTrack(videoId, ctx);
+  }
+
+  private async fetchTrack(videoId: string, ctx: RequestContext, requestedLanguage?: string) {
+    const result = await this.fetchCaptions(videoId, ctx, requestedLanguage);
+    const { text, segments } = normalizeSegments(
+      result.transcript.map((segment) => ({
+        text: segment.text,
+        startMs: Math.round(segment.start * 1000),
+        durationMs: Math.round(segment.duration * 1000),
+      })),
+    );
+    if (!requestedLanguage && !text)
+      throw new TranscriptError('TranscriptAPI: no captions available for this video.');
+    assertUsableTranscript(text, 'TranscriptAPI');
+
+    return {
+      provider: this.name,
+      videoId,
+      language: result.language,
+      text,
+      segments,
+      rawText: result.transcript.map((segment) => segment.text).join('\n'),
+    };
+  }
+
+  private async fetchCaptions(videoId: string, ctx: RequestContext, requestedLanguage?: string) {
     const url =
       `https://transcriptapi.com/api/v2/youtube/transcript` +
       `?video_url=${encodeURIComponent(videoId)}` +
-      `&language=${encodeURIComponent(requestedLanguage)}` +
+      (requestedLanguage ? `&language=${encodeURIComponent(requestedLanguage)}` : '') +
       `&format=json&include_timestamp=true&send_metadata=false`;
 
     const { response, firstFailure } = await fetchWithOneRetry(
@@ -95,29 +126,14 @@ export class TranscriptApiProvider implements TranscriptProvider {
         firstFailure,
       );
     }
-    if (!sameLanguageFamily(parsed.data.language, requestedLanguage)) {
+    if (requestedLanguage && !sameLanguageFamily(parsed.data.language, requestedLanguage)) {
       throw providerFailure(
         `TranscriptAPI returned ${parsed.data.language} captions instead of requested ${requestedLanguage} captions.`,
         firstFailure,
       );
     }
 
-    const { text, segments } = normalizeSegments(
-      parsed.data.transcript.map((segment) => ({
-        text: segment.text,
-        startMs: Math.round(segment.start * 1000),
-        durationMs: Math.round(segment.duration * 1000),
-      })),
-    );
-    assertUsableTranscript(text, 'TranscriptAPI');
-
-    return {
-      provider: this.name,
-      videoId,
-      language: parsed.data.language,
-      text,
-      segments,
-    };
+    return parsed.data;
   }
 }
 

@@ -157,8 +157,57 @@ export async function summarizeVideo(
   input: SummarizeInput,
   options: SummarizeOptions = {},
 ): Promise<SummaryResult> {
-  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  const payload = await requestVideoResult(
+    apiBase,
+    '/api/summarize',
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      // Titles are presentation-only and do not enter the shared summary cache.
+      body: JSON.stringify({
+        url: input.url,
+        language: input.language,
+        ...(options.regenerate ? { regenerate: true } : {}),
+      }),
+    },
+    options,
+  );
+  if (!isSummaryResult(payload)) {
+    throw new ApiClientError('The backend returned an invalid response.', 'INVALID_RESPONSE');
+  }
+  return payload;
+}
+
+export async function fetchRawTranscript(
+  apiBase: string,
+  videoId: string,
+  options: Pick<SummarizeOptions, 'signal' | 'password'> = {},
+): Promise<string> {
+  const payload = asObject(
+    await requestVideoResult(
+      apiBase,
+      `/api/transcript?${new URLSearchParams({ id: videoId })}`,
+      {},
+      { ...options, timeoutMs: 25_000 },
+      'transcript',
+    ),
+  );
+  if (typeof payload?.text !== 'string' || !payload.text.trim()) {
+    throw new ApiClientError('The backend returned invalid caption text.', 'INVALID_RESPONSE');
+  }
+  return payload.text;
+}
+
+async function requestVideoResult(
+  apiBase: string,
+  path: string,
+  init: RequestInit,
+  options: SummarizeOptions,
+  kind = 'summary',
+): Promise<unknown> {
+  const headers = { ...init.headers } as Record<string, string>;
   if (options.password) headers['x-app-password'] = options.password;
+  const timeoutMessage = `The ${kind} took too long. Try again.`;
 
   const controller = new AbortController();
   const timeoutMs = options.timeoutMs ?? DEFAULT_SUMMARY_REQUEST_TIMEOUT_MS;
@@ -172,17 +221,9 @@ export async function summarizeVideo(
     try {
       const normalizedBase = apiBase.replace(/\/+$/u, '');
       response = await settleOnAbort(
-        fetch(`${normalizedBase}/api/summarize`, {
-          method: 'POST',
+        fetch(`${normalizedBase}${path}`, {
+          ...init,
           headers,
-          // Titles are presentation-only. Keeping them out of the shared backend
-          // prevents the first caller from poisoning a cached summary with a
-          // misleading or instruction-like title.
-          body: JSON.stringify({
-            url: input.url,
-            language: input.language,
-            ...(options.regenerate ? { regenerate: true } : {}),
-          }),
           signal: controller.signal,
         }),
         controller.signal,
@@ -192,10 +233,10 @@ export async function summarizeVideo(
         throw new ApiClientError('Request cancelled.', 'REQUEST_CANCELLED');
       }
       if (controller.signal.aborted) {
-        throw new ApiClientError('The summary took too long. Try again.', 'REQUEST_TIMEOUT');
+        throw new ApiClientError(timeoutMessage, 'REQUEST_TIMEOUT');
       }
       throw new ApiClientError(
-        'The summary service is not reachable. Check your connection and try again.',
+        `The ${kind} service is not reachable. Check your connection and try again.`,
         'BACKEND_UNREACHABLE',
       );
     }
@@ -208,7 +249,7 @@ export async function summarizeVideo(
         throw new ApiClientError('Request cancelled.', 'REQUEST_CANCELLED');
       }
       if (controller.signal.aborted) {
-        throw new ApiClientError('The summary took too long. Try again.', 'REQUEST_TIMEOUT');
+        throw new ApiClientError(timeoutMessage, 'REQUEST_TIMEOUT');
       }
       throw error;
     }
@@ -221,9 +262,6 @@ export async function summarizeVideo(
         retryAfterSeconds(response),
         response.headers.get('x-request-id') ?? undefined,
       );
-    }
-    if (!isSummaryResult(payload)) {
-      throw new ApiClientError('The backend returned an invalid response.', 'INVALID_RESPONSE');
     }
     return payload;
   } finally {

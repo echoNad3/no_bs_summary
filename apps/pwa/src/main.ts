@@ -16,11 +16,8 @@ import {
   type TextSize,
 } from '../../shared/client-state.js';
 import { renderDetailedSummary } from '../../shared/render-summary.js';
-import {
-  extractVideoId,
-  firstYouTubeUrl,
-  youtubeThumbnailUrl,
-} from '../../shared/youtube-input.js';
+import { bindCopyTranscript } from '../../shared/copy-transcript.js';
+import { firstYouTubeUrl, videoIdFrom, youtubeThumbnailUrl } from '../../shared/youtube-input.js';
 import { LatestVideoTitleLookup } from '../../shared/video-title.js';
 import { isDownloadedBuildInstallable, nextDisplayedDownloadProgress } from './app-update-logic.js';
 import { AppUpdater, type AppUpdateState } from './app-updater.js';
@@ -149,6 +146,7 @@ urlInput.addEventListener('paste', (event) => useYouTubeUrlFromPaste(event, urlI
 togglePasswordButton.addEventListener('click', togglePasswordVisibility);
 cancelButton.addEventListener('click', cancelFromButton);
 regenerateButton.addEventListener('click', () => void submitSummary(true));
+bindCopyTranscript('', urlInput, passwordInput);
 retryButton.addEventListener('click', () => void submitSummary(lastAttemptWasRegeneration));
 diagnosticsButton.addEventListener('click', () => void copyDiagnostics());
 testConnectionButton.addEventListener('click', () => void testConnection());
@@ -463,14 +461,6 @@ function applyResolvedVideoTitle(title: string, videoId: string): void {
   if (renderedSummary?.response.videoId === videoId) {
     renderedSummary.title = title;
     saveLastSummary(renderedSummary);
-  }
-}
-
-function videoIdFrom(url: string): string | undefined {
-  try {
-    return extractVideoId(url);
-  } catch {
-    return undefined;
   }
 }
 

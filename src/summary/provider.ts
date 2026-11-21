@@ -137,7 +137,9 @@ export const summarySchema = publicSummaryShape.superRefine((value, ctx) => {
       message: 'output must start with substance, not generic video-summary wording',
     });
   }
-  if (hasRepeatedWord(`${value.reason} ${pointText}`)) {
+  // A label and body may legitimately share a name ("Reggie: Reggie's...").
+  // Check prose fields separately instead of inventing a repeated word across UI boundaries.
+  if ([value.reason, ...points.flatMap(({ label, body }) => [label, body])].some(hasRepeatedWord)) {
     ctx.addIssue({
       code: 'custom',
       path: ['summary'],
@@ -246,7 +248,9 @@ export function startsLikeAiCopy(text: string): boolean {
 }
 
 function startsLikeBadReason(text: string): boolean {
-  return /^(?:(?:the|this)\s+video|the\s+creator|this\s+is)\b/iu.test(text.trim());
+  return /^(?:(?:the|this)\s+video\s+(?:is|offers|provides|covers|discusses)|the\s+creator\s+(?:is|offers|provides)|this\s+is)\b/iu.test(
+    text.trim(),
+  );
 }
 
 function hasRepeatedWord(text: string): boolean {
@@ -344,6 +348,7 @@ export class SummaryValidationError extends Error {
     message: string,
     readonly candidate?: SummaryCandidate,
     readonly usage?: SummaryUsage,
+    readonly missingStories?: number[],
   ) {
     super(message);
     this.name = 'SummaryValidationError';

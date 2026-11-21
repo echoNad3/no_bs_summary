@@ -67,6 +67,17 @@
               Cancel
             </button>
           </div>
+          <button id="copy-transcript" class="secondary-button" type="button">
+            Copy transcript
+          </button>
+          <p id="transcript-status" class="status" role="status"></p>
+          <textarea
+            id="transcript-text"
+            aria-label="Raw video transcript"
+            rows="5"
+            readonly
+            hidden
+          ></textarea>
         </form>
 
         <p id="status" class="status" role="status" aria-live="polite" aria-atomic="true"></p>

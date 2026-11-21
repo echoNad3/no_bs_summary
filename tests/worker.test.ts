@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ProductError } from '../src/product/service.js';
 import { KvSummaryCache } from '../src/product/kv-summary-cache.js';
 import type { KvNamespaceLike } from '../src/product/kv-summary-cache.js';
@@ -123,6 +123,73 @@ const generatingService = () => ({
     await options?.beforeGenerate?.();
     return response;
   }),
+});
+
+describe('raw transcript route', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('copies every caption in provider order and uses the existing quota without invoking Gemini', async () => {
+    const quota = new FakeGenerationQuota();
+    const model = okService();
+    const upstream = vi.fn(async (_url: string) =>
+      Response.json({
+        video_id: identity.videoId,
+        language: 'asr-de',
+        transcript: [
+          { text: '  Erste  Zeile ', start: 3, duration: 1 },
+          { text: '  Erste  Zeile ', start: 4, duration: 1 },
+          { text: '[Musik]\nEnde', start: 5, duration: 1 },
+        ],
+      }),
+    );
+    vi.stubGlobal('fetch', upstream);
+    const request = new Request(
+      `https://app.example.workers.dev/api/transcript?id=${identity.videoId}`,
+      {
+        headers: { 'x-app-password': 'correct horse' },
+      },
+    );
+    const env = makeEnv({ GEMINI_API_KEY: undefined });
+    const deps = {
+      generationQuota: quota,
+      service: model,
+      rateLimiter: new SlidingWindowRateLimiter(),
+    };
+    const result = await handleRequest(request, env, deps);
+    expect(result.status).toBe(200);
+    expect(result.headers.get('cache-control')).toBe('no-store');
+    expect(await result.json()).toEqual({
+      text: '  Erste  Zeile \n  Erste  Zeile \n[Musik]\nEnde',
+      language: 'asr-de',
+    });
+    expect(upstream).toHaveBeenCalledTimes(1);
+    expect(String(upstream.mock.calls[0]?.[0])).not.toContain('language=');
+    expect(model.summarize).not.toHaveBeenCalled();
+    expect(quota.dailyUsed).toBe(1);
+    expect(quota.globalUsed).toBe(0);
+
+    const repeated = await handleRequest(request, env, deps);
+    expect(await repeated.json()).toEqual({
+      text: '  Erste  Zeile \n  Erste  Zeile \n[Musik]\nEnde',
+      language: 'asr-de',
+    });
+    expect(upstream).toHaveBeenCalledTimes(1);
+    expect(quota.consumeCalls).toBe(1);
+  });
+
+  it('does not fetch paid captions after the free allowance is exhausted', async () => {
+    const upstream = vi.fn();
+    vi.stubGlobal('fetch', upstream);
+    const quota = new FakeGenerationQuota();
+    quota.globalUsed = 50;
+    const result = await handleRequest(
+      new Request('https://app.example.workers.dev/api/transcript?id=dQw4w9WgXcQ'),
+      makeEnv(),
+      { generationQuota: quota, rateLimiter: new SlidingWindowRateLimiter() },
+    );
+    expect(result.status).toBe(429);
+    expect(upstream).not.toHaveBeenCalled();
+  });
 });
 
 describe('KvSummaryCache', () => {

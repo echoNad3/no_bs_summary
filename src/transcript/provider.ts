@@ -32,6 +32,8 @@ export interface TranscriptResult {
   language: string;
   /** Full transcript as plain text (whitespace-normalized, order preserved). */
   text: string;
+  /** Original provider text, with only a newline inserted between segments. */
+  rawText?: string;
   /** Timestamped segments when the provider supplies them. */
   segments?: TranscriptSegment[];
   /** Provider-specific extras (e.g. available languages). Never contains secrets. */

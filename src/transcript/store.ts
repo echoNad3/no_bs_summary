@@ -20,6 +20,7 @@ export const cachedTranscriptSchema = z
     videoId: videoIdSchema,
     language: languageSchema,
     text: z.string().trim().min(1),
+    rawText: z.string().min(1).optional(),
     segments: z.array(transcriptSegmentSchema).min(1).optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
   })

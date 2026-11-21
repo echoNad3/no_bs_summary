@@ -10,6 +10,14 @@ export function firstYouTubeUrl(text: string): string {
 
 export { extractVideoId } from '../../src/youtube.js';
 
+export function videoIdFrom(url: string): string | undefined {
+  try {
+    return extractVideoId(url);
+  } catch {
+    return undefined;
+  }
+}
+
 export function youtubeThumbnailUrl(rawUrl: string): string | undefined {
   try {
     return `https://i.ytimg.com/vi/${extractVideoId(rawUrl)}/hqdefault.jpg`;

@@ -16,8 +16,14 @@ import {
   type UsageCounterStatus,
   type QuotaAccess,
 } from './generation-quota.js';
-import { MemoryTranscriptStore } from './transcript/store.js';
-import { GEMINI_PROMPT_VERSION, GeminiSummaryProvider } from './summary/gemini.js';
+import { cacheKey, MemoryTranscriptStore } from './transcript/store.js';
+import { sameLanguageFamily, videoIdSchema } from './transcript/provider.js';
+import { createRequestContext, requestTimedOut, withinDeadline } from './request-context.js';
+import {
+  DEFAULT_GEMINI_MODEL,
+  GEMINI_PROMPT_VERSION,
+  GeminiSummaryProvider,
+} from './summary/gemini.js';
 import { TranscriptApiProvider } from './transcript/transcriptapi.js';
 import { DEFAULT_END_TO_END_TIMEOUT_MS } from './config.js';
 import { fetchYouTubeVideoMetadata } from './video-metadata.js';
@@ -130,7 +136,7 @@ export async function handleRequest(
             code: error.code,
             durationMs: Math.max(0, Date.now() - startedAt),
             requestId,
-            model: env.GEMINI_MODEL ?? 'gemini-3.1-flash-lite',
+            model: env.GEMINI_MODEL ?? DEFAULT_GEMINI_MODEL,
             promptVersion: GEMINI_PROMPT_VERSION,
             ...error.diagnostics,
           }),
@@ -209,6 +215,10 @@ async function routeRequest(
     return videoMetadata(request, url, deps, now, corsHeaders);
   }
 
+  if (request.method === 'GET' && url.pathname === '/api/transcript') {
+    return rawTranscript(request, url, env, deps, now, corsHeaders);
+  }
+
   if (request.method === 'POST' && url.pathname === '/api/summarize') {
     return summarize(request, env, deps, now, corsHeaders);
   }
@@ -226,6 +236,106 @@ async function routeRequest(
   }
 
   return serveAsset(request, env);
+}
+
+async function rawTranscript(
+  request: Request,
+  url: URL,
+  env: WorkerEnv,
+  deps: WorkerDeps,
+  now: () => number,
+  corsHeaders: Record<string, string>,
+): Promise<Response> {
+  const id = videoIdSchema.safeParse(url.searchParams.get('id'));
+  if (!id.success)
+    throw new ProductError(400, 'INVALID_YOUTUBE_URL', 'Enter a valid YouTube link.');
+  const headers = { ...corsHeaders, 'Cache-Control': 'no-store' };
+  const client = request.headers.get('cf-connecting-ip') ?? 'unknown';
+  const limiter = deps.rateLimiter ?? defaultRateLimiter;
+  const requestTime = now();
+  if (!limiter.allow(client, requestTime)) {
+    const delay = limiter.retryAfterSeconds(client, requestTime);
+    throw new ProductError(
+      429,
+      'RATE_LIMITED',
+      `Too many requests. Try again in ${delay} seconds.`,
+      delay,
+    );
+  }
+
+  const providerName = 'transcriptapi';
+  const englishKey = cacheKey(providerName, id.data, 'en');
+  const defaultKey = cacheKey(providerName, id.data);
+  const cached =
+    (await transcriptCache.read(englishKey)) ?? (await transcriptCache.read(defaultKey));
+  if (cached?.rawText)
+    return json(200, { text: cached.rawText, language: cached.language }, headers);
+
+  const apiKey = env.TRANSCRIPTAPI_API_KEY?.trim();
+  if (!apiKey)
+    throw new ProductError(500, 'SERVER_MISCONFIGURED', 'Transcript service is unavailable.');
+  const { context, dispose } = createRequestContext(20_000);
+  try {
+    const access = (await passwordMatches(request.headers.get('x-app-password'), env.APP_PASSWORD))
+      ? 'owner'
+      : 'free';
+    try {
+      await withinDeadline(
+        consumeGenerationQuota(request, env, deps, now(), access),
+        context,
+        5_000,
+      );
+    } catch (error) {
+      if (error instanceof ProductError) throw error;
+      throw new ProductError(
+        503,
+        'QUOTA_UNAVAILABLE',
+        'Usage limits are temporarily unavailable. Try again shortly.',
+      );
+    }
+
+    const result = await withinDeadline(
+      new TranscriptApiProvider(apiKey).fetchRawTranscript(id.data, context),
+      context,
+    );
+    try {
+      await withinDeadline(
+        transcriptCache.write(
+          sameLanguageFamily(result.language, 'en') ? englishKey : defaultKey,
+          result,
+        ),
+        context,
+        250,
+      );
+    } catch (error) {
+      console.warn(
+        JSON.stringify({
+          event: 'raw_transcript_cache_write_failed',
+          error: error instanceof Error ? error.name : 'UnknownError',
+        }),
+      );
+    }
+    return json(200, { text: result.rawText, language: result.language }, headers);
+  } catch (error) {
+    if (error instanceof ProductError) throw error;
+    if (requestTimedOut(error, context)) {
+      throw new ProductError(
+        504,
+        'TRANSCRIPT_TIMEOUT',
+        'Captions took too long to load. Try again.',
+      );
+    }
+    if (error instanceof Error && /no captions/iu.test(error.message)) {
+      throw new ProductError(404, 'NO_CAPTIONS', 'No captions are available for this video.');
+    }
+    throw new ProductError(
+      502,
+      'TRANSCRIPT_FAILED',
+      "Could not get this video's captions. Try again.",
+    );
+  } finally {
+    dispose();
+  }
 }
 
 async function videoMetadata(
@@ -311,7 +421,7 @@ async function summarize(
       JSON.stringify({
         event: 'summary_completed',
         requestId: deps.requestId,
-        model: env.GEMINI_MODEL ?? 'gemini-3.1-flash-lite',
+        model: env.GEMINI_MODEL ?? DEFAULT_GEMINI_MODEL,
         promptVersion: GEMINI_PROMPT_VERSION,
         requestMs,
         source: result.source,
@@ -551,7 +661,7 @@ export function getService(env: WorkerEnv): SummaryService {
       'The API keys are not configured on the server.',
     );
   }
-  const model = env.GEMINI_MODEL?.trim() || 'gemini-3.1-flash-lite';
+  const model = env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL;
   const timeoutMs = configuredLimit(env.END_TO_END_TIMEOUT_MS) ?? DEFAULT_END_TO_END_TIMEOUT_MS;
   return new SummaryService({
     transcriptProvider: new TranscriptApiProvider(transcriptKey),

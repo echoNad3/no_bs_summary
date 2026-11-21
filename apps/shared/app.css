@@ -156,6 +156,15 @@ h3 {
   gap: var(--space-3);
 }
 
+#transcript-text {
+  width: 100%;
+  min-width: 0;
+  resize: vertical;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+}
+
 label {
   color: var(--color-text-muted);
   font-size: var(--fs-label);

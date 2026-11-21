@@ -13,11 +13,8 @@ import {
   type SavedSummary,
 } from '../../shared/client-state.js';
 import { renderDetailedSummary } from '../../shared/render-summary.js';
-import {
-  extractVideoId,
-  firstYouTubeUrl,
-  youtubeThumbnailUrl,
-} from '../../shared/youtube-input.js';
+import { bindCopyTranscript } from '../../shared/copy-transcript.js';
+import { firstYouTubeUrl, videoIdFrom, youtubeThumbnailUrl } from '../../shared/youtube-input.js';
 import { LatestVideoTitleLookup } from '../../shared/video-title.js';
 import { getYouTubeTabContext } from './tab-context.js';
 import {
@@ -108,6 +105,7 @@ togglePasswordButton.addEventListener('click', togglePasswordVisibility);
 
 cancelButton.addEventListener('click', cancelFromButton);
 regenerateButton.addEventListener('click', () => void submitSummary(true));
+const resetTranscriptCopy = bindCopyTranscript(DEFAULT_BACKEND_URL, urlInput, passwordInput);
 retryButton.addEventListener('click', () => void submitSummary(lastAttemptWasRegeneration));
 diagnosticsButton.addEventListener('click', () => void copyDiagnostics());
 testConnectionButton.addEventListener('click', () => void testConnection());
@@ -320,6 +318,7 @@ function clearDetectedVideo(): void {
 }
 
 function showControlsForNewVideo(): void {
+  resetTranscriptCopy();
   cancelActiveRequest();
   clearResult();
   errorActions.hidden = true;
@@ -449,14 +448,6 @@ function requestVideoTitle(url: string): void {
       void saveLastSummary(savedSummary);
     }
   });
-}
-
-function videoIdFrom(url: string): string | undefined {
-  try {
-    return extractVideoId(url);
-  } catch {
-    return undefined;
-  }
 }
 
 function applyTextSize(size: ReturnType<typeof parseTextSize>): void {

@@ -15,6 +15,7 @@ const secondYoutubeUrl = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
 const productionApiUrl = 'https://no-bs-summary.echonad3.workers.dev/api/summarize';
 const productionStatusUrl = 'https://no-bs-summary.echonad3.workers.dev/api/status';
 const productionMetadataUrl = 'https://no-bs-summary.echonad3.workers.dev/api/video-metadata';
+const rawCaptionText = '  Original  captions \n[Music]\n[Music]\nLast line. ';
 let baseUrl = '';
 let localApiUrl = '';
 let localStatusUrl = '';
@@ -106,6 +107,11 @@ try {
 
   for (const page of context.pages()) watchPage(page);
   context.on('page', watchPage);
+  for (const origin of [baseUrl, new URL(productionApiUrl).origin]) {
+    await context.route(`${origin}/api/transcript?*`, (route) =>
+      route.fulfill({ json: { text: rawCaptionText, language: 'en' } }),
+    );
+  }
 
   await context.route('https://www.youtube.com/**', async (route) => {
     const isSecondVideo = route.request().url().includes('dQw4w9WgXcQ');
@@ -195,6 +201,9 @@ try {
   await pwaPage.goto(`${baseUrl}/`);
   await pwaPage.locator('h1').waitFor({ state: 'visible' });
   assert.equal(await pwaPage.locator('h1').innerText(), 'No BS Summary');
+  await pwaPage.locator('#url').fill(youtubeUrl);
+  await assertRawTranscriptCopy(pwaPage);
+  report.checks.pwaCopiesRawTranscript = true;
   const pwaSettings = pwaPage.locator('#settings-dialog');
   assert.equal(await pwaSettings.isVisible(), false);
   await pwaPage.locator('#settings-button').click();
@@ -428,6 +437,8 @@ try {
   report.checks.alignedHeaderIcons = true;
 
   report.checks.productionBackendConfigured = true;
+  await assertRawTranscriptCopy(sidePanelPage);
+  report.checks.extensionCopiesRawTranscript = true;
 
   const submit = sidePanelPage.locator('#submit');
   const status = sidePanelPage.locator('#status');
@@ -715,6 +726,44 @@ async function waitForText(locator, expected, timeoutMs = 5_000) {
     await new Promise((resolve) => setTimeout(resolve, 50));
   } while (Date.now() < deadline);
   assert.equal(await locator.innerText(), expected);
+}
+
+async function assertRawTranscriptCopy(page) {
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: async (text) => {
+          globalThis.__nbsRawCopy = text;
+        },
+      },
+    });
+  });
+  await page.locator('#copy-transcript').click();
+  await waitForText(page.locator('#transcript-status'), 'Transcript copied.');
+  assert.equal(await page.evaluate(() => globalThis.__nbsRawCopy), rawCaptionText);
+  await page.evaluate(() => {
+    if (typeof ClipboardItem !== 'function')
+      throw new Error('ClipboardItem is unavailable in the browser smoke.');
+    globalThis.__nbsRawCopy = '';
+    navigator.clipboard.write = async ([item]) => {
+      globalThis.__nbsRawCopy = await (await item.getType('text/plain')).text();
+    };
+  });
+  await page.locator('#copy-transcript').click();
+  await waitForText(page.locator('#transcript-status'), 'Transcript copied.');
+  assert.equal(await page.evaluate(() => globalThis.__nbsRawCopy), rawCaptionText);
+  await page.evaluate(() => {
+    navigator.clipboard.write = async () => {
+      throw new Error('Clipboard denied');
+    };
+    navigator.clipboard.writeText = async () => {
+      throw new Error('Clipboard denied');
+    };
+  });
+  await page.locator('#copy-transcript').click();
+  assert.equal(await page.locator('#transcript-text').inputValue(), rawCaptionText);
+  await waitForText(page.locator('#transcript-status'), 'Copy the selected transcript.');
 }
 
 async function waitForSummaryResponse(page, apiUrl = localApiUrl) {

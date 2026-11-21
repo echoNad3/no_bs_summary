@@ -8,9 +8,10 @@ A phone-first YouTube summarizer with blunt `WATCH`, `SKIM`, or `SKIP` verdicts.
 
 - Accepts pasted links and Android shares from YouTube or ReVanced.
 - Uses existing captions; videos without captions are rejected.
-- Gives three to five paragraphs based on the main topics, keeping separate news stories represented.
+- Copies the full caption text from TranscriptAPI directly from a video link. A fresh caption lookup uses one existing usage allowance. Captions already in memory can be copied without using it.
+- Gives exactly three paragraphs for transcripts up to 800 words; longer sources use three to five based on independent stories or major teaching themes, keeping related developments together and separate news stories represented.
 - Reopens completed summaries from the shared Cloudflare cache.
-- Allows five passwordless live-summary attempts per network each month, inside a shared monthly pool of 50.
+- Allows five passwordless live summary attempts or uncached transcript lookups per network each month, inside a shared monthly pool of 50.
 - Keeps provider keys and the shared password on the Worker.
 - Updates the Android app from Settings and verifies every APK before installation.
 

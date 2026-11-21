@@ -197,7 +197,7 @@ describe('local MVP manifests', () => {
 
   it('precaches the built JS and CSS needed for a first offline launch', async () => {
     const worker = await fs.readFile('apps/pwa/public/sw.js', 'utf8');
-    expect(worker).toContain("const CACHE = 'nbs-shell-v20'");
+    expect(worker).toContain("const CACHE = 'nbs-shell-v21'");
     expect(worker).toContain("event.data?.type === 'SKIP_WAITING'");
     expect(worker).toContain('/\\.(?:css|js)$/u');
     expect(worker).toContain("'/icons/icon-192.svg'");
